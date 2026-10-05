@@ -33,7 +33,7 @@
   button{font-family:inherit}
   :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 
-  .app{height:100%; position:relative; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto;
+  .app{position:fixed; top:0; right:0; bottom:0; left:0; height:auto; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto;
     grid-template-areas:"top" "stage" "sheet" "tabs";
     padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
   .topbar{grid-area:top; min-width:0; position:relative; z-index:7; background:var(--bg); display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:52px}
