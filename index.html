@@ -255,17 +255,31 @@
   .cgrow input.huetrack{height:6px; background:linear-gradient(90deg,hsl(0,75%,55%),hsl(60,75%,55%),hsl(120,75%,55%),hsl(180,75%,55%),hsl(240,75%,55%),hsl(300,75%,55%),hsl(360,75%,55%))}
   .app.sliding .cgwrap.keep{box-shadow:0 0 0 8px rgba(13,15,17,.62)}
   /* トリミング */
-  .cropui{position:absolute; display:none; z-index:3; pointer-events:none}
+  .cropui{position:absolute; inset:0; display:none; z-index:3; touch-action:none; cursor:move}
+  .cimg{position:absolute; pointer-events:none}
   .cbox{position:absolute; border:1.5px solid rgba(255,255,255,.95); box-shadow:0 0 0 9999px rgba(8,9,10,.62); pointer-events:auto; touch-action:none; cursor:move}
   .cbox .th,.cbox .tv{position:absolute; background:rgba(255,255,255,.35); pointer-events:none}
   .cbox .th{left:0; right:0; height:1px} .cbox .th1{top:33.33%} .cbox .th2{top:66.66%}
   .cbox .tv{top:0; bottom:0; width:1px} .cbox .tv1{left:33.33%} .cbox .tv2{left:66.66%}
-  .chd{position:absolute; width:26px; height:26px; touch-action:none}
-  .chd::after{content:""; position:absolute; width:14px; height:14px; border:3px solid #fff}
-  .chd-tl{left:-13px; top:-13px; cursor:nwse-resize} .chd-tl::after{left:10px; top:10px; border-right:0; border-bottom:0}
-  .chd-tr{right:-13px; top:-13px; cursor:nesw-resize} .chd-tr::after{right:10px; top:10px; border-left:0; border-bottom:0}
-  .chd-bl{left:-13px; bottom:-13px; cursor:nesw-resize} .chd-bl::after{left:10px; bottom:10px; border-right:0; border-top:0}
-  .chd-br{right:-13px; bottom:-13px; cursor:nwse-resize} .chd-br::after{right:10px; bottom:10px; border-left:0; border-top:0}
+  /* 辺（上下左右）：辺全体が触れる。見た目は中央の短い線 */
+  .ced{position:absolute; touch-action:none; z-index:1}
+  .ced-t,.ced-b{left:22px; right:22px; height:30px; cursor:ns-resize} .ced-t{top:-15px} .ced-b{bottom:-15px}
+  .ced-l,.ced-r{top:22px; bottom:22px; width:30px; cursor:ew-resize} .ced-l{left:-15px} .ced-r{right:-15px}
+  .ced::after{content:""; position:absolute; background:#fff; border-radius:2px; box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+  .ced-t::after,.ced-b::after{left:50%; top:50%; width:26px; height:4px; margin:-2px 0 0 -13px}
+  .ced-l::after,.ced-r::after{left:50%; top:50%; width:4px; height:26px; margin:-13px 0 0 -2px}
+  /* 角：大きめの当たり判定 */
+  .chd{position:absolute; width:40px; height:40px; touch-action:none; z-index:2}
+  .chd::after{content:""; position:absolute; width:16px; height:16px; border:3px solid #fff; pointer-events:none}
+  .chd-tl{left:-20px; top:-20px; cursor:nwse-resize} .chd-tl::after{left:18px; top:18px; border-right:0; border-bottom:0}
+  .chd-tr{right:-20px; top:-20px; cursor:nesw-resize} .chd-tr::after{right:18px; top:18px; border-left:0; border-bottom:0}
+  .chd-bl{left:-20px; bottom:-20px; cursor:nesw-resize} .chd-bl::after{left:18px; bottom:18px; border-right:0; border-top:0}
+  .chd-br{right:-20px; bottom:-20px; cursor:nwse-resize} .chd-br::after{right:18px; bottom:18px; border-left:0; border-top:0}
+  /* トリミング中は、写真全体が下のパネルに隠れない大きさで表示 */
+  .app.cropping:not(.collapsed):not(.expanded) .stage{padding-bottom:calc(min(32dvh,270px) + 6px); box-sizing:border-box}
+  @media (min-width:900px), (min-width:600px) and (orientation:landscape){ .app.cropping .stage{padding-bottom:0 !important} }
+  /* トリミング操作中：写真の外の暗い部分を少し薄くして、全体が見えるように */
+  .app.sliding .cbox{box-shadow:0 0 0 9999px rgba(8,9,10,.45)}
   .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
   .asprow::-webkit-scrollbar{display:none}
   .aspbtn{flex:none; font:inherit; font-size:12px; padding:7px 11px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); color:var(--muted); cursor:pointer}
@@ -333,7 +347,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v22</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v23</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2700,46 +2714,85 @@ function tkOldLens(img, w, h, P){
   }
   function showOriginalPixels(){ fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
   // トリミング枠
-  var cropui = null;
+  var cropui = null, cimg = null;
   function ensureCropUI(){
     if (cropui) return cropui;
+    // 写真の周り（ステージ全体）で指の操作を受ける：1本指で枠を移動、2本指のピンチで枠の大きさ、辺と角で大きさ
     cropui = xel('div', 'cropui'); cropui.id = 'cropui';
+    cimg = xel('div', 'cimg');
     var box = xel('div', 'cbox'); box.innerHTML = '<i class="th th1"></i><i class="th th2"></i><i class="tv tv1"></i><i class="tv tv2"></i>';
+    ['t', 'b', 'l', 'r'].forEach(function(c){ var e = xel('span', 'ced ced-' + c); e.dataset.c = c; box.appendChild(e); });
     ['tl', 'tr', 'bl', 'br'].forEach(function(c){ var hd = xel('span', 'chd chd-' + c); hd.dataset.c = c; box.appendChild(hd); });
-    cropui.appendChild(box); $('stage').appendChild(cropui);
-    var mode = null, st = null;
+    cimg.appendChild(box); cropui.appendChild(cimg); $('stage').appendChild(cropui);
+    var pts = {}, mode = null, st = null;
     function rect(){ return view.getBoundingClientRect(); }
-    box.addEventListener('pointerdown', function(e){
-      e.preventDefault(); e.stopPropagation(); box.setPointerCapture(e.pointerId);
-      var c = e.target.dataset && e.target.dataset.c; mode = c || 'move'; var g = P.geo;
-      st = { x: e.clientX, y: e.clientY, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() };
+    function cnt(){ return Object.keys(pts).length; }
+    function two(){ var k = Object.keys(pts), a = pts[k[0]], b = pts[k[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+    function begin(m, e){ var g = P.geo; mode = m; st = { x: e ? e.clientX : 0, y: e ? e.clientY : 0, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() }; if (m === 'pinch'){ var t = two(); st.d = t.d; st.x = t.x; st.y = t.y; } }
+    cropui.addEventListener('pointerdown', function(e){
+      e.preventDefault(); e.stopPropagation(); try{ cropui.setPointerCapture(e.pointerId); }catch(er){}
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (cnt() >= 2) begin('pinch');
+      else begin((e.target.dataset && e.target.dataset.c) || 'move', e);
     });
-    box.addEventListener('pointermove', function(e){
-      if (!mode) return;
-      var g = P.geo, r = st.r, dx = (e.clientX - st.x) / r.width, dy = (e.clientY - st.y) / r.height, o = st.g;
-      if (mode === 'move'){ g.x = Math.min(1 - o.w, Math.max(0, o.x + dx)); g.y = Math.min(1 - o.h, Math.max(0, o.y + dy)); }
-      else {
-        var F = geoFrame(hi.w, hi.h), A = aspNum(g.asp, F[0], F[1]), An = A ? A * F[1] / F[0] : null;
-        var left = mode[1] === 'l', top = mode[0] === 't';
-        var ax = left ? o.x + o.w : o.x, ay = top ? o.y + o.h : o.y;           // 動かない側の角
-        var px = (left ? o.x : o.x + o.w) + dx, py = (top ? o.y : o.y + o.h) + dy;
-        var maxW = left ? ax : 1 - ax, maxH = top ? ay : 1 - ay;
-        var w = Math.min(maxW, Math.max(0.08, left ? ax - px : px - ax)), h = Math.min(maxH, Math.max(0.08, top ? ay - py : py - ay));
-        if (An){ if (w / h > An) w = h * An; else h = w / An; if (w > maxW){ w = maxW; h = w / An; } if (h > maxH){ h = maxH; w = h * An; } }
-        g.w = w; g.h = h; g.x = left ? ax - w : ax; g.y = top ? ay - h : ay;
+    cropui.addEventListener('pointermove', function(e){
+      if (!pts[e.pointerId] || !mode) return;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      startSliding(cropui);   // 動かしている間は、ほかの表示を消して写真全体を見せる
+      var g = P.geo, r = st.r, o = st.g, F = geoFrame(hi.w, hi.h), A = aspNum(g.asp, F[0], F[1]), An = A ? A * F[1] / F[0] : null;
+      if (mode === 'pinch'){
+        if (cnt() < 2) return;
+        var t = two(), sc = st.d > 0 ? t.d / st.d : 1;
+        // 指を広げる＝写真を拡大＝枠は小さく（Lightroomと同じ感覚）
+        var w = o.w / sc, h = o.h / sc;
+        if (w > 1){ h *= 1 / w; w = 1; } if (h > 1){ w *= 1 / h; h = 1; }
+        if (w < 0.08){ h *= 0.08 / w; w = 0.08; } if (h < 0.08){ w *= 0.08 / h; h = 0.08; }
+        var cx = o.x + o.w / 2 + (t.x - st.x) / r.width, cy = o.y + o.h / 2 + (t.y - st.y) / r.height;
+        g.w = w; g.h = h; g.x = Math.min(1 - w, Math.max(0, cx - w / 2)); g.y = Math.min(1 - h, Math.max(0, cy - h / 2));
+      } else if (mode === 'move'){
+        var dx = (e.clientX - st.x) / r.width, dy = (e.clientY - st.y) / r.height;
+        g.x = Math.min(1 - o.w, Math.max(0, o.x + dx)); g.y = Math.min(1 - o.h, Math.max(0, o.y + dy));
+      } else {
+        var dx2 = (e.clientX - st.x) / r.width, dy2 = (e.clientY - st.y) / r.height;
+        var L0 = o.x, R0 = o.x + o.w, T0 = o.y, B0 = o.y + o.h, L = L0, R = R0, T = T0, B = B0, MIN = 0.08;
+        if (mode.indexOf('l') >= 0) L = Math.min(R0 - MIN, Math.max(0, L0 + dx2));
+        if (mode.indexOf('r') >= 0) R = Math.max(L0 + MIN, Math.min(1, R0 + dx2));
+        if (mode.indexOf('t') >= 0) T = Math.min(B0 - MIN, Math.max(0, T0 + dy2));
+        if (mode.indexOf('b') >= 0) B = Math.max(T0 + MIN, Math.min(1, B0 + dy2));
+        var nw = R - L, nh = B - T;
+        if (An){
+          var corner = mode.length === 2;
+          if (corner){
+            if (nw / nh > An) nw = nh * An; else nh = nw / An;
+            if (mode.indexOf('l') >= 0) L = R0 - nw; else R = L0 + nw;
+            if (mode.indexOf('t') >= 0) T = B0 - nh; else B = T0 + nh;
+          } else if (mode === 'l' || mode === 'r'){
+            nh = nw / An; var mcy = (T0 + B0) / 2; if (nh > 1){ nh = 1; nw = An; if (mode === 'l') L = R0 - nw; else R = L0 + nw; }
+            T = Math.min(1 - nh, Math.max(0, mcy - nh / 2)); B = T + nh;
+          } else {
+            nw = nh * An; var mcx = (L0 + R0) / 2; if (nw > 1){ nw = 1; nh = 1 / An; if (mode === 't') T = B0 - nh; else B = T0 + nh; }
+            L = Math.min(1 - nw, Math.max(0, mcx - nw / 2)); R = L + nw;
+          }
+          if (L < 0 || R > 1 || T < 0 || B > 1) return;   // はみ出す動きは止める
+        }
+        g.x = L; g.y = T; g.w = R - L; g.h = B - T;
       }
       positionCropUI(); updateGeoInfo();
     });
-    function up(){ if (!mode) return; mode = null; clearPresetMark(); schedule(); }
-    box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+    function up(e){
+      delete pts[e.pointerId];
+      if (cnt() === 1){ var k = Object.keys(pts)[0]; begin('move', { clientX: pts[k].x, clientY: pts[k].y }); return; }
+      if (cnt() === 0 && mode){ mode = null; clearPresetMark(); schedule(); }
+    }
+    cropui.addEventListener('pointerup', up); cropui.addEventListener('pointercancel', up);
     return cropui;
   }
   function positionCropUI(){
     if (!CROPMODE || !hi || rawView()){ if (cropui) cropui.style.display = 'none'; return; }
     ensureCropUI(); cropui.style.display = 'block';
     var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect(), g = P.geo;
-    cropui.style.left = (vr.left - sr.left) + 'px'; cropui.style.top = (vr.top - sr.top) + 'px'; cropui.style.width = vr.width + 'px'; cropui.style.height = vr.height + 'px';
-    var b = cropui.firstChild; b.style.left = g.x * 100 + '%'; b.style.top = g.y * 100 + '%'; b.style.width = g.w * 100 + '%'; b.style.height = g.h * 100 + '%';
+    cimg.style.left = (vr.left - sr.left) + 'px'; cimg.style.top = (vr.top - sr.top) + 'px'; cimg.style.width = vr.width + 'px'; cimg.style.height = vr.height + 'px';
+    var b = cimg.firstChild; b.style.left = g.x * 100 + '%'; b.style.top = g.y * 100 + '%'; b.style.width = g.w * 100 + '%'; b.style.height = g.h * 100 + '%';
   }
   function setCropMode(on){
     on = !!on; if (on === CROPMODE) return;
