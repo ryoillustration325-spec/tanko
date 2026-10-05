@@ -51,7 +51,11 @@
   .stagewrap{grid-area:stage; min-height:0; position:relative; padding:0 8px 8px}
   .stage{position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:#08090A}
   .stage canvas{display:block; max-width:100%; max-height:100%; width:auto; height:auto}
-  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; cursor:pointer; width:100%; height:100%; padding:24px}
+  /* 写真の選択：押せるのは中央のボタンだけ（画面全体を押せる形だと、iPhoneの選択メニューが押した場所に出て不自然になる） */
+  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; width:100%; height:100%; padding:24px; -webkit-user-select:none; user-select:none}
+  .dropbtn{display:flex; flex-direction:column; align-items:center; gap:4px; padding:18px 26px 16px; border-radius:18px; cursor:pointer; border:1px solid transparent; transition:background-color .15s, border-color .15s}
+  .dropbtn:active{background:var(--surface); border-color:var(--line)}
+  @media (hover:hover){ .dropbtn:hover{background:var(--surface); border-color:var(--line)} }
   .drop .big{font-size:16px; font-weight:500}
   .drop .sub{font-size:12px; color:var(--faint)}
   .drop .mark{width:54px; height:54px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent); margin-bottom:6px}
@@ -218,11 +222,13 @@
     <button class="tb pri" id="save" type="button" disabled>書き出し</button>
   </header>
   <main class="stagewrap"><div class="stage" id="stage">
-    <label class="drop" id="drop" for="file">
-      <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
-      <span class="big" id="dropBig">写真をタップして選択</span>
+    <div class="drop" id="drop">
+      <label class="dropbtn" for="file">
+        <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
+        <span class="big" id="dropBig">写真をタップして選択</span>
+      </label>
       <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます</span>
-    </label>
+    </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
     <div id="bcur"></div>
