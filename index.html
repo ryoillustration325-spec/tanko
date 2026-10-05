@@ -219,6 +219,10 @@
   .rline{display:flex; align-items:center; gap:10px; padding:6px 0; font-size:12px; color:var(--muted)}
   .rline .sp{flex:1}
   .regwrap.dis .rneed{opacity:.4; pointer-events:none}
+  /* 元画像を見ている間：表示を消す（ボタン自体は押したまま反応させるため pointer-events は残す） */
+  .app.peek .tabbar,.app.peek .sheet,.app.peek .chip,.app.peek .topbar > *:not(#cmp){opacity:0}
+  .app.peek #cmp{opacity:.35}
+  .app.peek .sheet{pointer-events:none}
   /* 調整中：動かしている項目だけ残して、ほかは消す（写真全体が見える） */
   .app.sliding .topbar,.app.sliding .tabbar,.app.sliding .chip{opacity:0; pointer-events:none}
   .app.sliding .sheet{background:transparent !important; border-color:transparent; -webkit-backdrop-filter:none; backdrop-filter:none}
@@ -250,6 +254,54 @@
   .cgrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); border:3px solid var(--surface)}
   .cgrow input.huetrack{height:6px; background:linear-gradient(90deg,hsl(0,75%,55%),hsl(60,75%,55%),hsl(120,75%,55%),hsl(180,75%,55%),hsl(240,75%,55%),hsl(300,75%,55%),hsl(360,75%,55%))}
   .app.sliding .cgwrap.keep{box-shadow:0 0 0 8px rgba(13,15,17,.62)}
+  /* トリミング */
+  .cropui{position:absolute; display:none; z-index:3; pointer-events:none}
+  .cbox{position:absolute; border:1.5px solid rgba(255,255,255,.95); box-shadow:0 0 0 9999px rgba(8,9,10,.62); pointer-events:auto; touch-action:none; cursor:move}
+  .cbox .th,.cbox .tv{position:absolute; background:rgba(255,255,255,.35); pointer-events:none}
+  .cbox .th{left:0; right:0; height:1px} .cbox .th1{top:33.33%} .cbox .th2{top:66.66%}
+  .cbox .tv{top:0; bottom:0; width:1px} .cbox .tv1{left:33.33%} .cbox .tv2{left:66.66%}
+  .chd{position:absolute; width:26px; height:26px; touch-action:none}
+  .chd::after{content:""; position:absolute; width:14px; height:14px; border:3px solid #fff}
+  .chd-tl{left:-13px; top:-13px; cursor:nwse-resize} .chd-tl::after{left:10px; top:10px; border-right:0; border-bottom:0}
+  .chd-tr{right:-13px; top:-13px; cursor:nesw-resize} .chd-tr::after{right:10px; top:10px; border-left:0; border-bottom:0}
+  .chd-bl{left:-13px; bottom:-13px; cursor:nesw-resize} .chd-bl::after{left:10px; bottom:10px; border-right:0; border-top:0}
+  .chd-br{right:-13px; bottom:-13px; cursor:nwse-resize} .chd-br::after{right:10px; bottom:10px; border-left:0; border-top:0}
+  .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
+  .asprow::-webkit-scrollbar{display:none}
+  .aspbtn{flex:none; font:inherit; font-size:12px; padding:7px 11px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); color:var(--muted); cursor:pointer}
+  .aspbtn.on{border-color:var(--accent); color:var(--ink); background:var(--surface2)}
+  .geoinfo{display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; font-size:11.5px; color:var(--faint); margin:4px 0 2px}
+  .geoinfo .ok{color:var(--accent); font-weight:600} .geoinfo .ng{color:var(--warn); font-weight:600}
+  /* 書き出し画面（フチ・共有） */
+  .xmodal{position:fixed; inset:0; z-index:25; background:var(--bg); display:flex; flex-direction:column; padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+  .xmodal[hidden]{display:none !important}
+  .xhead{flex:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--line-soft)}
+  .xtitle{font-size:15px; font-weight:600}
+  .xclose{width:40px; height:40px; border:0; background:transparent; color:var(--ink); font-size:20px; cursor:pointer}
+  .xshare{width:46px; height:46px; border-radius:50%; border:0; background:var(--accent); color:#0E1418; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:.4; transition:opacity .2s}
+  .xmodal.ready .xshare{opacity:1}
+  .xshare svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+  .xprev{flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:14px 16px 6px}
+  .xprev canvas{max-width:100%; max-height:calc(100% - 28px); display:block; box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  .xstat{display:flex; flex-wrap:wrap; justify-content:center; gap:4px 12px; font-size:11.5px; color:var(--faint); min-height:16px}
+  .xstat .ok{color:var(--accent); font-weight:600} .xstat .ng{color:var(--warn); font-weight:600}
+  .xbody{flex:none; max-height:48vh; overflow-y:auto; padding:0 16px 14px}
+  .xsec{border-top:1px solid var(--line-soft); padding:10px 0 6px}
+  .xlab{font-size:12px; color:var(--muted); margin-bottom:8px}
+  .xsw{display:flex; gap:10px; align-items:center; overflow-x:auto; padding:2px 2px 4px; scrollbar-width:none}
+  .xsw::-webkit-scrollbar{display:none}
+  .xcol{flex:none; width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.18); cursor:pointer; padding:0}
+  .xcol.on{outline:2.5px solid var(--ink); outline-offset:3px}
+  .xpick{flex:none; width:40px; height:40px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .xpick.on{border-color:var(--accent); color:var(--accent)}
+  .xpick svg{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round}
+  .xsec .row label{display:none}
+  .xratio{display:flex; gap:10px; overflow-x:auto; padding:2px 2px 4px; scrollbar-width:none}
+  .xratio::-webkit-scrollbar{display:none}
+  .xrb{flex:none; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:50px; border:0; background:transparent; color:var(--muted); font-size:11.5px; cursor:pointer; padding:4px 2px}
+  .xri{display:block; border:1.5px solid var(--faint); border-radius:3px; position:relative}
+  .xri.ig::after{content:""; position:absolute; left:50%; top:50%; width:9px; height:9px; margin:-5px 0 0 -5px; border:1.5px solid var(--faint); border-radius:3px}
+  .xrb.on{color:var(--accent)} .xrb.on .xri,.xrb.on .xri.ig::after{border-color:var(--accent)}
   /* トーンカーブ */
   .crvbox{margin:4px 0 8px}
   .crv{display:block; width:100%; height:180px; touch-action:none; border-radius:10px; background:rgba(0,0,0,.22); border:1px solid var(--line-soft); cursor:crosshair}
@@ -281,7 +333,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v20</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v22</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -456,7 +508,9 @@ function tkProcess(src, w, h, P){
   }
 
   // 0) 基本補正（露光量・ハイライト・ホワイトバランス・トーンカーブ・カラーミキサーなど）
+  tkNoise(img, w, h, P);
   tkBasic(img, w, h, P);
+  tkPresence(img, w, h, P);
   tkGrade(img, n, P);
 
   // 1) 自動明るさ（平均の明るさを目標へ。掛け算でなくガンマ＝白と黒は動かさず中間調だけ動かす→白飛びしない）
@@ -510,6 +564,9 @@ function tkProcess(src, w, h, P){
 
   // 2.3) 寒暖グラデーション（線形）：始点側と終点側に別々の色温度・明るさ
   if (P.on.grad) tkLinearGrad(img, w, h, P);
+
+  // 2.4) シャープ（光の効果をかける前に輪郭を整える）
+  tkSharpen(img, w, h, P);
 
   // 2.5) 濃さ（Density／減法的な彩度）：色が濃い画素ほど暗く沈める。くすんだ色・グレー・白はほぼ動かない
   //   A=全色一律 / B=肌（橙）を守る / C=色ごと（赤・橙・黄・緑・水・青・紫）
@@ -897,6 +954,80 @@ function tkGrade(img, n, P){
     LUT[o++] = tkClamp01(r2); LUT[o++] = tkClamp01(g2); LUT[o++] = tkClamp01(b2);
   }
   tkApplyLut3(img, n, LUT, N3);
+}
+
+
+// ---------- ディテール・効果（ノイズ軽減・明瞭度・テクスチャ・かすみ除去・シャープ） ----------
+// 明るさだけを取り出す
+function tkLumOf(img, n){ var Y = new Float32Array(n); for (var i = 0, j = 0; i < n; i++, j += 3) Y[i] = 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2]; return Y; }
+// 縮小してぼかした明るさ（大きな半径用・速い）
+function tkLumBlurBig(img, w, h, sigma){
+  var G = tkGrid(w, h, Math.max(1, Math.floor(sigma / 3))), stp = Math.max(1, G.f >> 1);
+  for (var y = 0; y < h; y += stp) for (var x = 0; x < w; x += stp){ var j = (y * w + x) * 3; tkGridAdd(G, x, y, 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2], 0, 0, 1); }
+  return tkRowReader(tkBlurGrid(tkGridDone(G), sigma), w);
+}
+// 明るさの比で色を保ったまま明暗だけ変える
+function tkSetLum(img, j, Y0, Y1){ var k = Y0 > 1e-4 ? Y1 / Y0 : 1; if (Y0 <= 1e-4){ img[j] += Y1; img[j + 1] += Y1; img[j + 2] += Y1; return; } img[j] *= k; img[j + 1] *= k; img[j + 2] *= k; }
+function tkNoise(img, w, h, P){
+  if (!P.on || !P.on.det) return;
+  var nl = (P.nrL || 0) / 100, nc = (P.nrC || 0) / 100, n = w * h, L = Math.max(w, h), i, j;
+  if (!nl && !nc) return;
+  if (nl){
+    // 明るさのざらつき：近くの似た明るさだけでならす（輪郭はぼかさない）
+    var Y = tkLumOf(img, n), Yb = tkBlur1(Y, w, h, Math.max(0.8, L * 0.0012) * (0.6 + nl));
+    var th = 0.02 + 0.06 * nl;
+    for (i = 0, j = 0; i < n; i++, j += 3){ var d = Yb[i] - Y[i], wgt = 1 - tkSS(Math.abs(d) / th); if (wgt > 0) tkSetLum(img, j, Y[i], Y[i] + d * wgt * Math.min(1, nl * 1.2)); }
+  }
+  if (nc){
+    // 色ノイズ：色の成分だけを大きくぼかす（明るさはそのまま）
+    var sg = Math.max(2, L * 0.006 * (0.5 + nc)), G = tkGrid(w, h, Math.max(1, Math.floor(sg / 3)));
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ j = (y * w + x) * 3; var Yy = 0.299 * img[j] + 0.587 * img[j + 1] + 0.114 * img[j + 2]; tkGridAdd(G, x, y, (img[j + 2] - Yy) * 0.564, (img[j] - Yy) * 0.713, 0, 1); }
+    var CR = tkRowReader(tkBlurGrid(tkGridDone(G), sg), w), a = Math.min(1, nc * 1.1);
+    for (y = 0; y < h; y++){ var row = CR(y); for (x = 0; x < w; x++){ j = (y * w + x) * 3; var r = img[j], g = img[j + 1], b = img[j + 2], Y2 = 0.299 * r + 0.587 * g + 0.114 * b, cb = (b - Y2) * 0.564, cr = (r - Y2) * 0.713;
+      cb += (row[x * 4] - cb) * a; cr += (row[x * 4 + 1] - cr) * a;
+      var r2 = Y2 + cr / 0.713, b2 = Y2 + cb / 0.564; img[j] = tkClamp01(r2); img[j + 2] = tkClamp01(b2); img[j + 1] = tkClamp01((Y2 - 0.299 * r2 - 0.114 * b2) / 0.587); } }
+  }
+}
+function tkPresence(img, w, h, P){
+  if (!P.on || !P.on.fx) return;
+  var cl = (P.fxCla || 0) / 100, tx = (P.fxTex || 0) / 100, dh = (P.fxDeh || 0) / 100, n = w * h, L = Math.max(w, h), x, y, j;
+  if (!cl && !tx && !dh) return;
+  if (dh){
+    // かすみ除去：明るい空気（かすみ）の色を求め、色の薄い所ほど取り除く／マイナスでかすみを足す
+    var sm = []; for (j = 0; j < n * 3; j += 3 * 37) sm.push(0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2]);
+    var A = Math.max(0.6, tkPct(sm, 0.97));
+    var G = tkGrid(w, h, Math.max(1, Math.floor(L * 0.01))), stp = Math.max(1, G.f >> 1);
+    for (y = 0; y < h; y += stp) for (x = 0; x < w; x += stp){ j = (y * w + x) * 3; tkGridAdd(G, x, y, Math.min(img[j], img[j + 1], img[j + 2]), 0, 0, 1); }
+    var DK = tkRowReader(tkBlurGrid(tkGridDone(G), L * 0.02), w);
+    for (y = 0; y < h; y++){ var rw = DK(y); for (x = 0; x < w; x++){ j = (y * w + x) * 3;
+      if (dh > 0){ var t = Math.max(0.35, 1 - dh * 0.85 * Math.min(1, rw[x * 4] / A)); for (var c = 0; c < 3; c++) img[j + c] = tkClamp01((img[j + c] - A) / t + A); }
+      else { var m = -dh * 0.45 * (0.4 + 0.6 * (1 - Math.min(1, rw[x * 4] / A))); for (var c2 = 0; c2 < 3; c2++) img[j + c2] += (A - img[j + c2]) * m; }
+    } }
+  }
+  if (cl || tx){
+    // 明瞭度＝大きな明暗の差を強める（中間調中心）／テクスチャ＝細かい質感だけを強める
+    var BC = cl ? tkLumBlurBig(img, w, h, L * 0.02) : null, Yt = null, BT = null;
+    if (tx){ Yt = tkLumOf(img, n); BT = tkBlur1(Yt, w, h, Math.max(1, L * 0.0035)); }
+    for (y = 0; y < h; y++){ var rb = BC ? BC(y) : null; for (x = 0; x < w; x++){ var i = y * w + x; j = i * 3;
+      var Y0 = 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2], Y1 = Y0;
+      if (rb){ var mid = 4 * Y0 * (1 - Y0); Y1 += cl * 0.9 * (Y0 - rb[x * 4]) * (0.35 + 0.65 * mid); }
+      if (BT){ Y1 += tx * 1.2 * (Yt[i] - BT[i]); }
+      Y1 = tkClamp01(Y1); tkSetLum(img, j, Y0, Y1); img[j] = tkClamp01(img[j]); img[j + 1] = tkClamp01(img[j + 1]); img[j + 2] = tkClamp01(img[j + 2]);
+    } }
+  }
+}
+function tkSharpen(img, w, h, P){
+  if (!P.on || !P.on.det) return;
+  var a = (P.shAmt || 0) / 100; if (!a) return;
+  var n = w * h, L = Math.max(w, h), r = (P.shRad == null ? 10 : P.shRad) / 10, mk = (P.shMask || 0) / 100;
+  // 半径は「長辺2000pxの時の値」として扱う（プレビューでも書き出しでも同じ見え方）
+  var Y = tkLumOf(img, n), Yb = tkBlur1(Y, w, h, Math.max(0.5, r * L / 2000));
+  for (var i = 0, j = 0; i < n; i++, j += 3){
+    var d = Y[i] - Yb[i], ad = Math.abs(d);
+    var wm = mk ? tkSS((ad - mk * 0.05) / (0.02 + mk * 0.03)) : 1;
+    var Y1 = tkClamp01(Y[i] + d * a * 1.6 * wm);
+    tkSetLum(img, j, Y[i], Y1); img[j] = tkClamp01(img[j]); img[j + 1] = tkClamp01(img[j + 1]); img[j + 2] = tkClamp01(img[j + 2]);
+  }
 }
 
 var TK_PRESETS = {
@@ -1390,6 +1521,14 @@ function tkOldLens(img, w, h, P){
     { key: 'wb', title: 'カラー', sub: '色温度・色かぶり・自然な彩度・彩度',
       sliders: [['bTemp','色温度',-100,100,0],['bTint','色かぶり',-100,100,0],['bVib','自然な彩度',-100,100,0],['bSat','彩度',-100,100,0]],
       hint: '色温度：− 青 ／ ＋ 黄。色かぶり：− 緑 ／ ＋ 赤紫。自然な彩度は、くすんだ色ほど強く効き、肌は上げすぎません。' },
+    { key: 'fx', title: '効果', sub: 'テクスチャ・明瞭度・かすみ除去・周辺光量',
+      sliders: [['fxTex','テクスチャ',-100,100,0],['fxCla','明瞭度',-100,100,0],['fxDeh','かすみの除去',-100,100,0],['vgAmt','周辺光量',-100,100,0],['vgMid','中心の広さ',0,100,50]],
+      hint: '周辺光量はトリミング後の枠に合わせてかかります（−で暗く、＋で明るく）。かすみの除去を−にすると、空気がふんわり白く霞みます。' },
+    { key: 'det', title: 'ディテール', sub: 'シャープ・ノイズ軽減',
+      sliders: [['shAmt','シャープ',0,150,0],['shRad','半径',5,30,10],['shMask','マスク',0,100,0],['nrL','ノイズ軽減',0,100,0],['nrC','カラーノイズ',0,100,0]],
+      hint: 'マスクを上げると、肌や空などの平らな所にはシャープがかからず、輪郭だけが締まります。半径10＝1.0px（長辺2000px相当）。' },
+    { key: 'geo', title: 'トリミング', sub: '比率・回転・傾き補正・反転', sliders: [], custom: buildGeoExtra, noToggle: true,
+      hint: '写真の上の枠をドラッグで移動、四隅で大きさを変えます。Instagramは 4:5・3:4・1:1 がそのまま載る比率です。' },
     { key: 'mix', title: 'カラーミキサー', sub: '8色それぞれの色相・彩度・輝度',
       modes: [['h','色相'],['s','彩度'],['l','輝度']],
       sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l']],
@@ -1486,6 +1625,7 @@ function tkOldLens(img, w, h, P){
   var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1 };
   function crvBlank(){ return { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] }; }
   P.crv = crvBlank();
+  P.geo = { rot: 0, flip: 0, ang: 0, x: 0, y: 0, w: 1, h: 1, asp: 'orig' };
   ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0;
   function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; }
   P.dmode = 'B';
@@ -1575,10 +1715,10 @@ function tkOldLens(img, w, h, P){
   buildLookTiles();
   function markPreset(key){ Array.prototype.forEach.call(pbox.children, function(c){ c.classList.toggle('on', c.dataset.p === key); }); }
   function clearPresetMark(){ markPreset('__none__'); }
-  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1 };
+  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
-  function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg'; }
-  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d)/.test(k); }
+  function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg' || k === 'fx' || k === 'det'; }
+  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
   function applyPreset(key){
     var p = TK_PRESETS[key];
     if (key === 'none'){
@@ -1696,7 +1836,8 @@ function tkOldLens(img, w, h, P){
     lo = { w: sl[0], h: sl[1], src: readPixels(sl[0], sl[1]) };
     loCanvas.width = lo.w; loCanvas.height = lo.h;
     view.width = hi.w; view.height = hi.h; view.style.display = 'block';
-    vctx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0);
+    P.geo = geoBlank();   // トリミングは写真ごと
+    fullCanvas.width = hi.w; fullCanvas.height = hi.h; fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); syncGeo();
     $('drop').style.display = 'none';
     $('badge').style.display = 'block'; $('cmp').disabled = false; $('change').textContent = '写真を変更'; setTimeout(renderLookThumbs, 30);
     $('reset').disabled = false; $('save').disabled = false;
@@ -1736,13 +1877,15 @@ function tkOldLens(img, w, h, P){
   function draw(r){
     if (showOrig || !r) return;
     setTimeout(drawOverlay, 0);
+    if (fullCanvas.width !== hi.w || fullCanvas.height !== hi.h){ fullCanvas.width = hi.w; fullCanvas.height = hi.h; }
     if (r.kind === 'hi'){
-      vctx.putImageData(new ImageData(r.out, hi.w, hi.h), 0, 0);
+      fullCtx.putImageData(new ImageData(r.out, hi.w, hi.h), 0, 0);
     } else {
       loCtx.putImageData(new ImageData(r.out, lo.w, lo.h), 0, 0);
-      vctx.imageSmoothingEnabled = true; vctx.imageSmoothingQuality = 'high';
-      vctx.drawImage(loCanvas, 0, 0, hi.w, hi.h);
+      fullCtx.imageSmoothingEnabled = true; fullCtx.imageSmoothingQuality = 'high';
+      fullCtx.drawImage(loCanvas, 0, 0, hi.w, hi.h);
     }
+    present();
   }
   var busyExport = false;
   function showBusy(t){ if (busyExport) return; $('busy').textContent = t; $('busy').style.display = 'block'; }
@@ -1763,13 +1906,15 @@ function tkOldLens(img, w, h, P){
   var cmp = $('cmp');
   function showOriginal(on){
     showOrig = on;
-    if (on){ vctx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); cmp.classList.add('pri'); }
+    // 元画像を見ている間は、ほかの表示をすべて消す（押している「元画像」ボタンは押したまま効く）
+    document.getElementById('app').classList.toggle('peek', !!on);
+    if (on){ showOriginalPixels(); cmp.classList.add('pri'); }
     else { cmp.classList.remove('pri'); draw(last); }
   }
   cmp.addEventListener('pointerdown', function(e){ e.preventDefault(); if (hi) showOriginal(true); });
   ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ cmp.addEventListener(ev, function(){ if (showOrig) showOriginal(false); }); });
 
-  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); ['basic','wb','mix','crv','cg'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
+  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
 
   // 回転・ウィンドウサイズ変更：表示サイズが大きく変わったら解像度を合わせ直す
   var rsTimer = null;
@@ -1802,20 +1947,137 @@ function tkOldLens(img, w, h, P){
     window.claude.use('downloads').then(function(d){ downloads = d; }).catch(function(){});
   }
   var saving = false;
-  $('save').addEventListener('click', function(){
+  $('save').addEventListener('click', function(){ openExport(); });
+  // ---- 書き出し画面：サイズ（Instagram／高画質）・フチ（色・線幅・比率）・共有 ----
+  var XP = { base: null, blob: null, gen: 0, timer: null, size: 'ig', color: '#ffffff', width: 0, ratio: 'even', open: false };
+  try{ var xs = JSON.parse(localStorage.getItem('retouch-export') || 'null'); if (xs){ ['size', 'color', 'width', 'ratio'].forEach(function(k){ if (xs[k] != null) XP[k] = xs[k]; }); } }catch(e){}
+  function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio })); }catch(e){} }
+  function xpRatios(){ return [['even', '均等', null], ['1:1', '1:1', 1], ['2:3', '2:3', 2 / 3], ['3:2', '3:2', 1.5], ['4:5', '4:5', 0.8], ['3:4', '3:4', 0.75], ['5:4', '5:4', 1.25]]; }
+  function xpColors(){ return ['#ffffff', '#d6d6d6', '#8a8a8a', '#4a4a4a', '#000000', '#141414', '#3b302c', '#8b5e43']; }
+  function buildExportUI(){
+    var m = xel('div', 'xmodal'); m.id = 'xmodal'; m.hidden = true;
+    m.innerHTML = '<div class="xhead"><button type="button" class="xclose" aria-label="閉じる">✕</button><div class="xtitle">書き出し</div><button type="button" class="xshare" aria-label="共有"><svg viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg></button></div>' +
+      '<div class="xprev"><canvas id="xcv"></canvas><div class="xstat" id="xstat">準備中…</div></div><div class="xbody"></div>';
+    document.body.appendChild(m);
+    var body = m.querySelector('.xbody');
+    function sec(t){ var s = xel('div', 'xsec'); s.appendChild(xel('div', 'xlab', t)); body.appendChild(s); return s; }
+    var s0 = sec('サイズ'), seg = xel('div', 'seg'); XE.xpSize = [];
+    [['ig', 'Instagram（幅1080px）'], ['hq', '高画質（長辺3000px）']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.size = d[0]; xpChanged(); }); seg.appendChild(b); XE.xpSize.push(b); });
+    s0.appendChild(seg);
+    var s1 = sec('フチのカラー'), sw = xel('div', 'xsw'); XE.xpSw = [];
+    var pick = xel('button', 'xpick'); pick.type = 'button'; pick.setAttribute('aria-label', '写真から色を取る');
+    pick.innerHTML = '<svg viewBox="0 0 24 24"><path d="m14 4 6 6"/><path d="M17 7 7 17l-3 1 1-3L15 5"/><path d="M4 20l2-2"/></svg>';
+    pick.addEventListener('click', function(){ XE.xpPicking = !XE.xpPicking; pick.classList.toggle('on', XE.xpPicking); toast(XE.xpPicking ? '上の写真をタップすると、その色がフチの色になります' : 'スポイトをやめました'); });
+    sw.appendChild(pick); XE.xpPick = pick;
+    xpColors().forEach(function(c){ var b = xel('button', 'xcol'); b.type = 'button'; b.style.background = c; b.dataset.c = c; b.addEventListener('click', function(){ XP.color = c; xpChanged(); }); sw.appendChild(b); XE.xpSw.push(b); });
+    XE.xpCustom = xel('button', 'xcol xcustom'); XE.xpCustom.type = 'button'; XE.xpCustom.hidden = true; XE.xpCustom.addEventListener('click', function(){ XP.color = XE.xpCustom.dataset.c; xpChanged(); }); sw.appendChild(XE.xpCustom);
+    s1.appendChild(sw);
+    var s2 = sec('線幅'), row = xel('div', 'row'); row.innerHTML = '<input type="range" min="0" max="100"><span class="val num"></span>';
+    XE.xpW = row.querySelector('input'); XE.xpWv = row.querySelector('.val');
+    XE.xpW.addEventListener('input', function(){ XP.width = +XE.xpW.value; xpChanged(); });
+    s2.appendChild(row);
+    var s3 = sec('フチのサイズ（仕上がりの比率）'), rr = xel('div', 'xratio'); XE.xpR = [];
+    xpRatios().forEach(function(d){
+      var b = xel('button', 'xrb'); b.type = 'button'; b.dataset.r = d[0];
+      var ic = xel('span', 'xri'); var a = d[2] || 0.72; ic.style.width = (a >= 1 ? 30 : 30 * a) + 'px'; ic.style.height = (a >= 1 ? 30 / a : 30) + 'px';
+      if (d[2] && d[2] >= 0.745 && d[2] <= 1.92) ic.classList.add('ig');
+      b.appendChild(ic); b.appendChild(xel('span', 'xrn', d[1]));
+      b.addEventListener('click', function(){ XP.ratio = d[0]; xpChanged(); }); rr.appendChild(b); XE.xpR.push(b);
+    });
+    s3.appendChild(rr);
+    m.querySelector('.xclose').addEventListener('click', closeExport);
+    m.querySelector('.xshare').addEventListener('click', xpShare);
+    // スポイト：プレビューの写真をタップ
+    $('xcv').addEventListener('click', function(e){
+      if (!XE.xpPicking) return;
+      var cv = $('xcv'), rc = cv.getBoundingClientRect(), x = Math.floor((e.clientX - rc.left) / rc.width * cv.width), y = Math.floor((e.clientY - rc.top) / rc.height * cv.height);
+      var d = cv.getContext('2d').getImageData(Math.max(0, Math.min(cv.width - 1, x)), Math.max(0, Math.min(cv.height - 1, y)), 1, 1).data;
+      var hex = '#' + [d[0], d[1], d[2]].map(function(v){ return ('0' + v.toString(16)).slice(-2); }).join('');
+      XE.xpCustom.dataset.c = hex; XE.xpCustom.style.background = hex; XE.xpCustom.hidden = false;
+      XP.color = hex; XE.xpPicking = false; XE.xpPick.classList.remove('on'); xpChanged();
+    });
+  }
+  function xpSync(){
+    XE.xpSize.forEach(function(b){ b.classList.toggle('on', b.dataset.m === XP.size); });
+    XE.xpSw.concat([XE.xpCustom]).forEach(function(b){ b.classList.toggle('on', b.dataset.c === XP.color); });
+    if (xpColors().indexOf(XP.color) < 0 && XP.color){ XE.xpCustom.dataset.c = XP.color; XE.xpCustom.style.background = XP.color; XE.xpCustom.hidden = false; XE.xpCustom.classList.add('on'); }
+    XE.xpW.value = XP.width; XE.xpWv.textContent = XP.width;
+    XE.xpR.forEach(function(b){ b.classList.toggle('on', b.dataset.r === XP.ratio); });
+  }
+  function openExport(){
     if (!img || saving) return;
-    saving = true; busyExport = true; $('save').disabled = true;
-    $('busy').textContent = '書き出し中…'; $('busy').style.display = 'block';
+    if (!$('xmodal')) buildExportUI();
+    saving = true; busyExport = true; XP.base = null; XP.blob = null; XP.open = true;
+    $('xmodal').hidden = false; $('xstat').textContent = '仕上げを高画質で計算中…'; $('xmodal').classList.remove('ready');
+    xpSync();
     setTimeout(function(){
       var sz = sizeFor(3000), w = sz[0], h = sz[1], src;
-      try{ src = readPixels(w, h); }catch(e){ endSave(); toast('書き出しに失敗しました（画像が大きすぎる可能性）'); return; }
+      try{ src = readPixels(w, h); }catch(e){ saving = false; busyExport = false; $('xstat').textContent = '画像が大きすぎて計算できませんでした'; return; }
       runJob(src, w, h, snap(P)).then(function(out){
-        var c = document.createElement('canvas'); c.width = w; c.height = h;
-        c.getContext('2d').putImageData(new ImageData(out, w, h), 0, 0);
-        c.toBlob(function(blob){ finishSave(blob); c.width = 1; c.height = 1; }, 'image/jpeg', 0.94);
-      }, function(){ endSave(); toast('書き出しに失敗しました'); });
-    }, 30);
-  });
+        var c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').putImageData(new ImageData(out, w, h), 0, 0);
+        var os = geoOutSize(w, h, true), b = document.createElement('canvas'); b.width = os[0]; b.height = os[1];
+        renderGeoTo(b.getContext('2d'), os[0], os[1], c, w, h, true); c.width = 1; c.height = 1;
+        XP.base = b; saving = false; busyExport = false; xpChanged();
+      }, function(){ saving = false; busyExport = false; $('xstat').textContent = '書き出しに失敗しました'; });
+    }, 40);
+  }
+  function closeExport(){ XP.open = false; $('xmodal').hidden = true; XE.xpPicking = false; if (XE.xpPick) XE.xpPick.classList.remove('on'); }
+  // 仕上がりの組み立て：写真の周りにフチ。比率を選ぶと、その比率の台紙の中央に写真を置く
+  function xpCompose(maxOut){
+    var b = XP.base, pw = b.width, ph = b.height, bw = XP.width / 100 * 0.1 * Math.max(pw, ph);
+    var R = (xpRatios().filter(function(d){ return d[0] === XP.ratio; })[0] || [0, 0, null])[2];
+    var W = pw + bw * 2, H = ph + bw * 2;
+    if (R){ if (W / H > R) H = W / R; else W = H * R; }
+    var k = XP.size === 'ig' ? 1080 / W : Math.min(1, 3000 / Math.max(W, H));
+    if (maxOut) k = Math.min(k, maxOut / Math.max(W, H));
+    var c = document.createElement('canvas'); c.width = Math.round(W * k); c.height = Math.round(H * k);
+    var x = c.getContext('2d'); x.fillStyle = XP.color; x.fillRect(0, 0, c.width, c.height);
+    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    var dw = pw * k, dh = ph * k; x.drawImage(b, Math.round((c.width - dw) / 2), Math.round((c.height - dh) / 2), Math.round(dw), Math.round(dh));
+    return { c: c, W: c.width, H: c.height };
+  }
+  function xpChanged(){
+    xpSaveSettings(); xpSync();
+    if (!XP.base) return;
+    var pv = xpCompose(900), cv = $('xcv'); cv.width = pv.W; cv.height = pv.H; cv.getContext('2d').drawImage(pv.c, 0, 0);
+    XP.blob = null; $('xmodal').classList.remove('ready');
+    var my = ++XP.gen; clearTimeout(XP.timer);
+    XP.timer = setTimeout(function(){
+      var r = xpCompose(0), c = r.c;
+      if (XP.size === 'ig'){
+        // Instagram用：縮小で甘くなった輪郭を、画面向けに軽く締める
+        var x = c.getContext('2d'), id = x.getImageData(0, 0, r.W, r.H), d = id.data, n = r.W * r.H, f = new Float32Array(n * 3);
+        for (var i = 0; i < n; i++){ f[i * 3] = d[i * 4] / 255; f[i * 3 + 1] = d[i * 4 + 1] / 255; f[i * 3 + 2] = d[i * 4 + 2] / 255; }
+        tkSharpen(f, r.W, r.H, { on: { det: 1 }, shAmt: 28, shRad: 12, shMask: 15 });
+        for (i = 0; i < n; i++){ d[i * 4] = f[i * 3] * 255 + 0.5; d[i * 4 + 1] = f[i * 3 + 1] * 255 + 0.5; d[i * 4 + 2] = f[i * 3 + 2] * 255 + 0.5; }
+        x.putImageData(id, 0, 0);
+      }
+      c.toBlob(function(bl){
+        if (my !== XP.gen) return;
+        XP.blob = bl; $('xmodal').classList.add('ready');
+        var ar = r.W / r.H, ok = ar >= 0.745 && ar <= 1.92;
+        $('xstat').innerHTML = '';
+        $('xstat').appendChild(xel('span', 'num', r.W + ' × ' + r.H + 'px ・ ' + Math.round(bl.size / 1024) + 'KB'));
+        if (XP.size === 'ig') $('xstat').appendChild(xel('span', ok ? 'ok' : 'ng', ok ? 'Instagram：そのまま載せられます' : 'Instagram：この比率は切れます（フチの比率を4:5か3:4に）'));
+      }, 'image/jpeg', XP.size === 'ig' ? 0.92 : 0.94);
+    }, 160);
+  }
+  function xpShare(){
+    if (!XP.blob){ toast('準備中です。少し待ってからもう一度'); return; }
+    var name = 'retouch_' + stamp() + (XP.size === 'ig' ? '_ig' : '') + '.jpg', blob = XP.blob;
+    if (downloads){
+      downloads.save({ filename: name, data: blob }).then(function(r){ toast(r && r.status === 'delivered' ? '受け渡しました' : '保存しました'); }).catch(function(e){ var c = e && e.code; toast(c === 'declined' ? 'キャンセルしました' : '保存できませんでした'); });
+      return;
+    }
+    var file = null; try{ file = new File([blob], name, { type: 'image/jpeg' }); }catch(e){}
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })){
+      // 共有シート：「画像を保存」で写真アプリへ、Instagramを選べばそのまま投稿へ
+      navigator.share({ files: [file] }).then(function(){ toast('共有しました'); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); });
+    } else {
+      var url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000); toast('保存しました');
+    }
+  }
   function finishSave(blob){
     if (!blob){ endSave(); toast('書き出しに失敗しました'); return; }
     var name = 'retouch_' + stamp() + '.jpg';
@@ -2173,6 +2435,7 @@ function tkOldLens(img, w, h, P){
     ovl.style.width = view.offsetWidth + 'px'; ovl.style.height = view.offsetHeight + 'px';
   }
   function drawOverlay(){
+    try{ present(); }catch(e){}   // 部分調整の道具を使う時は、トリミング前の全体を表示に戻す
     var on = REG.ready && P.on.reg && (REG.show || REG.tool !== 'off') && hi && !showOrig;
     if (!on){ ovl.style.display = 'none'; return; }
     ovlSrc.width = REG.mw; ovlSrc.height = REG.mh;
@@ -2389,6 +2652,145 @@ function tkOldLens(img, w, h, P){
       XE.cgMk.style.left = (50 + Math.cos(a) * s * 50) + '%'; XE.cgMk.style.top = (50 - Math.sin(a) * s * 50) + '%';
       XE.cgMk.style.background = s ? 'hsl(' + h + ',70%,' + (85 - s * 30) + '%)' : '#fff';
     }
+  }
+  // ---- トリミング・回転・傾き補正・反転（表示と書き出しの最後にかける。加工の計算はトリミング前の全体で行う） ----
+  function geoBlank(){ return { rot: 0, flip: 0, ang: 0, x: 0, y: 0, w: 1, h: 1, asp: 'orig' }; }
+  var CROPMODE = false, fullCanvas = document.createElement('canvas'), fullCtx = fullCanvas.getContext('2d');
+  function aspects(){ return [['orig', '元の比率'], ['free', '自由'], ['4:5', '4:5'], ['1:1', '1:1'], ['3:4', '3:4'], ['9:16', '9:16'], ['16:9', '16:9'], ['1.91', '1.91:1']]; }
+  function geoOn(){ var g = P.geo; return !!(g.rot || g.flip || g.ang || g.x > 5e-4 || g.y > 5e-4 || g.w < 0.9995 || g.h < 0.9995); }
+  function vigOn(){ return !!(P.on.fx && P.vgAmt); }
+  function rawView(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || !!(REG.show && P.on.reg); }
+  function geoFrame(W, H){ return (P.geo.rot % 180) ? [H, W] : [W, H]; }
+  function geoScale(Wf, Hf, ang){ var a = Math.abs(ang) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return Math.max((Wf * c + Hf * s) / Wf, (Wf * s + Hf * c) / Hf); }
+  function aspNum(a, Wf, Hf){ return a === 'orig' ? Wf / Hf : a === 'free' ? null : a === '1.91' ? 1.91 : (function(p){ return +p[0] / +p[1]; })(a.split(':')); }
+  // src（W×H）に回転・反転・傾き補正・トリミング・周辺光量をかけて、ctx（outW×outH）に描く
+  function renderGeoTo(ctx, outW, outH, src, W, H, crop){
+    var g = P.geo, F = geoFrame(W, H), Wf = F[0], Hf = F[1];
+    var cx = crop ? g.x * Wf : 0, cy = crop ? g.y * Hf : 0, cw = crop ? g.w * Wf : Wf, ch = crop ? g.h * Hf : Hf;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, outW, outH);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.scale(outW / cw, outH / ch); ctx.translate(-cx, -cy); ctx.translate(Wf / 2, Hf / 2);
+    ctx.rotate(g.ang * Math.PI / 180); var s = geoScale(Wf, Hf, g.ang); ctx.scale(s, s);
+    ctx.rotate(g.rot * Math.PI / 180); if (g.flip) ctx.scale(-1, 1);
+    ctx.drawImage(src, -W / 2, -H / 2);
+    ctx.restore();
+    if (crop && vigOn()){
+      // 周辺光量（トリミング後の枠に合わせる）
+      var amt = P.vgAmt / 100, mid = (P.vgMid == null ? 50 : P.vgMid) / 100, R = Math.hypot(outW, outH) / 2;
+      var gr = ctx.createRadialGradient(outW / 2, outH / 2, R * (0.18 + 0.62 * mid), outW / 2, outH / 2, R * 1.02);
+      var col = amt < 0 ? '0,0,0' : '255,255,255';
+      gr.addColorStop(0, 'rgba(' + col + ',0)'); gr.addColorStop(1, 'rgba(' + col + ',' + (Math.abs(amt) * 0.8).toFixed(3) + ')');
+      ctx.save(); ctx.globalCompositeOperation = amt < 0 ? 'multiply' : 'screen'; ctx.fillStyle = gr; ctx.fillRect(0, 0, outW, outH); ctx.restore();
+    }
+  }
+  function geoOutSize(W, H, crop){ var g = P.geo, F = geoFrame(W, H); return crop ? [Math.max(1, Math.round(g.w * F[0])), Math.max(1, Math.round(g.h * F[1]))] : F; }
+  // 画面に出す：加工済みの全体（fullCanvas）から、トリミング等をかけて view に描く
+  function present(){
+    if (!hi || !fullCanvas) return;
+    var useGeo = !rawView() && (geoOn() || vigOn() || CROPMODE);
+    if (!useGeo){
+      if (view.width !== hi.w || view.height !== hi.h){ view.width = hi.w; view.height = hi.h; }
+      vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.drawImage(fullCanvas, 0, 0);
+    } else {
+      var crop = !CROPMODE, sz = geoOutSize(hi.w, hi.h, crop);
+      if (view.width !== sz[0] || view.height !== sz[1]){ view.width = sz[0]; view.height = sz[1]; }
+      renderGeoTo(vctx, sz[0], sz[1], fullCanvas, hi.w, hi.h, crop);
+    }
+    positionCropUI();
+  }
+  function showOriginalPixels(){ fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
+  // トリミング枠
+  var cropui = null;
+  function ensureCropUI(){
+    if (cropui) return cropui;
+    cropui = xel('div', 'cropui'); cropui.id = 'cropui';
+    var box = xel('div', 'cbox'); box.innerHTML = '<i class="th th1"></i><i class="th th2"></i><i class="tv tv1"></i><i class="tv tv2"></i>';
+    ['tl', 'tr', 'bl', 'br'].forEach(function(c){ var hd = xel('span', 'chd chd-' + c); hd.dataset.c = c; box.appendChild(hd); });
+    cropui.appendChild(box); $('stage').appendChild(cropui);
+    var mode = null, st = null;
+    function rect(){ return view.getBoundingClientRect(); }
+    box.addEventListener('pointerdown', function(e){
+      e.preventDefault(); e.stopPropagation(); box.setPointerCapture(e.pointerId);
+      var c = e.target.dataset && e.target.dataset.c; mode = c || 'move'; var g = P.geo;
+      st = { x: e.clientX, y: e.clientY, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() };
+    });
+    box.addEventListener('pointermove', function(e){
+      if (!mode) return;
+      var g = P.geo, r = st.r, dx = (e.clientX - st.x) / r.width, dy = (e.clientY - st.y) / r.height, o = st.g;
+      if (mode === 'move'){ g.x = Math.min(1 - o.w, Math.max(0, o.x + dx)); g.y = Math.min(1 - o.h, Math.max(0, o.y + dy)); }
+      else {
+        var F = geoFrame(hi.w, hi.h), A = aspNum(g.asp, F[0], F[1]), An = A ? A * F[1] / F[0] : null;
+        var left = mode[1] === 'l', top = mode[0] === 't';
+        var ax = left ? o.x + o.w : o.x, ay = top ? o.y + o.h : o.y;           // 動かない側の角
+        var px = (left ? o.x : o.x + o.w) + dx, py = (top ? o.y : o.y + o.h) + dy;
+        var maxW = left ? ax : 1 - ax, maxH = top ? ay : 1 - ay;
+        var w = Math.min(maxW, Math.max(0.08, left ? ax - px : px - ax)), h = Math.min(maxH, Math.max(0.08, top ? ay - py : py - ay));
+        if (An){ if (w / h > An) w = h * An; else h = w / An; if (w > maxW){ w = maxW; h = w / An; } if (h > maxH){ h = maxH; w = h * An; } }
+        g.w = w; g.h = h; g.x = left ? ax - w : ax; g.y = top ? ay - h : ay;
+      }
+      positionCropUI(); updateGeoInfo();
+    });
+    function up(){ if (!mode) return; mode = null; clearPresetMark(); schedule(); }
+    box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+    return cropui;
+  }
+  function positionCropUI(){
+    if (!CROPMODE || !hi || rawView()){ if (cropui) cropui.style.display = 'none'; return; }
+    ensureCropUI(); cropui.style.display = 'block';
+    var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect(), g = P.geo;
+    cropui.style.left = (vr.left - sr.left) + 'px'; cropui.style.top = (vr.top - sr.top) + 'px'; cropui.style.width = vr.width + 'px'; cropui.style.height = vr.height + 'px';
+    var b = cropui.firstChild; b.style.left = g.x * 100 + '%'; b.style.top = g.y * 100 + '%'; b.style.width = g.w * 100 + '%'; b.style.height = g.h * 100 + '%';
+  }
+  function setCropMode(on){
+    on = !!on; if (on === CROPMODE) return;
+    CROPMODE = on; document.getElementById('app').classList.toggle('cropping', on);
+    present(); updateGeoInfo();
+  }
+  // 比率を当てる：今の中心のまま、入る一番大きな枠に
+  function fitAspect(a){
+    var g = P.geo; g.asp = a; if (!hi) return;
+    var F = geoFrame(hi.w, hi.h), A = aspNum(a, F[0], F[1]); if (!A) return;
+    var An = A * F[1] / F[0], w = 1, h = 1 / An; if (h > 1){ h = 1; w = An; }
+    var cx = g.x + g.w / 2, cy = g.y + g.h / 2;
+    g.w = w; g.h = h; g.x = Math.min(1 - w, Math.max(0, cx - w / 2)); g.y = Math.min(1 - h, Math.max(0, cy - h / 2));
+  }
+  function buildGeoExtra(body){
+    var asp = xel('div', 'asprow'); XE.aspBtns = [];
+    aspects().forEach(function(a){
+      var b = xel('button', 'aspbtn', a[1]); b.type = 'button'; b.dataset.a = a[0];
+      b.addEventListener('click', function(){ fitAspect(a[0]); afterGeo(); });
+      asp.appendChild(b); XE.aspBtns.push(b);
+    });
+    body.appendChild(asp);
+    var rr = xel('div', 'rrow');
+    rr.appendChild(xbtn('↻ 90°回転', 'ghost', function(){ var g = P.geo; g.rot = (g.rot + 90) % 360; g.x = 0; g.y = 0; g.w = 1; g.h = 1; fitAspect(g.asp); afterGeo(); }));
+    rr.appendChild(xbtn('⇋ 左右反転', 'ghost', function(){ P.geo.flip = P.geo.flip ? 0 : 1; afterGeo(); }));
+    rr.appendChild(xbtn('元に戻す', 'ghost', function(){ P.geo = geoBlank(); afterGeo(); }));
+    body.appendChild(rr);
+    var row = xel('div', 'row'); row.innerHTML = '<label>傾き補正</label><input type="range" min="-450" max="450" step="1"><span class="val num"></span>';
+    var r = row.querySelector('input'), v = row.querySelector('.val'); XE.angR = r; XE.angV = v;
+    r.addEventListener('input', function(){ P.geo.ang = +r.value / 10; v.textContent = P.geo.ang.toFixed(1); present(); schedule(); });
+    row.querySelector('label').addEventListener('dblclick', function(){ P.geo.ang = 0; afterGeo(); });
+    body.appendChild(row);
+    XE.geoInfo = xel('div', 'geoinfo'); body.appendChild(XE.geoInfo);
+  }
+  function afterGeo(){ clearPresetMark(); syncGeo(); present(); schedule(); }
+  function syncGeo(){
+    if (!XE.aspBtns) return;
+    XE.aspBtns.forEach(function(b){ b.classList.toggle('on', b.dataset.a === P.geo.asp); });
+    XE.angR.value = Math.round(P.geo.ang * 10); XE.angV.textContent = (+P.geo.ang).toFixed(1);
+    updateGeoInfo();
+  }
+  // 仕上がりの比率と、Instagramでそのまま載せられるか
+  function igJudge(r){ return r >= 0.745 && r <= 1.92; }
+  function updateGeoInfo(){
+    if (!XE.geoInfo || !img) return;
+    var F = (P.geo.rot % 180) ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight];
+    var w = Math.round(P.geo.w * F[0]), h = Math.round(P.geo.h * F[1]), r = w / h, ok = igJudge(r);
+    XE.geoInfo.innerHTML = '';
+    var a = xel('span', 'num', w + ' × ' + h + 'px ・ 比率 ' + (r >= 1 ? r.toFixed(2) + ':1' : '1:' + (1 / r).toFixed(2)));
+    var b = xel('span', ok ? 'ok' : 'ng', ok ? 'Instagram：そのまま載せられます' : 'Instagram：' + (r < 0.745 ? '縦が長すぎて切れます（4:5か3:4に）' : '横が長すぎて切れます'));
+    XE.geoInfo.appendChild(a); XE.geoInfo.appendChild(b);
   }
   // ---- トーンカーブ ----
   var CRV_COL = { rgb: '#E6EBEF', r: '#E8786A', g: '#7CC48A', b: '#79A6E8' };
@@ -2645,7 +3047,7 @@ function tkOldLens(img, w, h, P){
     row.appendChild(inp);
     row.appendChild(xbtn('保存', null, function(){
       var name = inp.value.trim(); if (!name){ toast('名前を入れてください'); return; }
-      var o = mpLoad(), snapP = JSON.parse(JSON.stringify(P)); delete snapP.reg.ver;
+      var o = mpLoad(), snapP = JSON.parse(JSON.stringify(P)); delete snapP.reg.ver; delete snapP.geo;   // トリミングは写真ごとなので保存しない
       o[name] = { P: snapP, at: Date.now() };
       if (mpSave(o)){ inp.value = ''; updateExtras(); toast('「' + name + '」を保存しました'); } else toast('この環境では保存できません（ブラウザの保存領域が使えません）');
     }));
@@ -2802,6 +3204,7 @@ function tkOldLens(img, w, h, P){
   function updateExtras(){
     try{ drawCurve(); }catch(e){}
     try{ syncGrade(); }catch(e){}
+    try{ syncGeo(); present(); }catch(e){}
     if (XE.raySeg){
       Array.prototype.forEach.call(XE.raySeg.children, function(b){ b.classList.toggle('on', b.dataset.m === P.rMode); });
       ['rAng','rBars'].forEach(function(k){ var r = rowOf(k); if (r) r.style.display = P.rMode === 'leak' ? 'none' : ''; });
@@ -2848,14 +3251,14 @@ function tkOldLens(img, w, h, P){
   };
   var TABS = [
     { key: 'look', label: '仕上げ' },
-    { key: 'adj', label: '調整', chips: [['basic','ライト',['basic']],['wb','カラー',['wb']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['cg','グレーディング',['cg']]] },
+    { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['basic','ライト',['basic']],['wb','カラー',['wb']],['fx','効果',['fx']],['det','ディテール',['det']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['cg','グレーディング',['cg']]] },
     { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
     { key: 'part', label: '部分', chips: [['reg','部分調整',['reg']]] },
     { key: 'util', label: '便利', chips: [['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
-  var CUR = { tab: 'look', chip: {} };
+  var CUR = { tab: 'look', chip: { adj: 'basic' } };   // 調整タブは「ライト」から（トリミングは選んだ時だけ）
   TABS.forEach(function(t){
     var b = document.createElement('button'); b.type = 'button'; b.className = 'tab'; b.dataset.t = t.key; b.setAttribute('aria-label', t.label);
     b.innerHTML = ICONS[t.key] + '<span>' + t.label + '</span><i></i>';
@@ -2866,7 +3269,7 @@ function tkOldLens(img, w, h, P){
       setCollapsed(false); showTab(t.key);
     });
     tabbar.appendChild(b);
-    if (t.chips) CUR.chip[t.key] = t.chips[0][0];
+    if (t.chips && !CUR.chip[t.key]) CUR.chip[t.key] = t.chips[0][0];
   });
   // 仕上げパネル
   var looksPanel = document.createElement('div'); panel.appendChild(looksPanel);
@@ -2927,7 +3330,7 @@ function tkOldLens(img, w, h, P){
   // 写真をタップ：操作部分をすべて隠す／もう一度タップで、直前のパネルのまま戻す
   (function(){
     var appEl = document.getElementById('app'), st = $('stage'), d = null, told = false;
-    function editing(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge; }
+    function editing(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || CROPMODE; }
     st.addEventListener('pointerdown', function(e){ if (!img || editing()) { d = null; return; } d = { x: e.clientX, y: e.clientY, t: Date.now() }; });
     st.addEventListener('pointerup', function(e){
       if (!d || editing()) return;
@@ -2970,6 +3373,7 @@ function tkOldLens(img, w, h, P){
     if (!(document.getElementById('app').classList.contains('expanded') && chip)) panel.scrollTop = 0;
     Array.prototype.forEach.call(tabbar.children, function(b){ b.classList.toggle('on', b.dataset.t === key); });
     setTimeout(function(){ try{ drawCurve(); }catch(e){} try{ syncGrade(); }catch(e){} }, 0);
+    if (t.chips){ var cc = CUR.chip[key] || t.chips[0][0]; setCropMode(key === 'adj' && cc === 'geo' && !document.getElementById('app').classList.contains('expanded')); } else setCropMode(false);
     updateIndicators();
     if (typeof drawOverlay === 'function') drawOverlay();
   }
@@ -2982,6 +3386,9 @@ function tkOldLens(img, w, h, P){
     if (k === 'mix') return tkMixActive(P);
     if (k === 'crv') return tkCurveActive(P);
     if (k === 'cg') return tkGradeActive(P);
+    if (k === 'fx') return !!P.on.fx && !!(P.fxTex || P.fxCla || P.fxDeh || P.vgAmt);
+    if (k === 'det') return !!P.on.det && !!(P.shAmt || P.nrL || P.nrC);
+    if (k === 'geo') return geoOn();
     return !!P.on[k];
   }
   function updateIndicators(){
