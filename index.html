@@ -51,14 +51,19 @@
   .stagewrap{grid-area:stage; min-height:0; position:relative; padding:0 8px 8px}
   .stage{position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:#08090A}
   .stage canvas{display:block; max-width:100%; max-height:100%; width:auto; height:auto}
-  /* 写真の選択：押せるのは中央のボタンだけ（画面全体を押せる形だと、iPhoneの選択メニューが押した場所に出て不自然になる） */
-  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; width:100%; height:100%; padding:24px; -webkit-user-select:none; user-select:none}
-  .dropbtn{display:flex; flex-direction:column; align-items:center; gap:4px; padding:18px 26px 16px; border-radius:18px; cursor:pointer; border:1px solid transparent; transition:background-color .15s, border-color .15s}
-  .dropbtn:active{background:var(--surface); border-color:var(--line)}
-  @media (hover:hover){ .dropbtn:hover{background:var(--surface); border-color:var(--line)} }
+  /* 写真の選択：枠のどこを押しても中央のボタンを押したことにする。
+     iPhoneの選択メニューは「押された入力欄」の位置に出るので、透明な入力欄を中央ボタンに重ね、枠を押した時もそれを押す＝メニューは常に中央に出る */
+  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; width:100%; height:100%; padding:24px; cursor:pointer; -webkit-user-select:none; user-select:none}
+  .dropbtn{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:min(260px,80%); padding:28px 32px 24px; border-radius:22px;
+    background:rgba(255,255,255,.03); border:1px dashed rgba(255,255,255,.14); transition:background-color .15s, border-color .15s}
+  .dropbtn input[type=file]{display:block; position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; font-size:16px}
+  .app:not(.collapsed) .drop{padding-bottom:calc(min(32dvh,270px) + 8px)}  /* 下のパネルに隠れない位置で中央に */
+  @media (min-width:900px), (min-width:600px) and (orientation:landscape){ .app:not(.collapsed) .drop{padding-bottom:24px} }
+  .drop.press .dropbtn{background:var(--surface); border-color:var(--accent)}
+  @media (hover:hover){ .drop:hover .dropbtn{background:var(--surface); border-color:var(--line)} }
   .drop .big{font-size:16px; font-weight:500}
   .drop .sub{font-size:12px; color:var(--faint)}
-  .drop .mark{width:54px; height:54px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent); margin-bottom:6px}
+  .drop .mark{width:64px; height:64px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent); margin-bottom:6px}
   .drop .mark svg{width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:1.6}
   body.dragging .stage{outline:2px dashed var(--accent); outline-offset:-8px}
   .chip{position:absolute; top:10px; background:rgba(13,15,17,.72); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
@@ -223,10 +228,11 @@
   </header>
   <main class="stagewrap"><div class="stage" id="stage">
     <div class="drop" id="drop">
-      <label class="dropbtn" for="file">
+      <div class="dropbtn" id="dropbtn">
+        <input type="file" id="dropfile" accept="image/*" aria-label="写真を選ぶ">
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
-      </label>
+      </div>
       <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます</span>
     </div>
     <canvas id="view" style="display:none"></canvas>
@@ -1262,6 +1268,14 @@ function tkOldLens(img, w, h, P){
     if (f) loadFile(f);
     e.target.value = '';
   });
+  // 写真を置く枠：どこを押しても中央の入力欄を押したことにする（選択メニューが常に中央に出る）
+  (function(){
+    var dz = $('drop'), df = $('dropfile');
+    df.addEventListener('change', function(e){ var f = e.target.files && e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
+    dz.addEventListener('click', function(e){ if (e.target !== df) df.click(); });
+    function on(){ dz.classList.add('press'); } function off(){ dz.classList.remove('press'); }
+    dz.addEventListener('pointerdown', on); dz.addEventListener('pointerup', off); dz.addEventListener('pointercancel', off); dz.addEventListener('pointerleave', off);
+  })();
   // PC：ドラッグ＆ドロップで読み込み
   var dragDepth = 0;
   document.addEventListener('dragenter', function(e){ e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
