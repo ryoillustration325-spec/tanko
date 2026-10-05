@@ -1,0 +1,17 @@
+{
+  "name": "淡光",
+  "short_name": "淡光",
+  "description": "光と色を、部分ごとに整える写真の仕上げアプリ。写真は端末の中だけで処理されます。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0D0F11",
+  "theme_color": "#0D0F11",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
