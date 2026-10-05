@@ -324,6 +324,37 @@
   .xri{display:block; border:1.5px solid var(--faint); border-radius:3px; position:relative}
   .xri.ig::after{content:""; position:absolute; left:50%; top:50%; width:9px; height:9px; margin:-5px 0 0 -5px; border:1.5px solid var(--faint); border-radius:3px}
   .xrb.on{color:var(--accent)} .xrb.on .xri,.xrb.on .xri.ig::after{border-color:var(--accent)}
+  /* 前後比較（分割） */
+  .splitui{position:absolute; display:none; z-index:3; pointer-events:none}
+  .splitui .sline{position:absolute; top:0; bottom:0; width:36px; margin-left:-18px; pointer-events:auto; touch-action:none; cursor:ew-resize}
+  .splitui .sline::before{content:""; position:absolute; left:17px; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+  .splitui .sknob{position:absolute; left:50%; top:50%; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.45)}
+  .splitui .sknob::after{content:"◀ ▶"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:8px; color:#333; letter-spacing:-1px}
+  .splitui .slab{position:absolute; bottom:8px; font-size:11px; color:#fff; background:rgba(0,0,0,.45); padding:2px 8px; border-radius:10px}
+  .splitui .sl-l{left:8px} .splitui .sl-r{right:8px}
+  .tb.on{border-color:var(--accent); color:var(--accent)}
+  .app.sliding .splitui,.app.peek .splitui{opacity:0}
+  /* ヒストグラム（左上の明るさの表示をタップ） */
+  .histo{position:absolute; left:10px; top:44px; z-index:4; width:min(260px,70%); background:rgba(13,15,17,.82); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:8px}
+  .histo[hidden]{display:none}
+  .histo canvas{display:block; width:100%; height:70px}
+  .histo .hrow{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:6px; font-size:10.5px; color:var(--faint); white-space:nowrap}
+  .histo .warn{color:var(--warn); font-weight:600}
+  .histo .hclip{font:inherit; font-size:10.5px; padding:4px 8px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer}
+  .histo .hclip.on{border-color:var(--accent); color:var(--accent)}
+  .app.sliding .histo,.app.peek .histo{opacity:0}
+  /* マスク */
+  .lmui{position:absolute; display:none; z-index:3; touch-action:none; overflow:visible}
+  .lmov{position:absolute; display:none; z-index:2; pointer-events:none; image-rendering:auto}
+  .lmui .lline{fill:none; stroke:#fff; stroke-width:1.6; filter:drop-shadow(0 0 1px rgba(0,0,0,.6)); pointer-events:stroke}
+  .lmui ellipse.lline{fill:rgba(255,255,255,.001); pointer-events:all}
+  .lmui .ldash{fill:none; stroke:rgba(255,255,255,.8); stroke-width:1.2; stroke-dasharray:5 5; pointer-events:none}
+  .lmui .lhd{fill:#fff; stroke:rgba(0,0,0,.4); stroke-width:1; cursor:grab}
+  .lmui .lend{fill:var(--accent)}
+  .lmui .lpin{fill:rgba(255,255,255,.5); stroke:#fff; stroke-width:1.5}
+  .lmlist{display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 6px}
+  .lmlist:empty{display:none}
+  .app.sliding .lmui.keep{background:none !important; box-shadow:none !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important}
   /* トーンカーブ */
   .crvbox{margin:4px 0 8px}
   .crv{display:block; width:100%; height:180px; touch-action:none; border-radius:10px; background:rgba(0,0,0,.22); border:1px solid var(--line-soft); cursor:crosshair}
@@ -355,7 +386,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v26</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v31</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -533,6 +564,7 @@ function tkProcess(src, w, h, P){
   tkNoise(img, w, h, P);
   tkBasic(img, w, h, P);
   tkPresence(img, w, h, P);
+  tkSkinSmooth(img, w, h, P);
   tkGrade(img, n, P);
 
   // 1) 自動明るさ（平均の明るさを目標へ。掛け算でなくガンマ＝白と黒は動かさず中間調だけ動かす→白飛びしない）
@@ -583,6 +615,9 @@ function tkProcess(src, w, h, P){
 
   // 2.2) 部分調整：被写体・緑・暖色・白・暗部をマスクで分け、それぞれ別の明るさ・彩度・色温度・色相に
   if (P.on.reg && P.reg && TK_REG && TK_REG.ver === P.reg.ver) tkApplyRegions(img, w, h, P.reg);
+
+  // 2.25) 自由な部分補正（円形・線形・ブラシ）
+  tkLocalMasks(img, w, h, P);
 
   // 2.3) 寒暖グラデーション（線形）：始点側と終点側に別々の色温度・明るさ
   if (P.on.grad) tkLinearGrad(img, w, h, P);
@@ -759,9 +794,12 @@ function tkProcess(src, w, h, P){
     }
   }
 
-  var out = new Uint8ClampedArray(n * 4);
+  // 8bitに戻す時に、目に見えないごく細かい揺らぎ（三角分布のディザ）を混ぜる＝空やグラデーションの縞（トーンジャンプ）を防ぐ
+  var out = new Uint8ClampedArray(n * 4), hs = 2166136261;
   for (i = 0; i < n; i++){
-    out[i * 4] = img[i * 3] * 255 + 0.5; out[i * 4 + 1] = img[i * 3 + 1] * 255 + 0.5; out[i * 4 + 2] = img[i * 3 + 2] * 255 + 0.5; out[i * 4 + 3] = 255;
+    hs = Math.imul(hs ^ i, 16777619) >>> 0; var d1 = (hs & 1023) / 1023; hs = Math.imul(hs ^ (i + 7919), 16777619) >>> 0; var d2 = (hs & 1023) / 1023;
+    var dz = d1 - d2 + 0.5;   // -0.5〜1.5 の中心0.5
+    out[i * 4] = img[i * 3] * 255 + dz; out[i * 4 + 1] = img[i * 3 + 1] * 255 + dz; out[i * 4 + 2] = img[i * 3 + 2] * 255 + dz; out[i * 4 + 3] = 255;
   }
   return out;
 }
@@ -867,12 +905,15 @@ function tkBasic(img, w, h, P){
     var FL = null;
     if (BR){ FL = new Float32Array(257); for (var fq = 0; fq <= 256; fq++){ var bs = fq / 256, ff = 1; if (sh) ff *= Math.pow(2, sh * 1.3 * Math.pow(1 - tkSS(bs / 0.55), 1.5)); if (hi) ff *= Math.pow(2, hi * 0.6 * tkSS((bs - 0.5) / 0.45)); FL[fq] = ff; } }
     var wbOn = te || ti, kS0 = 1 + sat;
+    // ホワイトバランスは光の量（リニア）で掛ける＝カメラやLightroomと同じ考え方。明るい所の色が濁らない
+    var TL = null, TG = null;
+    if (wbOn){ TL = new Float32Array(4097); TG = new Float32Array(4097); for (var lq = 0; lq <= 4096; lq++){ var v0 = lq / 4096; TL[lq] = v0 <= 0.04045 ? v0 / 12.92 : Math.pow((v0 + 0.055) / 1.055, 2.4); TG[lq] = v0 <= 0.0031308 ? v0 * 12.92 : 1.055 * Math.pow(v0, 1 / 2.4) - 0.055; } }
     for (var yy = 0; yy < h; yy++){
       if (BR) row = BR(yy);
       for (var xx = 0; xx < w; xx++){
         i = (yy * w + xx) * 3;
         var r = img[i], g = img[i + 1], b = img[i + 2];
-        if (wbOn){ r *= kr; g *= kg; b *= kb; if (r > 1) r = 1; if (g > 1) g = 1; if (b > 1) b = 1; }
+        if (wbOn){ r = TG[Math.min(4096, (TL[(r * 4096 + 0.5) | 0] * kr * 4096 + 0.5) | 0)]; g = TG[Math.min(4096, (TL[(g * 4096 + 0.5) | 0] * kg * 4096 + 0.5) | 0)]; b = TG[Math.min(4096, (TL[(b * 4096 + 0.5) | 0] * kb * 4096 + 0.5) | 0)]; }
         r = T[(r * 4096 + 0.5) | 0]; g = T[(g * 4096 + 0.5) | 0]; b = T[(b * 4096 + 0.5) | 0];
         if (row){
           var bv = row[xx * 4]; bv = bv < 0 ? 0 : (bv > 1 ? 1 : bv);
@@ -1049,6 +1090,86 @@ function tkSharpen(img, w, h, P){
     var wm = mk ? tkSS((ad - mk * 0.05) / (0.02 + mk * 0.03)) : 1;
     var Y1 = tkClamp01(Y[i] + d * a * 1.6 * wm);
     tkSetLum(img, j, Y[i], Y1); img[j] = tkClamp01(img[j]); img[j + 1] = tkClamp01(img[j + 1]); img[j + 2] = tkClamp01(img[j + 2]);
+  }
+}
+
+
+// ---------- 自由な部分補正（円形・線形・ブラシのマスク） ----------
+// m: { type:'radial'|'linear'|'brush', cx,cy,rx,ry | x0,y0,x1,y1 | strokes:[[x,y,r,erase]...], feather, inv, adj:{ev,con,hi,sh,temp,tint,sat} }
+function tkLmActive(m){ var a = m.adj || {}; return !!(a.ev || a.con || a.hi || a.sh || a.temp || a.tint || a.sat); }
+// マスクの効き具合（0〜1）を w×h で返す（座標は写真全体を 0〜1 とした割合）
+function tkLmWeight(m, w, h){
+  var n = w * h, W = new Float32Array(n), x, y, i, f = Math.max(0.02, (m.feather == null ? 50 : m.feather) / 100);
+  if (m.type === 'radial'){
+    var cx = m.cx * w, cy = m.cy * h, rx = Math.max(1, m.rx * w), ry = Math.max(1, m.ry * h), ca = Math.cos(m.ang || 0), sa = Math.sin(m.ang || 0);
+    var R0 = Math.max(rx, ry) + 2, yA = Math.max(0, Math.floor(cy - R0)), yB = Math.min(h - 1, Math.ceil(cy + R0)), xA = Math.max(0, Math.floor(cx - R0)), xB = Math.min(w - 1, Math.ceil(cx + R0));   // 楕円の外は計算しない
+    for (y = yA; y <= yB; y++) for (x = xA; x <= xB; x++){
+      var dx = x - cx, dy = y - cy, u = (dx * ca + dy * sa) / rx, v = (-dx * sa + dy * ca) / ry, d = Math.sqrt(u * u + v * v);
+      W[y * w + x] = 1 - tkSS((d - (1 - f)) / Math.max(1e-3, f));
+    }
+  } else if (m.type === 'linear'){
+    var x0 = m.x0 * w, y0 = m.y0 * h, ddx = m.x1 * w - x0, ddy = m.y1 * h - y0, L2 = Math.max(1, ddx * ddx + ddy * ddy);
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++){ var t = ((x - x0) * ddx + (y - y0) * ddy) / L2; W[y * w + x] = 1 - tkSS(t); }
+  } else if (m.type === 'brush'){
+    // ブラシは縮小した下書きに丸を打ってから、ぼかして写真の大きさへ
+    var Ls = Math.max(w, h), sc = Math.min(1, 512 / Ls), bw = Math.max(1, Math.round(w * sc)), bh = Math.max(1, Math.round(h * sc)), B = new Float32Array(bw * bh);
+    (m.strokes || []).forEach(function(s){
+      var px = s[0] * bw, py = s[1] * bh, r = Math.max(1, s[2] * Math.max(bw, bh)), er = s[3];
+      var x0b = Math.max(0, Math.floor(px - r)), x1b = Math.min(bw - 1, Math.ceil(px + r)), y0b = Math.max(0, Math.floor(py - r)), y1b = Math.min(bh - 1, Math.ceil(py + r));
+      for (var yy = y0b; yy <= y1b; yy++) for (var xx = x0b; xx <= x1b; xx++){
+        var dd = Math.hypot(xx - px, yy - py) / r; if (dd > 1) continue; var vv = 1 - tkSS((dd - 0.5) / 0.5), k = yy * bw + xx;
+        B[k] = er ? B[k] * (1 - vv) : Math.max(B[k], vv);
+      }
+    });
+    var Bb = tkBlur1(B, bw, bh, f * Math.max(bw, bh) * 0.02);
+    for (y = 0; y < h; y++){ var fy = Math.min(bh - 1, (y + 0.5) * bh / h - 0.5), y0i = Math.max(0, fy | 0), y1i = Math.min(bh - 1, y0i + 1), ty = Math.max(0, fy - y0i);
+      for (x = 0; x < w; x++){ var fx = Math.min(bw - 1, (x + 0.5) * bw / w - 0.5), x0i = Math.max(0, fx | 0), x1i = Math.min(bw - 1, x0i + 1), tx = Math.max(0, fx - x0i);
+        var a0 = Bb[y0i * bw + x0i] + (Bb[y0i * bw + x1i] - Bb[y0i * bw + x0i]) * tx, a1 = Bb[y1i * bw + x0i] + (Bb[y1i * bw + x1i] - Bb[y1i * bw + x0i]) * tx;
+        W[y * w + x] = tkClamp01(a0 + (a1 - a0) * ty); } }
+  }
+  if (m.inv) for (i = 0; i < n; i++) W[i] = 1 - W[i];
+  return W;
+}
+function tkLocalMasks(img, w, h, P){
+  if (!P.on || !P.on.lm || !P.lm || !P.lm.length) return;
+  var n = w * h;
+  P.lm.forEach(function(m){
+    if (!tkLmActive(m)) return;
+    var a = m.adj, Wt = tkLmWeight(m, w, h), q = tkRegPrep({ ev: a.ev, sat: a.sat, temp: (a.temp || 0) * 1.6, tint: (a.tint || 0) * 1.4 });
+    var con = (a.con || 0) / 100, hi = (a.hi || 0) / 100, sh = (a.sh || 0) / 100, T = null;
+    if (con || hi || sh){
+      T = new Float32Array(1025);
+      for (var k = 0; k <= 1024; k++){ var v = k / 1024; if (con) v = v + (con >= 0 ? con * 0.9 : con) * v * (1 - v) * (2 * v - 1); if (hi) v = v + hi * 0.22 * tkSS((v - 0.5) / 0.5) * (hi < 0 ? v : 1 - v) * 2; if (sh) v = v + sh * 0.25 * (1 - tkSS(v / 0.5)) * (sh > 0 ? 1 - v : v) * 1.5; T[k] = tkClamp01(v); }
+    }
+    var o = [0, 0, 0];
+    for (var i = 0, j = 0; i < n; i++, j += 3){
+      var wt = Wt[i]; if (wt < 0.003) continue;
+      var r = img[j], g = img[j + 1], b = img[j + 2], R = r, G = g, B2 = b;
+      if (T){ R = T[(r * 1024 + 0.5) | 0]; G = T[(g * 1024 + 0.5) | 0]; B2 = T[(b * 1024 + 0.5) | 0]; }
+      if (q.any){ tkRegAdj(R, G, B2, q, o); R = o[0]; G = o[1]; B2 = o[2]; }
+      img[j] = tkClamp01(r + (R - r) * wt); img[j + 1] = tkClamp01(g + (G - g) * wt); img[j + 2] = tkClamp01(b + (B2 - b) * wt);
+    }
+  });
+}
+
+
+// ---------- 肌をなめらかに（肌の色の所だけ、ムラとざらつきを整え、細かい質感は残す） ----------
+function tkSkinSmooth(img, w, h, P){
+  if (!P.on || !P.on.skin) return;
+  var amt = (P.skSm || 0) / 100; if (!amt) return;
+  var tex = (P.skTx == null ? 50 : P.skTx) / 100, n = w * h, L = Math.max(w, h), i, j;
+  var Y = tkLumOf(img, n), S = new Float32Array(n);
+  for (i = 0, j = 0; i < n; i++, j += 3){
+    var r = img[j], g = img[j + 1], b = img[j + 2], Yq = 0.299 * r + 0.587 * g + 0.114 * b, Iq = 0.596 * r - 0.274 * g - 0.322 * b, Qq = 0.211 * r - 0.523 * g + 0.312 * b;
+    S[i] = tkSkinW(Yq, Iq, Qq);
+  }
+  S = tkBlur1(S, w, h, L * 0.004);                                   // 肌の範囲の境目をなめらかに
+  var base = tkGuided(Y, Y, w, h, Math.max(2, Math.round(L * 0.006)), 0.0012 + 0.002 * amt);   // 輪郭を残したまま、ムラだけをならす
+  var fine = tkBlur1(Y, w, h, Math.max(0.6, L * 0.0009));             // 毛穴くらいの細かい質感
+  for (i = 0, j = 0; i < n; i++, j += 3){
+    var wt = S[i] * amt; if (wt < 0.01) continue;
+    var Y1 = base[i] + (Y[i] - fine[i]) * tex, Yn = Y[i] + (Y1 - Y[i]) * Math.min(1, wt * 1.3);
+    tkSetLum(img, j, Y[i], tkClamp01(Yn)); img[j] = tkClamp01(img[j]); img[j + 1] = tkClamp01(img[j + 1]); img[j + 2] = tkClamp01(img[j + 2]);
   }
 }
 
@@ -1532,6 +1653,19 @@ function tkOldLens(img, w, h, P){
 (function(){
   var $ = function(id){ return document.getElementById(id); };
 
+  // ---- 色の広さ（色域）：iPhoneの写真は Display P3 で記録されている。対応環境では、読み込み・加工・表示・書き出しまで P3 のまま扱う ----
+  var CS_P3 = (function(){
+    try{
+      var c = document.createElement('canvas'), x = c.getContext('2d', { colorSpace: 'display-p3' });
+      var ok = x && x.getContextAttributes && x.getContextAttributes().colorSpace === 'display-p3';
+      var gamut = window.matchMedia && window.matchMedia('(color-gamut: p3)').matches;
+      return !!(ok && gamut);
+    }catch(e){ return false; }
+  })();
+  var CS = CS_P3 ? 'display-p3' : 'srgb';
+  var LM = { sel: -1, edit: false, bmode: 'add', bsize: 6, show: false };   // マスクの選択状態（画面の組み立てより先に用意）
+  function mkImageData(data, w, h, cs){ try{ return new ImageData(data, w, h, { colorSpace: cs || CS }); }catch(e){ return new ImageData(data, w, h); } }
+
   // 写真編集用に暗い面で統一（テーマ切り替えはしない）
 
   // スライダー定義：キー, ラベル, 最小, 最大, 初期
@@ -1596,12 +1730,13 @@ function tkOldLens(img, w, h, P){
     { key: 'match', title: 'カラーマッチ', sub: '参考写真の色と明るさに寄せる', custom: buildMatchExtra,
       sliders: [['mAmt','色を寄せる',0,100,70],['mLum','明るさも寄せる',0,100,25]],
       hint: '影・中間・光の3つの明るさごとに、色かぶりと色の幅を合わせます。フィードの統一に。' },
-    { key: 'skin', title: '肌の色をそろえる', sub: '肌・毛色の赤み／黄ばみのムラだけを整える',
-      sliders: [['skAmt','そろえる',0,100,50],['skShift','赤み ← → 黄み',-20,20,0]],
+    { key: 'skin', title: '肌', sub: '肌の色ムラをそろえる・肌をなめらかに',
+      sliders: [['skAmt','そろえる',0,100,50],['skShift','赤み ← → 黄み',-20,20,0],['skSm','なめらかに',0,100,0],['skTx','質感を残す',0,100,50]],
       hint: '肌色に近い色相だけに効きます。人物の顔のムラ、茶トラの毛色のばらつきに。' },
     { sect: '部分調整（AIで奥行き・ピント・物を判定）' },
     { key: 'reg', title: '部分調整', sub: '主役・手前・まわり・奥を、奥行きとピントと物の形で分けて調整', sliders: [], custom: true },
     { sect: '便利機能' },
+    { key: 'lm', title: 'マスク', sub: '円形・線形・ブラシで決めた範囲だけを調整', sliders: [], custom: buildLmExtra, noToggle: true },
     { key: 'feed', title: 'フィード確認', sub: '過去の投稿と並べて、なじむか確かめる', sliders: [], custom: buildFeedExtra, noToggle: true },
     { key: 'mypre', title: '自分の設定を保存', sub: '今の設定に名前を付けて保存・呼び出し', sliders: [], custom: buildMyPreExtra, noToggle: true },
     { key: 'batch', title: 'まとめて書き出し', sub: '今の設定を複数の写真に当てて、ZIPで書き出す', sliders: [], custom: buildBatchExtra, noToggle: true },
@@ -1647,6 +1782,7 @@ function tkOldLens(img, w, h, P){
   var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1 };
   function crvBlank(){ return { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] }; }
   P.crv = crvBlank();
+  P.lm = []; P.on.lm = 1;
   P.geo = { rot: 0, flip: 0, ang: 0, x: 0, y: 0, w: 1, h: 1, asp: 'orig' };
   ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0;
   function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; }
@@ -1713,7 +1849,8 @@ function tkOldLens(img, w, h, P){
   setGroupMode('mix', 'h');
   function syncGroup(k){
     var box = $('g-' + k); if (!box) return;
-    box.querySelector('.tg').classList.toggle('on', !!P.on[k]);
+    var tg = box.querySelector('.tg'); if (!tg) return;   // ON/OFFの無いグループ（マスクなど）
+    tg.classList.toggle('on', !!P.on[k]);
     box.classList.toggle('off', !P.on[k]);
   }
   function setVal(k, v){ P[k] = v; var r = $('s-' + k); if (r){ r.value = v; $('v-' + k).textContent = v; } }
@@ -1737,7 +1874,7 @@ function tkOldLens(img, w, h, P){
   buildLookTiles();
   function markPreset(key){ Array.prototype.forEach.call(pbox.children, function(c){ c.classList.toggle('on', c.dataset.p === key); }); }
   function clearPresetMark(){ markPreset('__none__'); }
-  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1 };
+  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1, lm: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
   function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg' || k === 'fx' || k === 'det'; }
   function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
@@ -1761,12 +1898,56 @@ function tkOldLens(img, w, h, P){
 
   // 画像読み込み
   var img = null;
-  var view = $('view'), vctx = view.getContext('2d');
-  function loadFile(f){
+  var view = $('view'), vctx = view.getContext('2d', { colorSpace: CS });
+  // ---- 編集の自動保存（端末の中＝IndexedDB）：写真と設定を残し、開き直した時に続きから ----
+  var SESS = { db: null, timer: null, restoring: false };
+  function sessDB(){
+    return new Promise(function(res, rej){
+      if (SESS.db) return res(SESS.db);
+      try{
+        var rq = indexedDB.open('photo-retouch', 1);
+        rq.onupgradeneeded = function(){ rq.result.createObjectStore('kv'); };
+        rq.onsuccess = function(){ SESS.db = rq.result; res(SESS.db); };
+        rq.onerror = function(){ rej(rq.error); };
+      }catch(e){ rej(e); }
+    });
+  }
+  function sessPut(k, v){ return sessDB().then(function(db){ return new Promise(function(res, rej){ var t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = function(){ rej(t.error); }; }); }); }
+  function sessGet(k){ return sessDB().then(function(db){ return new Promise(function(res, rej){ var t = db.transaction('kv', 'readonly'), r = t.objectStore('kv').get(k); r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; }); }); }
+  function sessSaveState(){
+    if (!img || SESS.restoring) return;
+    clearTimeout(SESS.timer);
+    SESS.timer = setTimeout(function(){ try{ sessPut('state', { s: snapState(), tab: CUR.tab, at: Date.now() }).catch(function(){}); }catch(e){} }, 600);
+  }
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden' && img){ clearTimeout(SESS.timer); try{ sessPut('state', { s: snapState(), tab: CUR.tab, at: Date.now() }).catch(function(){}); }catch(e){} } });
+  // 起動時：前回の写真があれば、そのまま続きから開く
+  function sessRestore(){
+    Promise.all([sessGet('photo'), sessGet('state')]).then(function(r){
+      var ph = r[0], st = r[1]; if (!ph || !ph.blob || img) return;
+      SESS.restoring = true;
+      loadFile(ph.blob, { restore: st && st.s, keep: true, onDone: function(){
+        SESS.restoring = false;
+        var d = new Date(ph.at || Date.now());
+        toast('前回の編集を開きました（' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2) + '）');
+      } });
+    }).catch(function(){});
+  }
+  function loadFile(f, opt){
+    opt = opt || {};
     if (!f || (f.type && f.type.indexOf('image/') !== 0)){ toast('画像ファイルを選んでください'); return; }
     var url = URL.createObjectURL(f);
     var im = new Image();
-    im.onload = function(){ img = im; setupPreview(); URL.revokeObjectURL(url); };
+    if (!opt.keep){ try{ sessPut('photo', { blob: f, name: f.name || '', at: Date.now() }).then(function(){ sessPut('state', null); }).catch(function(){}); }catch(e){} }
+    im.onload = function(){
+      img = im; setupPreview(); URL.revokeObjectURL(url);
+      if (opt.restore){
+        try{
+          applyState(opt.restore); HIST = [snapState()]; REDO = []; updateHistBtns();
+          if (P.on.reg && !REG.ready) runSegmentation();
+        }catch(e){}
+      }
+      if (opt.onDone) opt.onDone();
+    };
     im.onerror = function(){ toast('この形式は読み込めませんでした'); };
     im.src = url;
   }
@@ -1799,7 +1980,7 @@ function tkOldLens(img, w, h, P){
   }
   function readPixels(w, h){
     var c = document.createElement('canvas'); c.width = w; c.height = h;
-    var x = c.getContext('2d'); x.drawImage(img, 0, 0, w, h);
+    var x = c.getContext('2d', { colorSpace: CS }); x.drawImage(img, 0, 0, w, h);
     return x.getImageData(0, 0, w, h).data;
   }
   // ---------- 処理エンジン：裏側（Worker）で計算し、使えない環境では同期処理 ----------
@@ -1838,7 +2019,7 @@ function tkOldLens(img, w, h, P){
   }
 
   // ---------- プレビュー：操作中は軽い解像度、止めたら画面の実ピクセルで描き直す ----------
-  var lo = null, hi = null, loCanvas = document.createElement('canvas'), loCtx = loCanvas.getContext('2d');
+  var lo = null, hi = null, loCanvas = document.createElement('canvas'), loCtx = loCanvas.getContext('2d', { colorSpace: CS });
   var WIDE_Q = '(min-width:900px), (min-width:600px) and (orientation:landscape)';
   function isWide(){ try{ return window.matchMedia(WIDE_Q).matches; }catch(e){ return false; } }
   function hiLongSide(){
@@ -1860,7 +2041,9 @@ function tkOldLens(img, w, h, P){
     loCanvas.width = lo.w; loCanvas.height = lo.h;
     view.width = hi.w; view.height = hi.h; view.style.display = 'block';
     P.geo = geoBlank();   // トリミングは写真ごと
-    fullCanvas.width = hi.w; fullCanvas.height = hi.h; fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); syncGeo();
+    P.lm = []; LM.sel = -1;   // マスクも写真ごと
+    if (SPLIT) updateOrigCanvas();
+    fullCanvas.width = hi.w; fullCanvas.height = hi.h; fullCtx.putImageData(mkImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); syncGeo();
     $('drop').style.display = 'none';
     $('badge').style.display = 'block'; $('cmp').disabled = false; $('change').textContent = '写真を変更'; setTimeout(renderLookThumbs, 30);
     $('reset').disabled = false; $('save').disabled = false;
@@ -1893,7 +2076,7 @@ function tkOldLens(img, w, h, P){
       if (kind === 'hi' && myGen !== gen){ pump(); return; }   // 途中でまた動かした → 捨てる
       last = { kind: kind, out: out };
       draw(last);
-      updateBadge(out, q.w * q.h);
+      updateBadge(out, q.w * q.h); computeHisto(out, q.w * q.h);
       pump();
     }, function(){ busy = false; hideBusy(); pump(); });
   }
@@ -1902,11 +2085,13 @@ function tkOldLens(img, w, h, P){
     setTimeout(drawOverlay, 0);
     if (fullCanvas.width !== hi.w || fullCanvas.height !== hi.h){ fullCanvas.width = hi.w; fullCanvas.height = hi.h; }
     if (r.kind === 'hi'){
-      fullCtx.putImageData(new ImageData(r.out, hi.w, hi.h), 0, 0);
+      fullCtx.putImageData(mkImageData(r.out, hi.w, hi.h), 0, 0);
+      clipOverlay(r.out, hi.w, hi.h);
     } else {
-      loCtx.putImageData(new ImageData(r.out, lo.w, lo.h), 0, 0);
+      loCtx.putImageData(mkImageData(r.out, lo.w, lo.h), 0, 0);
       fullCtx.imageSmoothingEnabled = true; fullCtx.imageSmoothingQuality = 'high';
       fullCtx.drawImage(loCanvas, 0, 0, hi.w, hi.h);
+      clipOverlay(r.out, lo.w, lo.h);
     }
     present();
   }
@@ -1934,10 +2119,17 @@ function tkOldLens(img, w, h, P){
     if (on){ showOriginalPixels(); cmp.classList.add('pri'); }
     else { cmp.classList.remove('pri'); draw(last); }
   }
-  cmp.addEventListener('pointerdown', function(e){ e.preventDefault(); if (hi) showOriginal(true); });
-  ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ cmp.addEventListener(ev, function(){ if (showOrig) showOriginal(false); }); });
+  // 「元画像」：長押し＝押している間だけ元の写真／短くタップ＝前後比較（分割表示）の入／切
+  var cmpT = null, cmpHeld = false;
+  cmp.addEventListener('pointerdown', function(e){ e.preventDefault(); if (!hi) return; cmpHeld = false; clearTimeout(cmpT); cmpT = setTimeout(function(){ cmpHeld = true; showOriginal(true); }, 220); });
+  ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ cmp.addEventListener(ev, function(){
+    clearTimeout(cmpT);
+    if (showOrig){ showOriginal(false); return; }
+    if (ev === 'pointerup' && !cmpHeld && hi) setSplit(!SPLIT);
+    cmpHeld = true;
+  }); });
 
-  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
+  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw(); ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
 
   // 回転・ウィンドウサイズ変更：表示サイズが大きく変わったら解像度を合わせ直す
   var rsTimer = null;
@@ -1972,9 +2164,9 @@ function tkOldLens(img, w, h, P){
   var saving = false;
   $('save').addEventListener('click', function(){ openExport(); });
   // ---- 書き出し画面：サイズ（Instagram／高画質）・フチ（色・線幅・比率）・共有 ----
-  var XP = { base: null, blob: null, gen: 0, timer: null, size: 'ig', color: '#ffffff', width: 0, ratio: 'even', open: false };
-  try{ var xs = JSON.parse(localStorage.getItem('retouch-export') || 'null'); if (xs){ ['size', 'color', 'width', 'ratio'].forEach(function(k){ if (xs[k] != null) XP[k] = xs[k]; }); } }catch(e){}
-  function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio })); }catch(e){} }
+  var XP = { base: null, blob: null, gen: 0, timer: null, size: 'ig', color: '#ffffff', width: 0, ratio: 'even', open: false, cs: 'p3', n: 1 };
+  try{ var xs = JSON.parse(localStorage.getItem('retouch-export') || 'null'); if (xs){ ['size', 'color', 'width', 'ratio', 'cs'].forEach(function(k){ if (xs[k] != null) XP[k] = xs[k]; }); } }catch(e){}
+  function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio, cs: XP.cs })); }catch(e){} }
   function xpRatios(){ return [['even', '均等', null], ['1:1', '1:1', 1], ['2:3', '2:3', 2 / 3], ['3:2', '3:2', 1.5], ['4:5', '4:5', 0.8], ['3:4', '3:4', 0.75], ['5:4', '5:4', 1.25]]; }
   function xpColors(){ return ['#ffffff', '#d6d6d6', '#8a8a8a', '#4a4a4a', '#000000', '#141414', '#3b302c', '#8b5e43']; }
   function buildExportUI(){
@@ -1987,6 +2179,15 @@ function tkOldLens(img, w, h, P){
     var s0 = sec('サイズ'), seg = xel('div', 'seg'); XE.xpSize = [];
     [['ig', 'Instagram（幅1080px）'], ['hq', '高画質（長辺3000px）']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.size = d[0]; xpChanged(); }); seg.appendChild(b); XE.xpSize.push(b); });
     s0.appendChild(seg);
+    // 色の範囲：P3（iPhoneの写真本来の広い色）／sRGB（どこでも同じに見える互換重視）
+    var sc = sec('色の範囲'), seg2 = xel('div', 'seg'); XE.xpCs = [];
+    [['p3', '広い色（Display P3）'], ['srgb', '互換（sRGB）']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.cs = d[0]; xpChanged(); }); seg2.appendChild(b); XE.xpCs.push(b); });
+    sc.appendChild(seg2); sc.appendChild(xel('div', 'hint', 'iPhoneやInstagramは広い色に対応しています。古いパソコンや印刷に回すなら互換（sRGB）が安全です。'));
+    if (!CS_P3) sc.style.display = 'none';
+    // カルーセル（横長の写真を2〜3枚に分けて、Instagramでスワイプするとつながる）
+    var sk = sec('カルーセル分割'), seg3 = xel('div', 'seg'); XE.xpN = [];
+    [[1, '分けない'], [2, '2枚に分ける'], [3, '3枚に分ける']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.n = d[0]; xpChanged(); }); seg3.appendChild(b); XE.xpN.push(b); });
+    sk.appendChild(seg3); sk.appendChild(xel('div', 'hint', '1枚あたりの比率は「フチのサイズ」の4:5・3:4・1:1に合わせます（それ以外は4:5）。トリミングで「2枚つなぎ 8:5」「3枚つなぎ 12:5」を選んでおくと、フチなしでぴったり分けられます。'));
     var s1 = sec('フチのカラー'), sw = xel('div', 'xsw'); XE.xpSw = [];
     var pick = xel('button', 'xpick'); pick.type = 'button'; pick.setAttribute('aria-label', '写真から色を取る');
     pick.innerHTML = '<svg viewBox="0 0 24 24"><path d="m14 4 6 6"/><path d="M17 7 7 17l-3 1 1-3L15 5"/><path d="M4 20l2-2"/></svg>';
@@ -2014,7 +2215,7 @@ function tkOldLens(img, w, h, P){
     $('xcv').addEventListener('click', function(e){
       if (!XE.xpPicking) return;
       var cv = $('xcv'), rc = cv.getBoundingClientRect(), x = Math.floor((e.clientX - rc.left) / rc.width * cv.width), y = Math.floor((e.clientY - rc.top) / rc.height * cv.height);
-      var d = cv.getContext('2d').getImageData(Math.max(0, Math.min(cv.width - 1, x)), Math.max(0, Math.min(cv.height - 1, y)), 1, 1).data;
+      var d = cv.getContext('2d', { colorSpace: CS }).getImageData(Math.max(0, Math.min(cv.width - 1, x)), Math.max(0, Math.min(cv.height - 1, y)), 1, 1).data;
       var hex = '#' + [d[0], d[1], d[2]].map(function(v){ return ('0' + v.toString(16)).slice(-2); }).join('');
       XE.xpCustom.dataset.c = hex; XE.xpCustom.style.background = hex; XE.xpCustom.hidden = false;
       XP.color = hex; XE.xpPicking = false; XE.xpPick.classList.remove('on'); xpChanged();
@@ -2022,6 +2223,8 @@ function tkOldLens(img, w, h, P){
   }
   function xpSync(){
     XE.xpSize.forEach(function(b){ b.classList.toggle('on', b.dataset.m === XP.size); });
+    (XE.xpCs || []).forEach(function(b){ b.classList.toggle('on', b.dataset.m === XP.cs); });
+    (XE.xpN || []).forEach(function(b){ b.classList.toggle('on', +b.dataset.m === (XP.n || 1)); });
     XE.xpSw.concat([XE.xpCustom]).forEach(function(b){ b.classList.toggle('on', b.dataset.c === XP.color); });
     if (xpColors().indexOf(XP.color) < 0 && XP.color){ XE.xpCustom.dataset.c = XP.color; XE.xpCustom.style.background = XP.color; XE.xpCustom.hidden = false; XE.xpCustom.classList.add('on'); }
     XE.xpW.value = XP.width; XE.xpWv.textContent = XP.width;
@@ -2037,57 +2240,81 @@ function tkOldLens(img, w, h, P){
       var sz = sizeFor(3000), w = sz[0], h = sz[1], src;
       try{ src = readPixels(w, h); }catch(e){ saving = false; busyExport = false; $('xstat').textContent = '画像が大きすぎて計算できませんでした'; return; }
       runJob(src, w, h, snap(P)).then(function(out){
-        var c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').putImageData(new ImageData(out, w, h), 0, 0);
+        var c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d', { colorSpace: CS }).putImageData(mkImageData(out, w, h), 0, 0);
         var os = geoOutSize(w, h, true), b = document.createElement('canvas'); b.width = os[0]; b.height = os[1];
-        renderGeoTo(b.getContext('2d'), os[0], os[1], c, w, h, true); c.width = 1; c.height = 1;
+        renderGeoTo(b.getContext('2d', { colorSpace: CS }), os[0], os[1], c, w, h, true); c.width = 1; c.height = 1;
         XP.base = b; saving = false; busyExport = false; xpChanged();
       }, function(){ saving = false; busyExport = false; $('xstat').textContent = '書き出しに失敗しました'; });
     }, 40);
   }
   function closeExport(){ XP.open = false; $('xmodal').hidden = true; XE.xpPicking = false; if (XE.xpPick) XE.xpPick.classList.remove('on'); }
   // 仕上がりの組み立て：写真の周りにフチ。比率を選ぶと、その比率の台紙の中央に写真を置く
-  function xpCompose(maxOut){
-    var b = XP.base, pw = b.width, ph = b.height, bw = XP.width / 100 * 0.1 * Math.max(pw, ph);
+  function xpCS(){ return CS_P3 && XP.cs !== 'srgb' ? 'display-p3' : 'srgb'; }
+  function xpCompose(maxOut, base){
+    var b = base || XP.base, pw = b.width, ph = b.height, bw = XP.width / 100 * 0.1 * Math.max(pw, ph);
     var R = (xpRatios().filter(function(d){ return d[0] === XP.ratio; })[0] || [0, 0, null])[2];
+    var NS = XP.n || 1; if (NS > 1){ var Rs = R && (R === 0.8 || R === 0.75 || R === 1) ? R : 0.8; R = Rs * NS; }   // カルーセル：1枚の比率×枚数
     var W = pw + bw * 2, H = ph + bw * 2;
     if (R){ if (W / H > R) H = W / R; else W = H * R; }
-    var k = XP.size === 'ig' ? 1080 / W : Math.min(1, 3000 / Math.max(W, H));
+    var k = XP.size === 'ig' ? 1080 * NS / W : Math.min(1, 3000 * NS / Math.max(W, H / NS));
     if (maxOut) k = Math.min(k, maxOut / Math.max(W, H));
     var c = document.createElement('canvas'); c.width = Math.round(W * k); c.height = Math.round(H * k);
-    var x = c.getContext('2d'); x.fillStyle = XP.color; x.fillRect(0, 0, c.width, c.height);
+    var x = c.getContext('2d', { colorSpace: xpCS() }); x.fillStyle = XP.color; x.fillRect(0, 0, c.width, c.height);
     x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
     var dw = pw * k, dh = ph * k; x.drawImage(b, Math.round((c.width - dw) / 2), Math.round((c.height - dh) / 2), Math.round(dw), Math.round(dh));
     return { c: c, W: c.width, H: c.height };
   }
-  function xpChanged(){
-    xpSaveSettings(); xpSync();
-    if (!XP.base) return;
-    var pv = xpCompose(900), cv = $('xcv'); cv.width = pv.W; cv.height = pv.H; cv.getContext('2d').drawImage(pv.c, 0, 0);
-    XP.blob = null; $('xmodal').classList.remove('ready');
-    var my = ++XP.gen; clearTimeout(XP.timer);
-    XP.timer = setTimeout(function(){
-      var r = xpCompose(0), c = r.c;
+  // 書き出す1枚を作る（フチ・サイズ・Instagram用の仕上げシャープ・色の範囲）→ JPEG
+  function xpFinal(base){
+    return new Promise(function(res){
+      var r = xpCompose(0, base), c = r.c;
       if (XP.size === 'ig'){
         // Instagram用：縮小で甘くなった輪郭を、画面向けに軽く締める
-        var x = c.getContext('2d'), id = x.getImageData(0, 0, r.W, r.H), d = id.data, n = r.W * r.H, f = new Float32Array(n * 3);
+        var x = c.getContext('2d', { colorSpace: xpCS() }), id = x.getImageData(0, 0, r.W, r.H), d = id.data, n = r.W * r.H, f = new Float32Array(n * 3);
         for (var i = 0; i < n; i++){ f[i * 3] = d[i * 4] / 255; f[i * 3 + 1] = d[i * 4 + 1] / 255; f[i * 3 + 2] = d[i * 4 + 2] / 255; }
         tkSharpen(f, r.W, r.H, { on: { det: 1 }, shAmt: 28, shRad: 12, shMask: 15 });
         for (i = 0; i < n; i++){ d[i * 4] = f[i * 3] * 255 + 0.5; d[i * 4 + 1] = f[i * 3 + 1] * 255 + 0.5; d[i * 4 + 2] = f[i * 3 + 2] * 255 + 0.5; }
         x.putImageData(id, 0, 0);
       }
-      c.toBlob(function(bl){
+      var NS = XP.n || 1, q = XP.size === 'ig' ? 0.92 : 0.94;
+      if (NS <= 1){ c.toBlob(function(bl){ res({ blob: bl, W: r.W, H: r.H }); }, 'image/jpeg', q); return; }
+      // カルーセル：同じ幅で切り分ける（つなぎ目がずれないよう、幅は整数で割り切る）
+      var sw = Math.floor(r.W / NS), parts = [], done = 0;
+      for (var k2 = 0; k2 < NS; k2++){ (function(k2){
+        var pc = document.createElement('canvas'); pc.width = sw; pc.height = r.H; pc.getContext('2d', { colorSpace: xpCS() }).drawImage(c, k2 * sw, 0, sw, r.H, 0, 0, sw, r.H);
+        pc.toBlob(function(bl){ parts[k2] = bl; if (++done === NS){ var tot = 0; parts.forEach(function(p){ tot += p.size; }); res({ blob: parts[0], blobs: parts, W: sw, H: r.H, size: tot }); } }, 'image/jpeg', q);
+      })(k2); }
+    });
+  }
+  function xpChanged(){
+    xpSaveSettings(); xpSync();
+    if (!XP.base) return;
+    var pv = xpCompose(900), cv = $('xcv'); cv.width = pv.W; cv.height = pv.H; cv.getContext('2d', { colorSpace: CS }).drawImage(pv.c, 0, 0);
+    if ((XP.n || 1) > 1){ var px2 = cv.getContext('2d', { colorSpace: CS }); px2.save(); px2.strokeStyle = 'rgba(255,255,255,.85)'; px2.setLineDash([6, 6]); px2.lineWidth = 1.5; for (var ci = 1; ci < XP.n; ci++){ var lx = Math.round(pv.W * ci / XP.n) + 0.5; px2.beginPath(); px2.moveTo(lx, 0); px2.lineTo(lx, pv.H); px2.stroke(); } px2.restore(); }
+    XP.blob = null; $('xmodal').classList.remove('ready');
+    var my = ++XP.gen; clearTimeout(XP.timer);
+    XP.timer = setTimeout(function(){
+      xpFinal(XP.base).then(function(res){ var bl = res.blob, r = res;
+
         if (my !== XP.gen) return;
-        XP.blob = bl; $('xmodal').classList.add('ready');
+        XP.blob = bl; XP.blobs = res.blobs || null; $('xmodal').classList.add('ready');
         var ar = r.W / r.H, ok = ar >= 0.745 && ar <= 1.92;
         $('xstat').innerHTML = '';
-        $('xstat').appendChild(xel('span', 'num', r.W + ' × ' + r.H + 'px ・ ' + Math.round(bl.size / 1024) + 'KB'));
+        $('xstat').appendChild(xel('span', 'num', (XP.blobs ? XP.blobs.length + '枚 ・ 各' : '') + r.W + ' × ' + r.H + 'px ・ ' + Math.round((res.size || bl.size) / 1024) + 'KB ・ ' + (xpCS() === 'display-p3' ? 'P3' : 'sRGB')));
         if (XP.size === 'ig') $('xstat').appendChild(xel('span', ok ? 'ok' : 'ng', ok ? 'Instagram：そのまま載せられます' : 'Instagram：この比率は切れます（フチの比率を4:5か3:4に）'));
-      }, 'image/jpeg', XP.size === 'ig' ? 0.92 : 0.94);
+      });
     }, 160);
   }
   function xpShare(){
     if (!XP.blob){ toast('準備中です。少し待ってからもう一度'); return; }
     var name = 'retouch_' + stamp() + (XP.size === 'ig' ? '_ig' : '') + '.jpg', blob = XP.blob;
+    if (XP.blobs && XP.blobs.length > 1){
+      var base = 'retouch_' + stamp() + '_', files = XP.blobs.map(function(b, i){ try{ return new File([b], base + (i + 1) + '.jpg', { type: 'image/jpeg' }); }catch(e){ return null; } });
+      if (downloads){ files.reduce(function(pr, f, i){ return pr.then(function(){ return downloads.save({ filename: base + (i + 1) + '.jpg', data: XP.blobs[i] }); }); }, Promise.resolve()).then(function(){ toast(files.length + '枚を保存しました'); }).catch(function(){ toast('保存できませんでした'); }); return; }
+      if (files[0] && navigator.canShare && navigator.canShare({ files: files })){ navigator.share({ files: files }).then(function(){ toast(files.length + '枚を共有しました'); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); }); return; }
+      XP.blobs.forEach(function(b, i){ var u = URL.createObjectURL(b), a2 = document.createElement('a'); a2.href = u; a2.download = base + (i + 1) + '.jpg'; document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(function(){ URL.revokeObjectURL(u); }, 4000); });
+      toast(files.length + '枚を保存しました'); return;
+    }
     if (downloads){
       downloads.save({ filename: name, data: blob }).then(function(r){ toast(r && r.status === 'delivered' ? '受け渡しました' : '保存しました'); }).catch(function(e){ var c = e && e.code; toast(c === 'declined' ? 'キャンセルしました' : '保存できませんでした'); });
       return;
@@ -2131,8 +2358,8 @@ function tkOldLens(img, w, h, P){
       box.addEventListener('click', function(e){ if (e.target === box) box.hidden = true; });
     }
     var go = box.querySelector('#shareGo');
-    go.textContent = canShare ? (type === 'application/zip' ? '共有・ファイルに保存' : '写真に保存・共有') : 'ダウンロード';
-    box.querySelector('#shareHint').textContent = canShare ? (type === 'application/zip' ? '共有シートで「\"ファイル\"に保存」を選んでください。' : '共有シートで「画像を保存」を選ぶと、写真アプリに入ります。') : 'ブラウザのダウンロードとして保存します。';
+    go.textContent = canShare ? (type !== 'image/jpeg' ? '共有・ファイルに保存' : '写真に保存・共有') : 'ダウンロード';
+    box.querySelector('#shareHint').textContent = canShare ? (type !== 'image/jpeg' ? '共有シートで「\"ファイル\"に保存」を選んでください。' : '共有シートで「画像を保存」を選ぶと、写真アプリに入ります。') : 'ブラウザのダウンロードとして保存します。';
     go.onclick = function(){
       if (canShare){
         navigator.share({ files: [file] }).then(function(){ box.hidden = true; toast('保存しました'); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); });
@@ -2284,7 +2511,7 @@ function tkOldLens(img, w, h, P){
     }).then(function(s){ S[name] = s; return s; }, function(e){ loading[name] = null; throw e; });
     return loading[name];
   }
-  function canvasOf(w, h, draw){ var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); draw(x); return x.getImageData(0, 0, w, h).data; }
+  function canvasOf(w, h, draw){ var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d', { colorSpace: CS }); draw(x); return x.getImageData(0, 0, w, h).data; }
   // 主役の見当（u2netp）：色かぶりを補正してから
   function runU2(flip){
     var d = canvasOf(320, 320, function(x){ if (flip){ x.translate(320, 0); x.scale(-1, 1); } x.drawImage(img, 0, 0, 320, 320); });
@@ -2452,7 +2679,7 @@ function tkOldLens(img, w, h, P){
     updateRegUI(); pushRegions();
   }
   // ---- 切り分けの色表示 ----
-  var ovl = $('ovl'), octx = ovl.getContext('2d'), ovlSrc = document.createElement('canvas');
+  var ovl = $('ovl'), octx = ovl.getContext('2d', { colorSpace: CS }), ovlSrc = document.createElement('canvas');
   function placeOverlay(){
     ovl.style.left = view.offsetLeft + 'px'; ovl.style.top = view.offsetTop + 'px';
     ovl.style.width = view.offsetWidth + 'px'; ovl.style.height = view.offsetHeight + 'px';
@@ -2462,7 +2689,7 @@ function tkOldLens(img, w, h, P){
     var on = REG.ready && P.on.reg && (REG.show || REG.tool !== 'off') && hi && !showOrig;
     if (!on){ ovl.style.display = 'none'; return; }
     ovlSrc.width = REG.mw; ovlSrc.height = REG.mh;
-    var sx = ovlSrc.getContext('2d'), im = sx.createImageData(REG.mw, REG.mh), d = im.data, n = REG.mw * REG.mh, D = REG.data;
+    var sx = ovlSrc.getContext('2d', { colorSpace: CS }), im = sx.createImageData(REG.mw, REG.mh), d = im.data, n = REG.mw * REG.mh, D = REG.data;
     var only = REG.tool !== 'off';   // 手直し中は選んだ部分だけ
     for (var i = 0; i < n; i++){
       var r = 0, g = 0, b = 0, a = 0;
@@ -2641,7 +2868,7 @@ function tkOldLens(img, w, h, P){
     var d = window.devicePixelRatio || 1, S = Math.round(rc.width * d);
     if (cv.width !== S){ cv.width = S; cv.height = S; }
     if (CG_IMG.size !== S){
-      var x = cv.getContext('2d'), im = x.createImageData(S, S), c = S / 2;
+      var x = cv.getContext('2d', { colorSpace: CS }), im = x.createImageData(S, S), c = S / 2;
       for (var y = 0; y < S; y++) for (var xx = 0; xx < S; xx++){
         var dx = xx - c + 0.5, dy = c - y - 0.5, rr = Math.hypot(dx, dy) / c, o = (y * S + xx) * 4;
         if (rr > 1){ im.data[o + 3] = 0; continue; }
@@ -2653,7 +2880,7 @@ function tkOldLens(img, w, h, P){
       }
       CG_IMG.data = im; CG_IMG.size = S;
     }
-    cv.getContext('2d').putImageData(CG_IMG.data, 0, 0);
+    cv.getContext('2d', { colorSpace: CS }).putImageData(CG_IMG.data, 0, 0);
   }
   function syncGrade(){
     if (!XE.cgBtns) return;
@@ -2678,26 +2905,27 @@ function tkOldLens(img, w, h, P){
   }
   // ---- トリミング・回転・傾き補正・反転（表示と書き出しの最後にかける。加工の計算はトリミング前の全体で行う） ----
   function geoBlank(){ return { rot: 0, flip: 0, ang: 0, x: 0, y: 0, w: 1, h: 1, asp: 'orig' }; }
-  var CROPMODE = false, fullCanvas = document.createElement('canvas'), fullCtx = fullCanvas.getContext('2d');
-  function aspects(){ return [['orig', '元の比率'], ['free', '自由'], ['4:5', '4:5'], ['1:1', '1:1'], ['3:4', '3:4'], ['9:16', '9:16'], ['16:9', '16:9'], ['1.91', '1.91:1']]; }
+  var CROPMODE = false, fullCanvas = document.createElement('canvas'), fullCtx = fullCanvas.getContext('2d', { colorSpace: CS });
+  function aspects(){ return [['orig', '元の比率'], ['free', '自由'], ['4:5', '4:5'], ['1:1', '1:1'], ['3:4', '3:4'], ['9:16', '9:16'], ['16:9', '16:9'], ['1.91', '1.91:1'], ['8:5', '2枚つなぎ 8:5'], ['12:5', '3枚つなぎ 12:5']]; }
   function geoOn(){ var g = P.geo; return !!(g.rot || g.flip || g.ang || g.x > 5e-4 || g.y > 5e-4 || g.w < 0.9995 || g.h < 0.9995); }
   function vigOn(){ return !!(P.on.fx && P.vgAmt); }
-  function rawView(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || !!(REG.show && P.on.reg); }
+  function rawView(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || !!(REG.show && P.on.reg) || LMEDIT; }
   function geoFrame(W, H){ return (P.geo.rot % 180) ? [H, W] : [W, H]; }
   function geoScale(Wf, Hf, ang){ var a = Math.abs(ang) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return Math.max((Wf * c + Hf * s) / Wf, (Wf * s + Hf * c) / Hf); }
   function aspNum(a, Wf, Hf){ return a === 'orig' ? Wf / Hf : a === 'free' ? null : a === '1.91' ? 1.91 : (function(p){ return +p[0] / +p[1]; })(a.split(':')); }
   // src（W×H）に回転・反転・傾き補正・トリミング・周辺光量をかけて、ctx（outW×outH）に描く
-  function renderGeoTo(ctx, outW, outH, src, W, H, crop){
+  function renderGeoTo(ctx, outW, outH, src, W, H, crop, opt){
+    opt = opt || {};
     var g = P.geo, F = geoFrame(W, H), Wf = F[0], Hf = F[1];
     var cx = crop ? g.x * Wf : 0, cy = crop ? g.y * Hf : 0, cw = crop ? g.w * Wf : Wf, ch = crop ? g.h * Hf : Hf;
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, outW, outH);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); if (!opt.noClear) ctx.clearRect(0, 0, outW, outH);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.scale(outW / cw, outH / ch); ctx.translate(-cx, -cy); ctx.translate(Wf / 2, Hf / 2);
     ctx.rotate(g.ang * Math.PI / 180); var s = geoScale(Wf, Hf, g.ang); ctx.scale(s, s);
     ctx.rotate(g.rot * Math.PI / 180); if (g.flip) ctx.scale(-1, 1);
     ctx.drawImage(src, -W / 2, -H / 2);
     ctx.restore();
-    if (crop && vigOn()){
+    if (crop && vigOn() && !opt.noVig){
       // 周辺光量（トリミング後の枠に合わせる）
       var amt = P.vgAmt / 100, mid = (P.vgMid == null ? 50 : P.vgMid) / 100, R = Math.hypot(outW, outH) / 2;
       var gr = ctx.createRadialGradient(outW / 2, outH / 2, R * (0.18 + 0.62 * mid), outW / 2, outH / 2, R * 1.02);
@@ -2720,7 +2948,17 @@ function tkOldLens(img, w, h, P){
       if (view.width !== sz[0] || view.height !== sz[1]){ view.width = sz[0]; view.height = sz[1]; }
       renderGeoTo(vctx, sz[0], sz[1], fullCanvas, hi.w, hi.h, crop);
     }
+    // 前後比較（分割）：線より左に元の写真（同じトリミング・回転で）
+    if (SPLIT && !showOrig && origCanvas.width){
+      var sx = Math.round(view.width * SPLITX);
+      vctx.save(); vctx.beginPath(); vctx.rect(0, 0, sx, view.height); vctx.clip();
+      if (useGeo) renderGeoTo(vctx, view.width, view.height, origCanvas, hi.w, hi.h, true, { noClear: true, noVig: true });
+      else { vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.drawImage(origCanvas, 0, 0); }
+      vctx.restore();
+    }
     fitView();
+    positionSplitUI();
+    if (LMEDIT) lmDraw();
     positionCropUI();
   }
   // 表示の大きさ：トリミング後に小さくなった画像も、画面いっぱいに合わせて表示（縦横比は保つ）
@@ -2737,11 +2975,75 @@ function tkOldLens(img, w, h, P){
     var want = hiLongSide(), have = Math.max(hi.w, hi.h);
     if (Math.abs(want - have) / have > 0.12){
       var sh = sizeFor(want); hi = { w: sh[0], h: sh[1], src: readPixels(sh[0], sh[1]) };
+      if (SPLIT) updateOrigCanvas();
       if (last && last.kind === 'hi') last = null;
       schedule();
     }
   }
-  function showOriginalPixels(){ fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
+  // ---- 前後比較（分割表示） ----
+  var SPLIT = false, SPLITX = 0.5, origCanvas = document.createElement('canvas'), splitui = null;
+  function updateOrigCanvas(){ if (!hi) return; origCanvas.width = hi.w; origCanvas.height = hi.h; origCanvas.getContext('2d', { colorSpace: CS }).putImageData(mkImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); }
+  function positionSplitUI(){
+    var on = SPLIT && hi && !CROPMODE && !showOrig;
+    if (!on){ if (splitui) splitui.style.display = 'none'; return; }
+    if (!splitui){
+      splitui = xel('div', 'splitui'); splitui.innerHTML = '<span class="slab sl-l">元</span><span class="slab sl-r">後</span><div class="sline"><i class="sknob"></i></div>';
+      $('stage').appendChild(splitui);
+      var ln = splitui.querySelector('.sline'), drag = false;
+      ln.addEventListener('pointerdown', function(e){ e.preventDefault(); e.stopPropagation(); drag = true; try{ ln.setPointerCapture(e.pointerId); }catch(er){} });
+      ln.addEventListener('pointermove', function(e){ if (!drag) return; var r = view.getBoundingClientRect(); SPLITX = Math.min(0.98, Math.max(0.02, (e.clientX - r.left) / r.width)); present(); });
+      function up(e){ drag = false; } ln.addEventListener('pointerup', up); ln.addEventListener('pointercancel', up);
+    }
+    var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect();
+    splitui.style.display = 'block'; splitui.style.left = (vr.left - sr.left) + 'px'; splitui.style.top = (vr.top - sr.top) + 'px'; splitui.style.width = vr.width + 'px'; splitui.style.height = vr.height + 'px';
+    splitui.querySelector('.sline').style.left = (SPLITX * 100) + '%';
+  }
+  function setSplit(on){ SPLIT = !!on; cmp.classList.toggle('on', SPLIT); if (SPLIT) updateOrigCanvas(); present(); toast(SPLIT ? '前後比較：線を左右に動かせます（もう一度タップで終了）' : '前後比較を終了しました'); }
+  // ---- 白飛び・黒つぶれの表示とヒストグラム ----
+  var CLIPON = false, HISTO = null, clipCv = document.createElement('canvas');
+  function clipOverlay(out, w, h){
+    if (!CLIPON) return;
+    var id = mkImageData(new Uint8ClampedArray(w * h * 4), w, h), d = id.data;
+    for (var i = 0, n = w * h; i < n; i++){
+      var r = out[i * 4], g = out[i * 4 + 1], b = out[i * 4 + 2], o = i * 4;
+      if (r >= 253 || g >= 253 || b >= 253){ d[o] = 255; d[o + 1] = 45; d[o + 2] = 60; d[o + 3] = r >= 253 && g >= 253 && b >= 253 ? 235 : 150; }
+      else if (r <= 2 && g <= 2 && b <= 2){ d[o] = 40; d[o + 1] = 110; d[o + 2] = 255; d[o + 3] = 235; }
+    }
+    clipCv.width = w; clipCv.height = h; clipCv.getContext('2d', { colorSpace: CS }).putImageData(id, 0, 0);
+    fullCtx.drawImage(clipCv, 0, 0, hi.w, hi.h);
+  }
+  function computeHisto(out, n){
+    var H = { r: new Float32Array(64), g: new Float32Array(64), b: new Float32Array(64), l: new Float32Array(64) }, step = Math.max(1, Math.floor(n / 120000)), hiC = 0, loC = 0, cnt = 0;
+    for (var i = 0; i < n; i += step){ var r = out[i * 4], g = out[i * 4 + 1], b = out[i * 4 + 2]; H.r[r >> 2]++; H.g[g >> 2]++; H.b[b >> 2]++; H.l[(0.2126 * r + 0.7152 * g + 0.0722 * b) >> 2]++; if (r >= 253 || g >= 253 || b >= 253) hiC++; if (r <= 2 && g <= 2 && b <= 2) loC++; cnt++; }
+    H.hi = hiC / cnt; H.lo = loC / cnt; HISTO = H; drawHisto();
+  }
+  function drawHisto(){
+    var box = $('histo'); if (!box || box.hidden || !HISTO) return;
+    var cv = box.querySelector('canvas'), d = window.devicePixelRatio || 1, W = Math.round(cv.clientWidth * d), Hh = Math.round(cv.clientHeight * d);
+    cv.width = W; cv.height = Hh; var x = cv.getContext('2d'), mx = 0;
+    ['r', 'g', 'b'].forEach(function(k){ for (var i = 1; i < 63; i++) mx = Math.max(mx, HISTO[k][i]); });
+    x.clearRect(0, 0, W, Hh); x.globalCompositeOperation = 'lighter';
+    [['r', 'rgba(255,70,70,.55)'], ['g', 'rgba(70,220,110,.5)'], ['b', 'rgba(80,140,255,.55)']].forEach(function(c){
+      var h = HISTO[c[0]]; x.fillStyle = c[1]; x.beginPath(); x.moveTo(0, Hh);
+      for (var i = 0; i < 64; i++) x.lineTo(W * (i + 0.5) / 64, Hh - Hh * Math.min(1, Math.sqrt(h[i] / (mx || 1))) * 0.95);
+      x.lineTo(W, Hh); x.closePath(); x.fill();
+    });
+    x.globalCompositeOperation = 'source-over';
+    box.querySelector('.hlo').textContent = '黒つぶれ ' + (HISTO.lo * 100).toFixed(1) + '%'; box.querySelector('.hhi').textContent = '白飛び ' + (HISTO.hi * 100).toFixed(1) + '%';
+    box.querySelector('.hlo').classList.toggle('warn', HISTO.lo >= 0.005); box.querySelector('.hhi').classList.toggle('warn', HISTO.hi >= 0.005);
+  }
+  function buildHisto(){
+    var box = xel('div', 'histo'); box.id = 'histo'; box.hidden = true;
+    box.innerHTML = '<canvas></canvas><div class="hrow"><span class="hlo num"></span><button type="button" class="hclip">写真に色で表示</button><span class="hhi num"></span></div>';
+    $('stage').appendChild(box);
+    box.querySelector('.hclip').addEventListener('click', function(e){ e.stopPropagation(); CLIPON = !CLIPON; this.classList.toggle('on', CLIPON); if (last) draw(last); });
+    box.addEventListener('pointerdown', function(e){ e.stopPropagation(); }); box.addEventListener('pointerup', function(e){ e.stopPropagation(); });
+    var bd = $('badge'); bd.style.cursor = 'pointer'; bd.style.pointerEvents = 'auto';
+    bd.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    bd.addEventListener('pointerup', function(e){ e.stopPropagation(); });
+    bd.addEventListener('click', function(e){ e.stopPropagation(); box.hidden = !box.hidden; if (!box.hidden) drawHisto(); else if (CLIPON){ CLIPON = false; box.querySelector('.hclip').classList.remove('on'); if (last) draw(last); } });
+  }
+  function showOriginalPixels(){ fullCtx.putImageData(mkImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
   // トリミング枠
   var cropui = null, cimg = null, CL = null, CLIVE = null, geoCv = document.createElement('canvas');
   // トリミング画面（Lightroomと同じ）：枠は画面の中央に固定、写真の方を動かす・拡大縮小する
@@ -2755,7 +3057,7 @@ function tkOldLens(img, w, h, P){
     if (view.width !== pw || view.height !== ph){ view.width = pw; view.height = ph; }
     var F = geoOutSize(hi.w, hi.h, false), Wf = F[0], Hf = F[1];
     if (geoCv.width !== Wf || geoCv.height !== Hf){ geoCv.width = Wf; geoCv.height = Hf; }
-    renderGeoTo(geoCv.getContext('2d'), Wf, Hf, fullCanvas, hi.w, hi.h, false);
+    renderGeoTo(geoCv.getContext('2d', { colorSpace: CS }), Wf, Hf, fullCanvas, hi.w, hi.h, false);
     var g = P.geo, L;
     if (CLIVE){ L = { fx: CLIVE.fx, fy: CLIVE.fy, fw: CLIVE.fw, fh: CLIVE.fh, k: CL.k, imgL: CL.imgL, imgT: CL.imgT }; }
     else {
@@ -2911,6 +3213,141 @@ function tkOldLens(img, w, h, P){
     var b = xel('span', ok ? 'ok' : 'ng', ok ? 'Instagram：そのまま載せられます' : 'Instagram：' + (r < 0.745 ? '縦が長すぎて切れます（4:5か3:4に）' : '横が長すぎて切れます'));
     XE.geoInfo.appendChild(a); XE.geoInfo.appendChild(b);
   }
+  // ---- 自由な部分補正（円形・線形・ブラシ） ----
+  var LMEDIT = false, lmui = null, lmov = null;
+  function lmAdjKeys(){ return [['ev', '露光量'], ['con', 'コントラスト'], ['hi', 'ハイライト'], ['sh', 'シャドウ'], ['temp', '色温度'], ['tint', '色かぶり'], ['sat', '彩度']]; }
+  function lmName(m, i){ return (i + 1) + ' ' + (m.type === 'radial' ? '円形' : m.type === 'linear' ? '線形' : 'ブラシ'); }
+  function lmNew(type){
+    if (!img){ toast('先に写真を選んでください'); return; }
+    var a = img.naturalWidth / img.naturalHeight, m = { type: type, feather: 50, inv: 0, adj: {} };
+    if (type === 'radial'){ m.cx = 0.5; m.cy = 0.45; m.rx = 0.28; m.ry = 0.28 * a; }
+    else if (type === 'linear'){ m.x0 = 0.5; m.y0 = 0.08; m.x1 = 0.5; m.y1 = 0.5; }
+    else { m.strokes = []; m.feather = 30; }
+    P.lm.push(m); LM.sel = P.lm.length - 1; P.on.lm = 1;
+    toast(type === 'radial' ? '円の中をドラッグで移動、白い点で大きさ' : type === 'linear' ? '白い点をドラッグで、効き始めと終わりを決めます' : '写真の上をなぞって範囲を塗ります');
+    lmSync(); lmDraw(); clearPresetMark(); schedule();
+  }
+  function buildLmExtra(body){
+    var row = xel('div', 'lmrow'); XE.lmList = xel('div', 'lmlist'); row.appendChild(XE.lmList); body.appendChild(row);
+    var add = xel('div', 'rrow');
+    add.appendChild(xbtn('＋ 円形', 'ghost', function(){ lmNew('radial'); }));
+    add.appendChild(xbtn('＋ 線形', 'ghost', function(){ lmNew('linear'); }));
+    add.appendChild(xbtn('＋ ブラシ', 'ghost', function(){ lmNew('brush'); }));
+    body.appendChild(add);
+    XE.lmBox = xel('div', 'lmbox'); body.appendChild(XE.lmBox);
+    var tools = xel('div', 'rrow');
+    XE.lmInv = xbtn('反転', 'ghost', function(){ var m = P.lm[LM.sel]; if (!m) return; m.inv = m.inv ? 0 : 1; lmSync(); lmDraw(); schedule(); });
+    XE.lmShow = xbtn('範囲を表示', 'ghost', function(){ LM.show = !LM.show; lmSync(); lmDraw(); });
+    XE.lmDel = xbtn('削除', 'ghost', function(){ if (LM.sel < 0) return; P.lm.splice(LM.sel, 1); LM.sel = P.lm.length - 1; lmSync(); lmDraw(); schedule(); });
+    tools.appendChild(XE.lmInv); tools.appendChild(XE.lmShow); tools.appendChild(XE.lmDel); XE.lmBox.appendChild(tools);
+    // ブラシ
+    XE.lmBrush = xel('div', 'lmbrush');
+    var seg = xel('div', 'seg'); XE.lmBm = [];
+    [['add', '塗る'], ['erase', '消す']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ LM.bmode = d[0]; lmSync(); }); seg.appendChild(b); XE.lmBm.push(b); });
+    XE.lmBrush.appendChild(seg);
+    var br = xel('div', 'row'); br.innerHTML = '<label>ブラシの大きさ</label><input type="range" min="1" max="25"><span class="val num"></span>';
+    var bi = br.querySelector('input'), bv = br.querySelector('.val'); bi.value = LM.bsize; bv.textContent = LM.bsize;
+    bi.addEventListener('input', function(){ LM.bsize = +bi.value; bv.textContent = bi.value; });
+    XE.lmBrush.appendChild(br); XE.lmBox.appendChild(XE.lmBrush);
+    // 調整
+    XE.lmRows = {};
+    lmAdjKeys().concat([['feather', 'ぼかし']]).forEach(function(d){
+      var r = xel('div', 'row'); r.innerHTML = '<label></label><input type="range"><span class="val num"></span>';
+      r.querySelector('label').textContent = d[1];
+      var inp = r.querySelector('input'), v = r.querySelector('.val'); inp.min = d[0] === 'feather' ? 0 : -100; inp.max = 100;
+      inp.addEventListener('input', function(){ var m = P.lm[LM.sel]; if (!m) return; if (d[0] === 'feather') m.feather = +inp.value; else m.adj[d[0]] = +inp.value; v.textContent = inp.value; clearPresetMark(); if (d[0] === 'feather') lmDraw(); schedule(); });
+      r.querySelector('label').addEventListener('dblclick', function(){ var m = P.lm[LM.sel]; if (!m) return; if (d[0] === 'feather') m.feather = 50; else m.adj[d[0]] = 0; lmSync(); schedule(); });
+      XE.lmBox.appendChild(r); XE.lmRows[d[0]] = { r: inp, v: v };
+    });
+    XE.lmEmpty = xel('div', 'hint', '「＋」で範囲を追加すると、その範囲だけ明るさや色を変えられます。空だけ暗く、顔の周りだけ明るく、など。'); body.appendChild(XE.lmEmpty);
+  }
+  function lmSync(){
+    if (!XE.lmList) return;
+    XE.lmList.innerHTML = '';
+    (P.lm || []).forEach(function(m, i){ var c = xel('button', 'rchip' + (i === LM.sel ? ' on' : ''), lmName(m, i)); c.type = 'button'; c.addEventListener('click', function(){ LM.sel = i; lmSync(); lmDraw(); }); XE.lmList.appendChild(c); });
+    var m = P.lm[LM.sel];
+    XE.lmBox.style.display = m ? '' : 'none'; XE.lmEmpty.style.display = (P.lm && P.lm.length) ? 'none' : '';
+    if (!m) return;
+    XE.lmBrush.style.display = m.type === 'brush' ? '' : 'none';
+    XE.lmBm.forEach(function(b){ b.classList.toggle('on', b.dataset.m === LM.bmode); });
+    XE.lmInv.classList.toggle('pri', !!m.inv); XE.lmShow.classList.toggle('pri', LM.show);
+    Object.keys(XE.lmRows).forEach(function(k){ var v = k === 'feather' ? (m.feather == null ? 50 : m.feather) : (m.adj[k] || 0); XE.lmRows[k].r.value = v; XE.lmRows[k].v.textContent = v; });
+  }
+  function setLmEdit(on){ on = !!on; if (on === LMEDIT) return; LMEDIT = on; if (on && LM.sel < 0 && P.lm.length) LM.sel = P.lm.length - 1; present(); lmSync(); lmDraw(); }
+  // 写真の上の操作（SVGの枠・点、ブラシ）
+  function ensureLmUI(){
+    if (lmui) return;
+    lmov = xel('canvas', 'lmov'); $('stage').appendChild(lmov);
+    lmui = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); lmui.setAttribute('class', 'lmui'); $('stage').appendChild(lmui);
+    var drag = null, last = null;
+    function pos(e){ var r = view.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, r: r }; }
+    lmui.addEventListener('pointerdown', function(e){
+      var m = P.lm[LM.sel]; if (!m) return;
+      e.preventDefault(); e.stopPropagation(); try{ lmui.setPointerCapture(e.pointerId); }catch(er){}
+      var q = pos(e), h = e.target.getAttribute && e.target.getAttribute('data-h');
+      if (m.type === 'brush'){ drag = { k: 'paint' }; lmPaint(m, q); return; }
+      if (h){ drag = { k: h, q: q, m0: JSON.parse(JSON.stringify(m)) }; return; }
+      // 範囲の中なら移動
+      drag = { k: 'move', q: q, m0: JSON.parse(JSON.stringify(m)) };
+    });
+    lmui.addEventListener('pointermove', function(e){
+      var m = P.lm[LM.sel]; if (!drag || !m) return;
+      var q = pos(e); startSliding(lmui);
+      if (drag.k === 'paint'){ lmPaint(m, q); return; }
+      var o = drag.m0, dx = q.x - drag.q.x, dy = q.y - drag.q.y, ar = q.r.width / q.r.height;
+      if (m.type === 'radial'){
+        if (drag.k === 'move'){ m.cx = o.cx + dx; m.cy = o.cy + dy; }
+        else if (drag.k === 'rx'){ m.rx = Math.max(0.02, Math.abs(q.x - o.cx)); }
+        else if (drag.k === 'ry'){ m.ry = Math.max(0.02, Math.abs(q.y - o.cy)); }
+      } else if (m.type === 'linear'){
+        if (drag.k === 'move'){ m.x0 = o.x0 + dx; m.y0 = o.y0 + dy; m.x1 = o.x1 + dx; m.y1 = o.y1 + dy; }
+        else if (drag.k === 'p0'){ m.x0 = q.x; m.y0 = q.y; }
+        else if (drag.k === 'p1'){ m.x1 = q.x; m.y1 = q.y; }
+      }
+      lmDraw(true); schedule();
+    });
+    function up(){ if (!drag) return; drag = null; lmDraw(); clearPresetMark(); schedule(); }
+    lmui.addEventListener('pointerup', up); lmui.addEventListener('pointercancel', up);
+  }
+  function lmPaint(m, q){
+    var r = LM.bsize / 100, s = m.strokes, lp = s[s.length - 1];
+    if (lp && Math.hypot((lp[0] - q.x) * q.r.width, (lp[1] - q.y) * q.r.height) < r * Math.max(q.r.width, q.r.height) * 0.3 && lp[3] === (LM.bmode === 'erase' ? 1 : 0)) return;
+    s.push([+q.x.toFixed(4), +q.y.toFixed(4), r, LM.bmode === 'erase' ? 1 : 0]);
+    lmDraw(true); schedule();
+  }
+  function lmDraw(dragging){
+    var on = LMEDIT && hi && !CROPMODE;
+    if (!on){ if (lmui){ lmui.style.display = 'none'; lmov.style.display = 'none'; } return; }
+    ensureLmUI();
+    var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect(), L = (vr.left - sr.left) + 'px', T = (vr.top - sr.top) + 'px';
+    [lmui, lmov].forEach(function(e){ e.style.display = 'block'; e.style.left = L; e.style.top = T; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
+    var W = vr.width, H = vr.height, m = P.lm[LM.sel], svg = '';
+    lmui.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    (P.lm || []).forEach(function(o, i){ if (i === LM.sel) return; var cx = o.type === 'radial' ? o.cx : o.type === 'linear' ? (o.x0 + o.x1) / 2 : (o.strokes[0] ? o.strokes[0][0] : 0.5), cy = o.type === 'radial' ? o.cy : o.type === 'linear' ? (o.y0 + o.y1) / 2 : (o.strokes[0] ? o.strokes[0][1] : 0.5); svg += '<circle cx="' + cx * W + '" cy="' + cy * H + '" r="7" class="lpin"/>'; });
+    if (m){
+      var f = Math.max(0.02, (m.feather == null ? 50 : m.feather) / 100);
+      if (m.type === 'radial'){
+        var cx = m.cx * W, cy = m.cy * H, rx = m.rx * W, ry = m.ry * H;
+        svg += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" class="lline" data-h="move"/>';
+        svg += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx * (1 - f) + '" ry="' + ry * (1 - f) + '" class="ldash"/>';
+        svg += '<circle cx="' + cx + '" cy="' + cy + '" r="9" class="lhd" data-h="move"/><circle cx="' + (cx + rx) + '" cy="' + cy + '" r="9" class="lhd" data-h="rx"/><circle cx="' + cx + '" cy="' + (cy + ry) + '" r="9" class="lhd" data-h="ry"/>';
+      } else if (m.type === 'linear'){
+        var x0 = m.x0 * W, y0 = m.y0 * H, x1 = m.x1 * W, y1 = m.y1 * H, dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = -dy / l * 2000, ny = dx / l * 2000;
+        [[x0, y0, 'lline'], [(x0 + x1) / 2, (y0 + y1) / 2, 'ldash'], [x1, y1, 'lline']].forEach(function(p){ svg += '<line x1="' + (p[0] - nx) + '" y1="' + (p[1] - ny) + '" x2="' + (p[0] + nx) + '" y2="' + (p[1] + ny) + '" class="' + p[2] + '"/>'; });
+        svg += '<circle cx="' + (x0 + x1) / 2 + '" cy="' + (y0 + y1) / 2 + '" r="9" class="lhd" data-h="move"/><circle cx="' + x0 + '" cy="' + y0 + '" r="9" class="lhd" data-h="p0"/><circle cx="' + x1 + '" cy="' + y1 + '" r="9" class="lhd lend" data-h="p1"/>';
+      }
+    }
+    lmui.innerHTML = svg;
+    // 範囲の赤い表示（「範囲を表示」か、動かしている間）
+    var showOv = m && (LM.show || dragging || m.type === 'brush');
+    lmov.style.display = showOv ? 'block' : 'none';
+    if (showOv){
+      var sc = Math.min(1, 320 / Math.max(hi.w, hi.h)), w = Math.max(1, Math.round(hi.w * sc)), h = Math.max(1, Math.round(hi.h * sc)), Wt = tkLmWeight(m, w, h);
+      lmov.width = w; lmov.height = h; var x = lmov.getContext('2d'), id = x.createImageData(w, h);
+      for (var i = 0; i < w * h; i++){ id.data[i * 4] = 255; id.data[i * 4 + 1] = 60; id.data[i * 4 + 2] = 70; id.data[i * 4 + 3] = Wt[i] * 120; }
+      x.putImageData(id, 0, 0);
+    }
+  }
   // ---- トーンカーブ ----
   var CRV_COL = { rgb: '#E6EBEF', r: '#E8786A', g: '#7CC48A', b: '#79A6E8' };
   function buildCurveExtra(body){
@@ -2975,7 +3412,7 @@ function tkOldLens(img, w, h, P){
     var r = cv.getBoundingClientRect(); if (!r.width) return;
     var d = window.devicePixelRatio || 1, W = Math.round(r.width * d), H = Math.round(r.height * d);
     if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
-    var x = cv.getContext('2d'), PAD = 12 * d, iw = W - PAD * 2, ih = H - PAD * 2, ch = XE.crvCh, col = CRV_COL[ch];
+    var x = cv.getContext('2d', { colorSpace: CS }), PAD = 12 * d, iw = W - PAD * 2, ih = H - PAD * 2, ch = XE.crvCh, col = CRV_COL[ch];
     x.clearRect(0, 0, W, H);
     var hs = curveHist();
     if (hs){ x.fillStyle = ch === 'rgb' ? 'rgba(230,235,239,.10)' : col + '26'; x.beginPath(); x.moveTo(PAD, PAD + ih); for (var i = 0; i < 64; i++) x.lineTo(PAD + iw * (i + 0.5) / 64, PAD + ih * (1 - hs[ch][i] * 0.9)); x.lineTo(PAD + iw, PAD + ih); x.closePath(); x.fill(); }
@@ -3051,7 +3488,7 @@ function tkOldLens(img, w, h, P){
   function smallPixels(im, maxL){
     var s = Math.min(1, maxL / Math.max(im.naturalWidth || im.width, im.naturalHeight || im.height));
     var w = Math.max(1, Math.round((im.naturalWidth || im.width) * s)), h = Math.max(1, Math.round((im.naturalHeight || im.height) * s));
-    var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.drawImage(im, 0, 0, w, h);
+    var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d', { colorSpace: CS }); x.drawImage(im, 0, 0, w, h);
     return { w: w, h: h, data: x.getImageData(0, 0, w, h).data, canvas: c };
   }
   function drawCover(ctx, src, W, H){
@@ -3061,7 +3498,7 @@ function tkOldLens(img, w, h, P){
   function setMatchFromImage(im){
     var sp = smallPixels(im, 400);
     P.mref = tkColorStats(sp.data, sp.w * sp.h, true);
-    var x = XE.mThumb.getContext('2d'); x.clearRect(0, 0, 112, 112); drawCover(x, im, 112, 112);
+    var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112); drawCover(x, im, 112, 112);
     XE.mThumbSrc = 'img';
     P.on.match = 1; syncGroup('match'); updateExtras(); clearPresetMark(); schedule();
     toast('参考写真の色に寄せました');
@@ -3076,7 +3513,7 @@ function tkOldLens(img, w, h, P){
   function matchFromFeed(){
     var fs = feedStats(); if (!fs){ toast('先に「フィード確認」で過去の投稿を読み込んでください'); return; }
     P.mref = fs.st;
-    var x = XE.mThumb.getContext('2d'); x.clearRect(0, 0, 112, 112);
+    var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112);
     FEED.slice(0, 4).forEach(function(f, i){ x.save(); x.beginPath(); x.rect((i % 2) * 56, (i >> 1) * 56, 56, 56); x.clip(); x.translate((i % 2) * 56, (i >> 1) * 56); drawCover(x, f.px.canvas, 56, 56); x.restore(); });
     XE.mThumbSrc = 'feed';
     P.on.match = 1; syncGroup('match'); updateExtras(); clearPresetMark(); schedule();
@@ -3137,7 +3574,7 @@ function tkOldLens(img, w, h, P){
     items.splice(Math.min(FEEDPOS, items.length), 0, { src: view, me: true });
     items.forEach(function(it){
       var c = xel('canvas', 'ftile' + (it.me ? ' me' : '')); c.width = 300; c.height = 400;
-      drawCover(c.getContext('2d'), it.src, 300, 400); g.appendChild(c);
+      drawCover(c.getContext('2d', { colorSpace: CS }), it.src, 300, 400); g.appendChild(c);
     });
     XE.fNote.innerHTML = feedCompareHTML();
   }
@@ -3166,12 +3603,31 @@ function tkOldLens(img, w, h, P){
     row.appendChild(inp);
     row.appendChild(xbtn('保存', null, function(){
       var name = inp.value.trim(); if (!name){ toast('名前を入れてください'); return; }
-      var o = mpLoad(), snapP = JSON.parse(JSON.stringify(P)); delete snapP.reg.ver; delete snapP.geo;   // トリミングは写真ごとなので保存しない
+      var o = mpLoad(), snapP = JSON.parse(JSON.stringify(P)); delete snapP.reg.ver; delete snapP.geo; delete snapP.lm;   // トリミングとマスクは写真ごとなので保存しない
       o[name] = { P: snapP, at: Date.now() };
       if (mpSave(o)){ inp.value = ''; updateExtras(); toast('「' + name + '」を保存しました'); } else toast('この環境では保存できません（ブラウザの保存領域が使えません）');
     }));
     body.appendChild(row);
     XE.mpList = xel('div', 'mplist'); body.appendChild(XE.mpList);
+    // バックアップ：保存した設定をファイルにして、iPhoneの「ファイル」などに残す／読み込む
+    var bi = xel('input'); bi.type = 'file'; bi.accept = 'application/json,.json'; bi.style.display = 'none'; body.appendChild(bi);
+    bi.addEventListener('change', function(e){
+      var f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      f.text().then(function(t){
+        var d = JSON.parse(t), o = mpLoad(), n = 0; if (!d || !d.presets) throw new Error();
+        Object.keys(d.presets).forEach(function(k){ o[k] = d.presets[k]; n++; });
+        if (mpSave(o)){ updateExtras(); buildLookTiles(); toast(n + '件の設定を読み込みました'); }
+      }).catch(function(){ toast('このファイルは読み込めませんでした'); });
+    });
+    var br = xel('div', 'rrow');
+    br.appendChild(xbtn('設定をファイルに書き出す', 'ghost', function(){
+      var o = mpLoad(); if (!Object.keys(o).length){ toast('保存した設定がありません'); return; }
+      var blob = new Blob([JSON.stringify({ app: 'photo retouch', v: 1, at: Date.now(), presets: o }, null, 1)], { type: 'application/json' });
+      if (downloads) downloads.save({ filename: 'retouch_settings_' + stamp() + '.json', data: blob }).then(function(){ toast('書き出しました'); }).catch(function(){});
+      else offerShare(blob, 'retouch_settings_' + stamp() + '.json', 'application/json');
+    }));
+    br.appendChild(xbtn('ファイルから読み込む', 'ghost', function(){ bi.click(); }));
+    body.appendChild(br);
     body.appendChild(xel('div', 'hint', 'この端末のブラウザの中に保存されます。部分調整の切り分け（マスク）は写真ごとなので保存されず、各部分の色の設定だけが残ります。'));
   }
   function applyMyPre(name){
@@ -3190,8 +3646,14 @@ function tkOldLens(img, w, h, P){
     var fi = xel('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.multiple = true; fi.id = 'bfile'; fi.style.display = 'none';
     fi.addEventListener('change', function(e){ var fl = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; if (fl.length) runBatch(fl); });
     body.appendChild(fi);
+    // 比率（中央で切り抜き）と、書き出し画面の設定（サイズ・フチ・色の範囲）を使うか
+    XE.bAsp = 'keep'; var seg = xel('div', 'asprow'); XE.bAspBtns = [];
+    [['keep', 'そのままの比率'], ['4:5', '4:5'], ['1:1', '1:1'], ['3:4', '3:4']].forEach(function(d){ var b = xel('button', 'aspbtn' + (d[0] === 'keep' ? ' on' : ''), d[1]); b.type = 'button'; b.addEventListener('click', function(){ XE.bAsp = d[0]; XE.bAspBtns.forEach(function(x){ x.classList.toggle('on', x === b); }); }); seg.appendChild(b); XE.bAspBtns.push(b); });
+    body.appendChild(seg);
+    var ln = xel('div', 'rline'); ln.appendChild(xel('span', '', '書き出し画面のサイズ・フチ・色の範囲を使う')); ln.appendChild(xel('span', 'sp'));
+    XE.bXp = xel('button', 'tg on'); XE.bXp.type = 'button'; XE.bXp.addEventListener('click', function(){ XE.bXp.classList.toggle('on'); }); ln.appendChild(XE.bXp); body.appendChild(ln);
     XE.bBtn = xbtn('写真を選んで、まとめて書き出す', null, function(){ fi.click(); }); body.appendChild(XE.bBtn);
-    XE.bStat = xel('div', 'rstat', '今の設定（光・色・部分調整）をそのまま当てて、長辺3000pxのJPEGをZIPにまとめます。'); body.appendChild(XE.bStat);
+    XE.bStat = xel('div', 'rstat', '今の設定（調整・光・色・部分調整）をそのまま当てて、JPEGをZIPにまとめます。比率を選ぶと、各写真の中央で切り抜きます。'); body.appendChild(XE.bStat);
     body.appendChild(xel('div', 'hint', '部分調整がONの時は、写真ごとにAIで切り分け直します（iPhoneでは1枚あたり十数秒〜）。ブラシやタップの手直しは今の写真だけのものなので、他の写真には当たりません。'));
   }
   function loadImageFile(f){
@@ -3220,11 +3682,16 @@ function tkOldLens(img, w, h, P){
           return seg.then(function(){
             var sz = sizeFor(3000), src = readPixels(sz[0], sz[1]);
             return runJob(src, sz[0], sz[1], snap(P)).then(function(out){
-              return new Promise(function(res){
-                var c = document.createElement('canvas'); c.width = sz[0]; c.height = sz[1];
-                c.getContext('2d').putImageData(new ImageData(out, sz[0], sz[1]), 0, 0);
-                c.toBlob(function(b){ c.width = 1; c.height = 1; res(b); }, 'image/jpeg', 0.94);
-              });
+              var c = document.createElement('canvas'); c.width = sz[0]; c.height = sz[1];
+              c.getContext('2d', { colorSpace: CS }).putImageData(mkImageData(out, sz[0], sz[1]), 0, 0);
+              // 比率を選んだ時は中央で切り抜く（周辺光量もここで）
+              var A = XE.bAsp === 'keep' ? null : (function(q){ return +q[0] / +q[1]; })(XE.bAsp.split(':'));
+              var w = sz[0], h = sz[1], cw = w, ch = h; if (A){ if (w / h > A) cw = Math.round(h * A); else ch = Math.round(w / A); }
+              var b2 = document.createElement('canvas'); b2.width = cw; b2.height = ch; var x2 = b2.getContext('2d', { colorSpace: CS });
+              x2.drawImage(c, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, cw, ch); c.width = 1; c.height = 1;
+              if (vigOn()){ var sv = P.geo; P.geo = geoBlank(); var t = document.createElement('canvas'); t.width = cw; t.height = ch; renderGeoTo(t.getContext('2d', { colorSpace: CS }), cw, ch, b2, cw, ch, true); P.geo = sv; b2 = t; }
+              if (XE.bXp.classList.contains('on')) return xpFinal(b2).then(function(r){ return r.blob; });
+              return new Promise(function(res){ b2.toBlob(function(bb){ res(bb); }, 'image/jpeg', 0.94); });
             });
           }).then(function(b){ zip.file(f.name.replace(/\.[^.]+$/, '') + '_retouch.jpg', b); done++; });
         }).catch(function(){ fails++; });
@@ -3247,7 +3714,7 @@ function tkOldLens(img, w, h, P){
     }).then(function(){ batching = false; XE.bBtn.disabled = false; });
   }
   // ---- 写真の上での位置指定（グラデーションの線・光の位置） ----
-  var gde = $('gde'), gctx = gde.getContext('2d'), pickStart = null, guideTimer = null;
+  var gde = $('gde'), gctx = gde.getContext('2d', { colorSpace: CS }), pickStart = null, guideTimer = null;
   function startPick(kind){
     if (!img){ toast('先に写真を選んでください'); return; }
     PICK = PICK === kind ? null : kind;
@@ -3324,6 +3791,7 @@ function tkOldLens(img, w, h, P){
     try{ drawCurve(); }catch(e){}
     try{ syncGrade(); }catch(e){}
     try{ syncGeo(); present(); }catch(e){}
+    try{ lmSync(); }catch(e){}
     if (XE.raySeg){
       Array.prototype.forEach.call(XE.raySeg.children, function(b){ b.classList.toggle('on', b.dataset.m === P.rMode); });
       ['rAng','rBars'].forEach(function(k){ var r = rowOf(k); if (r) r.style.display = P.rMode === 'leak' ? 'none' : ''; });
@@ -3332,7 +3800,7 @@ function tkOldLens(img, w, h, P){
     if (XE.gradPick) XE.gradPick.textContent = PICK === 'grad' ? '写真の上でドラッグ中…（もう一度押すと中止）' : '写真の上でドラッグして線を引く';
     if (XE.mStat){
       XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
-      if (!P.mref){ var x = XE.mThumb.getContext('2d'); x.clearRect(0, 0, 112, 112); }
+      if (!P.mref){ var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112); }
       renderMatchTable();
       XE.mFeed.disabled = !FEED.length;
     }
@@ -3373,7 +3841,7 @@ function tkOldLens(img, w, h, P){
     { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['basic','ライト',['basic']],['wb','カラー',['wb']],['fx','効果',['fx']],['det','ディテール',['det']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['cg','グレーディング',['cg']]] },
     { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
-    { key: 'part', label: '部分', chips: [['reg','部分調整',['reg']]] },
+    { key: 'part', label: '部分', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: '便利', chips: [['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
@@ -3449,7 +3917,7 @@ function tkOldLens(img, w, h, P){
   // 写真をタップ：操作部分をすべて隠す／もう一度タップで、直前のパネルのまま戻す
   (function(){
     var appEl = document.getElementById('app'), st = $('stage'), d = null, told = false;
-    function editing(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || CROPMODE; }
+    function editing(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || CROPMODE || LMEDIT; }
     st.addEventListener('pointerdown', function(e){ if (!img || editing()) { d = null; return; } d = { x: e.clientX, y: e.clientY, t: Date.now() }; });
     st.addEventListener('pointerup', function(e){
       if (!d || editing()) return;
@@ -3493,6 +3961,7 @@ function tkOldLens(img, w, h, P){
     Array.prototype.forEach.call(tabbar.children, function(b){ b.classList.toggle('on', b.dataset.t === key); });
     setTimeout(function(){ try{ drawCurve(); }catch(e){} try{ syncGrade(); }catch(e){} }, 0);
     if (t.chips){ var cc = CUR.chip[key] || t.chips[0][0]; setCropMode(key === 'adj' && cc === 'geo' && !document.getElementById('app').classList.contains('expanded')); } else setCropMode(false);
+    setLmEdit(!!t.chips && key === 'part' && (CUR.chip[key] || t.chips[0][0]) === 'lm');
     updateIndicators();
     if (typeof drawOverlay === 'function') drawOverlay();
   }
@@ -3558,8 +4027,8 @@ function tkOldLens(img, w, h, P){
       if (q){
         try{
           var out = tkProcess(src, sz[0], sz[1], q), c = document.createElement('canvas'); c.width = sz[0]; c.height = sz[1];
-          c.getContext('2d').putImageData(new ImageData(out, sz[0], sz[1]), 0, 0);
-          var cv = t.querySelector('canvas'), x = cv.getContext('2d'); x.clearRect(0, 0, cv.width, cv.height);
+          c.getContext('2d', { colorSpace: CS }).putImageData(mkImageData(out, sz[0], sz[1]), 0, 0);
+          var cv = t.querySelector('canvas'), x = cv.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, cv.width, cv.height);
           var s = Math.max(cv.width / sz[0], cv.height / sz[1]); x.drawImage(c, (cv.width - sz[0] * s) / 2, (cv.height - sz[1] * s) / 2, sz[0] * s, sz[1] * s);
         }catch(e){}
       }
@@ -3582,6 +4051,7 @@ function tkOldLens(img, w, h, P){
   }
   function updateHistBtns(){ $('undo').disabled = HIST.length < 2; $('redo').disabled = !REDO.length; }
   function noteChange(){
+    sessSaveState();
     if (restoring) return;
     clearTimeout(histTimer);
     histTimer = setTimeout(function(){
@@ -3600,6 +4070,8 @@ function tkOldLens(img, w, h, P){
   updateExtras = function(){ _ux0(); var n = Object.keys(mpLoad()).length; if (n !== buildLookTiles._n){ buildLookTiles._n = n; buildLookTiles(); renderLookThumbs(); } };
   try{ if (window.matchMedia('(pointer:fine)').matches) $('dropBig').textContent = 'クリックして選択、またはここへドラッグ'; }catch(e){}
   showTab('look');
+  buildHisto();
+  setTimeout(sessRestore, 50);   // 前回の続きから
 
   var tt = null;
   function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
