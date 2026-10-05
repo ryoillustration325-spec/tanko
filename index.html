@@ -283,6 +283,11 @@
   .stage canvas#view{transform-origin:center center}
   /* トリミング操作中：写真の外の暗い部分を少し薄くして、全体が見えるように */
   .app.sliding .cbox{box-shadow:0 0 0 9999px rgba(8,9,10,.45)}
+  .geofin{margin-bottom:6px}
+  .rbtn.pri{background:var(--accent); color:#0E1418; border-color:transparent}
+  .cropdone{position:absolute; top:10px; right:10px; z-index:4; display:none; font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:18px; border:0; background:var(--accent); color:#0E1418; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  .app.cropping .cropdone{display:block}
+  .app.sliding .cropdone{opacity:0}
   .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
   .asprow::-webkit-scrollbar{display:none}
   .aspbtn{flex:none; font:inherit; font-size:12px; padding:7px 11px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.18); color:var(--muted); cursor:pointer}
@@ -350,7 +355,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v25</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v26</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2767,6 +2772,7 @@ function tkOldLens(img, w, h, P){
   }
   function ensureCropUI(){
     if (cropui) return cropui;
+    var fd = xel('button', 'cropdone', '✓ 完了'); fd.type = 'button'; fd.addEventListener('click', cropDone); $('stage').appendChild(fd);
     cropui = xel('div', 'cropui'); cropui.id = 'cropui';
     cimg = xel('div', 'cimg');
     var box = xel('div', 'cbox'); box.innerHTML = '<i class="th th1"></i><i class="th th2"></i><i class="tv tv1"></i><i class="tv tv2"></i>';
@@ -2848,6 +2854,7 @@ function tkOldLens(img, w, h, P){
   function setCropMode(on){
     on = !!on; if (on === CROPMODE) return;
     CL = null; CLIVE = null;
+    if (on) XE.geoSnap = JSON.stringify(P.geo);   // キャンセル用に、入った時の状態を覚えておく
     CROPMODE = on; document.getElementById('app').classList.toggle('cropping', on);
     present(); updateGeoInfo(); setTimeout(refreshHiRes, 60);
   }
@@ -2860,6 +2867,11 @@ function tkOldLens(img, w, h, P){
     g.w = w; g.h = h; g.x = Math.min(1 - w, Math.max(0, cx - w / 2)); g.y = Math.min(1 - h, Math.max(0, cy - h / 2));
   }
   function buildGeoExtra(body){
+    // 確定・キャンセル（トリミング画面を閉じる。タブを切り替えても確定になる）
+    var fin = xel('div', 'rrow geofin');
+    fin.appendChild(xbtn('キャンセル', 'ghost', cropCancel));
+    var ok = xbtn('✓ 完了', null, cropDone); ok.classList.add('pri'); fin.appendChild(ok);
+    body.appendChild(fin);
     var asp = xel('div', 'asprow'); XE.aspBtns = [];
     aspects().forEach(function(a){
       var b = xel('button', 'aspbtn', a[1]); b.type = 'button'; b.dataset.a = a[0];
@@ -2879,6 +2891,8 @@ function tkOldLens(img, w, h, P){
     body.appendChild(row);
     XE.geoInfo = xel('div', 'geoinfo'); body.appendChild(XE.geoInfo);
   }
+  function cropDone(){ showTab('adj', 'basic'); toast('トリミングを確定しました'); }
+  function cropCancel(){ if (XE.geoSnap){ P.geo = JSON.parse(XE.geoSnap); } showTab('adj', 'basic'); syncGeo(); present(); schedule(); toast('トリミングを取り消しました'); }
   function afterGeo(){ clearPresetMark(); syncGeo(); present(); schedule(); }
   function syncGeo(){
     if (!XE.aspBtns) return;
