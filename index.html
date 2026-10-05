@@ -398,7 +398,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v32</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v33</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1802,7 +1802,7 @@ function tkOldLens(img, w, h, P){
     { sect: '便利機能' },
     { key: 'lm', title: 'マスク', sub: '円形・線形・ブラシで決めた範囲だけを調整', sliders: [], custom: buildLmExtra, noToggle: true },
     { key: 'hist', title: '編集履歴', sub: '変えた順に並び、タップでその時点へ', sliders: [], custom: buildHistExtra, noToggle: true },
-    { key: 'clip', title: '設定のコピー', sub: '今の仕上げを、次の写真にそのまま', sliders: [], custom: buildClipExtra, noToggle: true },
+    { key: 'clip', title: '設定のコピー', sub: '今の仕上げを次の写真へ／新しい写真の始め方', sliders: [], custom: buildClipExtra, noToggle: true },
     { key: 'aiprep', title: 'AIの準備', sub: 'AIのファイルを先に端末へ入れておく', sliders: [], custom: buildAiExtra, noToggle: true },
     { key: 'feed', title: 'フィード確認', sub: '過去の投稿と並べて、なじむか確かめる', sliders: [], custom: buildFeedExtra, noToggle: true },
     { key: 'mypre', title: '自分の設定を保存', sub: '今の設定に名前を付けて保存・呼び出し', sliders: [], custom: buildMyPreExtra, noToggle: true },
@@ -2004,9 +2004,13 @@ function tkOldLens(img, w, h, P){
     if (!f || (f.type && f.type.indexOf('image/') !== 0)){ toast('画像ファイルを選んでください'); return; }
     var url = URL.createObjectURL(f);
     var im = new Image();
+    // 新しい写真：設定に合わせて「まっさらから」か「直前の調整を引き継ぐ」。まっさらの時も、直前の調整はすぐ当て直せるよう覚えておく
+    if (!opt.restore && img){ try{ PREVSET = snapState(); }catch(e){} }
     if (!opt.keep){ try{ sessPut('photo', { blob: f, name: f.name || '', at: Date.now() }).then(function(){ sessPut('state', null); }).catch(function(){}); }catch(e){} }
     im.onload = function(){
-      img = im; setupPreview(); URL.revokeObjectURL(url);
+      var fresh = !opt.restore && newPhotoMode() === 'fresh' && PREVSET;
+      img = im; if (fresh){ restoring = true; fullReset(); restoring = false; } setupPreview(); URL.revokeObjectURL(url);
+      if (fresh){ HIST = [snapState()]; REDO = []; updateHistBtns(); }
       if (opt.restore){
         try{
           applyState(opt.restore); HIST = [snapState()]; REDO = []; updateHistBtns();
@@ -2197,7 +2201,15 @@ function tkOldLens(img, w, h, P){
     cmpHeld = true;
   }); });
 
-  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw(); ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
+  // すべて初期値へ（調整・仕上げ・強さ・部分調整・トリミング・マスク）
+  function fullReset(){
+    Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); });
+    P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw();
+    ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); });
+    P.mix = 100; P.mixL = 100; P.mixC = 100; ['mix', 'mixL', 'mixC'].forEach(function(k){ if ($('s-' + k)){ $('s-' + k).value = 100; $('v-' + k).textContent = 100; } });
+    applyPreset('none'); regResetParams(); schedule();
+  }
+  $('reset').addEventListener('click', fullReset);
 
   // 回転・ウィンドウサイズ変更：表示サイズが大きく変わったら解像度を合わせ直す
   var rsTimer = null;
@@ -3479,6 +3491,8 @@ function tkOldLens(img, w, h, P){
     applyState(HIST[HIST.length - 1]); renderHist(); toast('その時点に戻りました');
   }
   // ---- 設定のコピー＆貼り付け（C3）：トリミング・マスク・カラーマッチの参考写真は写真ごとなので除く ----
+  var PREVSET = null;
+  function newPhotoMode(){ try{ return localStorage.getItem('retouch-newmode') || 'fresh'; }catch(e){ return 'fresh'; } }
   function clipGet(){ try{ return JSON.parse(localStorage.getItem('retouch-clip') || 'null'); }catch(e){ return null; } }
   function copySettings(){
     var q = JSON.parse(snapState()); delete q.geo; delete q.lm;
@@ -3493,15 +3507,27 @@ function tkOldLens(img, w, h, P){
     applyState(JSON.stringify(d)); if (P.on.reg && !REG.ready) runSegmentation();
     toast('設定を貼り付けました');
   }
+  function pastePrev(){
+    if (!PREVSET) return;
+    var cur = JSON.parse(snapState()), d = JSON.parse(PREVSET); d.geo = cur.geo; d.lm = cur.lm;
+    applyState(JSON.stringify(d)); if (P.on.reg && !REG.ready) runSegmentation(); toast('直前の写真の調整を当てました');
+  }
   function buildClipExtra(body){
     var r = xel('div', 'rrow'); r.appendChild(xbtn('今の設定をコピー', 'ghost', copySettings)); r.appendChild(xbtn('貼り付け', null, pasteSettings)); body.appendChild(r);
     XE.clipStat = xel('div', 'rstat', clipGet() ? 'コピーした設定があります。' : 'まだコピーしていません。'); body.appendChild(XE.clipStat);
+    body.appendChild(xel('div', 'rsub', '新しい写真を開いた時'));
+    var seg = xel('div', 'seg'), mode = newPhotoMode(), btns = [];
+    [['fresh', 'まっさらから'], ['keep', '直前の調整を引き継ぐ']].forEach(function(d){ var b = xel('button', d[0] === mode ? 'on' : '', d[1]); b.type = 'button'; b.addEventListener('click', function(){ try{ localStorage.setItem('retouch-newmode', d[0]); }catch(e){} btns.forEach(function(x){ x.classList.toggle('on', x === b); }); toast(d[0] === 'fresh' ? '新しい写真は、まっさらから始めます' : '新しい写真に、直前の調整を引き継ぎます'); }); seg.appendChild(b); btns.push(b); });
+    body.appendChild(seg);
+    body.appendChild(xel('div', 'hint', '「まっさらから」でも、開いた直後に出る「直前の写真の調整を当てる」を押せば、そのまま引き継げます。'));
     body.appendChild(xel('div', 'hint', '光・色・調整・部分調整の値をまとめて写します。トリミングとマスクは写真ごとなので写しません。'));
   }
   // 新しい写真を開いた時、コピーがあれば「貼り付け」を少しの間だけ出す
   function offerPaste(){
-    if (!clipGet()) return;
-    var b = $('pasteChip'); if (!b){ b = xel('button', 'pastechip', '前の設定を貼り付け'); b.id = 'pasteChip'; b.type = 'button'; b.addEventListener('click', function(e){ e.stopPropagation(); b.classList.remove('show'); pasteSettings(); }); b.addEventListener('pointerdown', function(e){ e.stopPropagation(); }); $('stage').appendChild(b); }
+    var src = newPhotoMode() === 'fresh' && PREVSET ? 'prev' : (clipGet() ? 'clip' : null);
+    if (!src) return;
+    var b = $('pasteChip'); if (!b){ b = xel('button', 'pastechip'); b.id = 'pasteChip'; b.type = 'button'; b.addEventListener('click', function(e){ e.stopPropagation(); b.classList.remove('show'); if (b.dataset.src === 'prev') pastePrev(); else pasteSettings(); }); b.addEventListener('pointerdown', function(e){ e.stopPropagation(); }); $('stage').appendChild(b); }
+    b.dataset.src = src; b.textContent = src === 'prev' ? '直前の写真の調整を当てる' : 'コピーした設定を貼り付け';
     b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(function(){ b.classList.remove('show'); }, 7000);
   }
   // ---- AIの準備（C6）：AIのファイル（約65MB）を、使う前に端末へ入れておく ----
