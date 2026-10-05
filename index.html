@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0D0F11">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="淡光">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,7 +33,7 @@
   button{font-family:inherit}
   :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 
-  .app{position:fixed; top:0; right:0; bottom:0; left:0; height:auto; height:var(--apph,auto); overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto;
+  .app{position:fixed; top:0; right:0; bottom:0; left:0; height:auto; overflow:hidden; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto;
     grid-template-areas:"top" "stage" "sheet" "tabs";
     padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
   .topbar{grid-area:top; min-width:0; position:relative; z-index:7; background:var(--bg); display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:52px}
@@ -234,7 +234,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v13</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v14</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1269,19 +1269,6 @@ function tkOldLens(img, w, h, P){
     if (f) loadFile(f);
     e.target.value = '';
   });
-  // ホーム画面アプリ（iPhone）：上の時計の帯の裏まで広げる設定だと、iOSが画面の高さを帯の分だけ短く伝えてくる
-  // → 下にすき間ができるので、実際の画面の高さに合わせて外枠を伸ばす
-  (function(){
-    if (!window.navigator.standalone) return;
-    var root = document.documentElement;
-    function fit(){
-      var portrait = window.innerHeight >= window.innerWidth;
-      var full = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
-      if (full > window.innerHeight && full - window.innerHeight < 120) root.style.setProperty('--apph', full + 'px');
-      else root.style.removeProperty('--apph');
-    }
-    fit(); window.addEventListener('resize', fit); window.addEventListener('orientationchange', function(){ setTimeout(fit, 300); });
-  })();
   // 表示の調査用：画面の高さの数字を版番号の横に出す（ホーム画面アプリの下の余白の原因確認）
   (function(){
     var sub = document.querySelector('#drop .sub'); if (!sub) return;
