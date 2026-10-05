@@ -180,6 +180,13 @@
   .mpname{font-size:12.5px; padding:7px 4px 7px 12px}
   .mpdel{font-size:13px; padding:7px 11px 7px 8px; color:var(--faint) !important}
   .ftable{margin:6px 0 8px; font-size:12px}
+  .mtable{margin:2px 0 8px; font-size:12px}
+  .mtr{display:grid; grid-template-columns:5.5em 1fr 1fr 6em; gap:8px; padding:6px 2px; border-bottom:1px solid var(--line-soft); align-items:center}
+  .mtr span:nth-child(2),.mtr span:nth-child(3){text-align:right}
+  .mtr span:last-child{text-align:right}
+  .mth{color:var(--faint); font-size:11px; letter-spacing:.06em}
+  .mtr .ok{color:var(--accent); font-weight:600}
+  .mtr .ng{color:var(--warn); font-weight:600}
   .ftr{display:grid; grid-template-columns:4.5em 1fr 4.5em; gap:8px; padding:6px 2px; border-bottom:1px solid var(--line-soft); align-items:center}
   .fth{color:var(--faint); font-size:11px; letter-spacing:.06em}
   .ftr .ok{color:var(--accent); font-weight:600}
@@ -235,7 +242,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v17</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v18</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -451,7 +458,7 @@ function tkProcess(src, w, h, P){
   }
 
   // 2.1) カラーマッチ：参考写真の色（影・中間・光それぞれ）と明るさに寄せる
-  if (P.on.match && P.mref && P.mAmt > 0) tkColorMatch(img, n, P.mref, P.mAmt / 100, (P.mLum || 0) / 100);
+  if (P.on.match && P.mref && P.mAmt > 0) tkColorMatch(img, n, P.mref, P.mAmt / 100, (P.mLum || 0) / 100, P.mMode || 'part');
   // 2.15) 肌（毛色）の色ムラをそろえる
   if (P.on.skin && (P.skAmt > 0 || P.skShift)) tkSkinUnify(img, n, (P.skAmt || 0) / 100, (P.skShift || 0));
 
@@ -907,25 +914,52 @@ function tkRoleMasks(F, subj, depth, w, h){
   return [sub, near, mid, far, S];
 }
 
-// ---------- 色の統計（カラーマッチ用）：YCbCr、影・中間・光の3帯 ----------
+// ---------- 色の統計（カラーマッチ用）：YCbCr、影・中間・光の3帯 ＋ 部分（肌・植物・空・白グレー・その他） ----------
 function tkBandW(Y){ var ws = 1 - tkSS((Y - 0.15) / 0.3), wh = tkSS((Y - 0.55) / 0.3); return [ws, Math.max(0, 1 - ws - wh), wh]; }
+var TK_CATS = ['肌', '植物', '空・青', '白・グレー', 'その他'];
+// 1画素がどの部分らしいか（0〜1、合計1）。色相・鮮やかさ・明るさで判定
+function tkCatW(r, g, b, out){
+  var Y = 0.299 * r + 0.587 * g + 0.114 * b, I = 0.596 * r - 0.274 * g - 0.322 * b, Q = 0.211 * r - 0.523 * g + 0.312 * b;
+  var skin = tkSkinW(Y, I, Q);
+  var mx = Math.max(r, g, b), mn = Math.min(r, g, b), ch = mx - mn, hue = 0;
+  if (ch > 1e-4){ if (mx === r) hue = 60 * (((g - b) / ch) % 6); else if (mx === g) hue = 60 * ((b - r) / ch + 2); else hue = 60 * ((r - g) / ch + 4); if (hue < 0) hue += 360; }
+  var sat = mx > 1e-4 ? ch / mx : 0;
+  var colorful = tkSS((sat - 0.08) / 0.1) * tkSS((ch - 0.03) / 0.05);
+  var leaf = tkSS((hue - 58) / 14) * (1 - tkSS((hue - 165) / 14)) * colorful * tkSS((mx - 0.06) / 0.08);
+  var sky = tkSS((hue - 170) / 14) * (1 - tkSS((hue - 255) / 14)) * colorful;
+  var neu = 1 - tkSS((sat - 0.05) / 0.12);
+  skin *= 1 - neu * 0.7; leaf *= 1 - skin; sky *= 1 - skin;
+  var t = skin + leaf + sky + neu;
+  if (t > 1){ skin /= t; leaf /= t; sky /= t; neu /= t; t = 1; }
+  out[0] = skin; out[1] = leaf; out[2] = sky; out[3] = neu; out[4] = 1 - t;
+  return Y;
+}
 // rgb: Float32 (0-1) 3ch / または Uint8 RGBA（rgba=true）
 function tkColorStats(px, n, rgba){
-  var st = { Ym: 0, Ys: 0, b: [] }, k, i, step = Math.max(1, Math.floor(n / 60000)), c = rgba ? 4 : 3, sc = rgba ? 1 / 255 : 1;
+  var st = { Ym: 0, Ys: 0, b: [], cat: [] }, k, i, step = Math.max(1, Math.floor(n / 60000)), c = rgba ? 4 : 3, sc = rgba ? 1 / 255 : 1;
   var W = [0, 0, 0], mb = [0, 0, 0], mr = [0, 0, 0], vb = [0, 0, 0], vr = [0, 0, 0], sy = 0, syy = 0, cnt = 0;
+  var K = TK_CATS.length, CW = new Float64Array(K), CY = new Float64Array(K), CB = new Float64Array(K), CR = new Float64Array(K), VB = new Float64Array(K), VR = new Float64Array(K), cw = [0, 0, 0, 0, 0];
   for (i = 0; i < n; i += step){
     var r = px[i * c] * sc, g = px[i * c + 1] * sc, b = px[i * c + 2] * sc, Y = 0.299 * r + 0.587 * g + 0.114 * b, Cb = (b - Y) * 0.564, Cr = (r - Y) * 0.713;
     var bw = tkBandW(Y); sy += Y; syy += Y * Y; cnt++;
     for (k = 0; k < 3; k++){ var ww = bw[k]; W[k] += ww; mb[k] += ww * Cb; mr[k] += ww * Cr; vb[k] += ww * Cb * Cb; vr[k] += ww * Cr * Cr; }
+    tkCatW(r, g, b, cw);
+    for (k = 0; k < K; k++){ var q = cw[k]; if (q < 1e-3) continue; CW[k] += q; CY[k] += q * Y; CB[k] += q * Cb; CR[k] += q * Cr; VB[k] += q * Cb * Cb; VR[k] += q * Cr * Cr; }
   }
   st.Ym = sy / cnt; st.Ys = Math.sqrt(Math.max(1e-6, syy / cnt - st.Ym * st.Ym));
   for (k = 0; k < 3; k++){
     var ww2 = Math.max(1e-6, W[k]), m1 = mb[k] / ww2, m2 = mr[k] / ww2;
     st.b.push({ w: W[k] / cnt, mb: m1, mr: m2, sb: Math.sqrt(Math.max(1e-6, vb[k] / ww2 - m1 * m1)), sr: Math.sqrt(Math.max(1e-6, vr[k] / ww2 - m2 * m2)) });
   }
+  for (k = 0; k < K; k++){
+    var w3 = Math.max(1e-6, CW[k]), a1 = CB[k] / w3, a2 = CR[k] / w3;
+    st.cat.push({ w: CW[k] / cnt, Ym: CY[k] / w3, mb: a1, mr: a2, sb: Math.sqrt(Math.max(1e-6, VB[k] / w3 - a1 * a1)), sr: Math.sqrt(Math.max(1e-6, VR[k] / w3 - a2 * a2)) });
+  }
   return st;
 }
-function tkColorMatch(img, n, ref, amt, amtL){
+function tkClampV(v, a){ return v < -a ? -a : (v > a ? a : v); }
+// mode: 'part'＝部分ごとに合わせる（肌は肌、植物は植物へ）／'all'＝全体（影・中間・光の3帯）
+function tkColorMatch(img, n, ref, amt, amtL, mode){
   var src = tkColorStats(img, n, false), k, i;
   var T = [];
   for (k = 0; k < 3; k++){
@@ -935,13 +969,35 @@ function tkColorMatch(img, n, ref, amt, amtL){
     T.push({ ms: s.mb, mr: s.mr, kb: Math.min(2, Math.max(0.5, r.sb / s.sb)), kr: Math.min(2, Math.max(0.5, r.sr / s.sr)), tb: r.mb, tr: r.mr });
   }
   var kY = Math.min(1.4, Math.max(0.7, ref.Ys / src.Ys));
+  // 部分ごとの対応（両方の写真に十分ある部分だけ。無い部分は全体の合わせ方で代用）
+  var part = mode !== 'all' && ref.cat && ref.cat.length === TK_CATS.length, C = [], K = TK_CATS.length;
+  if (part){
+    for (k = 0; k < K; k++){
+      var cs = src.cat[k], cr = ref.cat[k];
+      if (k === 3 || cs.w < 0.006 || cr.w < 0.006){ C.push(null); continue; }   // 白・グレーは3帯の色かぶり合わせが最適
+      C.push({ ms: cs.mb, mr: cs.mr, kb: Math.min(1.6, Math.max(0.6, cr.sb / cs.sb)), kr: Math.min(1.6, Math.max(0.6, cr.sr / cs.sr)),
+               db: tkClampV(cr.mb - cs.mb, 0.12), dr: tkClampV(cr.mr - cs.mr, 0.12), dY: tkClampV(cr.Ym - cs.Ym, 0.15) });
+    }
+  }
+  var cw = [0, 0, 0, 0, 0];
   for (i = 0; i < n; i++){
     var R = img[i * 3], G = img[i * 3 + 1], B = img[i * 3 + 2];
     var Y = 0.299 * R + 0.587 * G + 0.114 * B, Cb = (B - Y) * 0.564, Cr = (R - Y) * 0.713;
     var bw = tkBandW(Y), nb = 0, nr = 0;
     for (k = 0; k < 3; k++){ var t = T[k]; nb += bw[k] * ((Cb - t.ms) * t.kb + t.tb); nr += bw[k] * ((Cr - t.mr) * t.kr + t.tr); }
+    var dYp = 0;
+    if (part){
+      tkCatW(R, G, B, cw);
+      var pb = 0, pr = 0, rest = 0;
+      for (k = 0; k < K; k++){
+        var q = cw[k], cc = C[k]; if (q < 1e-3) continue;
+        if (!cc){ rest += q; continue; }
+        pb += q * ((Cb - cc.ms) * cc.kb + cc.ms + cc.db); pr += q * ((Cr - cc.mr) * cc.kr + cc.mr + cc.dr); dYp += q * cc.dY;
+      }
+      nb = pb + rest * nb; nr = pr + rest * nr;
+    }
     Cb += (nb - Cb) * amt; Cr += (nr - Cr) * amt;
-    if (amtL > 0){ var Yn = (Y - src.Ym) * kY + ref.Ym; Y += (Yn - Y) * amtL; }
+    if (amtL > 0){ var Yn = (Y - src.Ym) * kY + ref.Ym; Y += (Yn - Y) * amtL * (part ? 0.6 : 1) + dYp * amtL * 0.6; }
     var r2 = Y + Cr / 0.713, b2 = Y + Cb / 0.564, g2 = (Y - 0.299 * r2 - 0.114 * b2) / 0.587;
     img[i * 3] = tkClamp01(r2); img[i * 3 + 1] = tkClamp01(g2); img[i * 3 + 2] = tkClamp01(b2);
   }
@@ -1159,7 +1215,7 @@ function tkOldLens(img, w, h, P){
   // 既定でOFFにする項目（Lightroomでもできる処理＋濃さ）
   var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1 };
   P.dmode = 'B';
-  P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null;
+  P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null; P.mMode = 'part';
   var PICK = null, FEED = [], FEEDPOS = 0, XE = {};
   GROUPS.forEach(function(g){ if (!g.key || g.noToggle) return; P.on[g.key] = OFF_KEYS[g.key] ? 0 : 1; g.sliders.forEach(function(s){ P[s[0]] = s[4]; DEFAULTS[s[0]] = s[4]; }); });
 
@@ -1240,7 +1296,7 @@ function tkOldLens(img, w, h, P){
     var p = TK_PRESETS[key];
     if (key === 'none'){
       Object.keys(DEFAULTS).forEach(function(k){ setVal(k, DEFAULTS[k]); });
-      Object.keys(P.on).forEach(function(k){ P.on[k] = OFF_KEYS[k] ? 0 : 1; syncGroup(k); }); P.mref = null; updateExtras(); setMode('B');
+      Object.keys(P.on).forEach(function(k){ P.on[k] = OFF_KEYS[k] ? 0 : 1; syncGroup(k); }); P.mref = null; P.mMode = 'part'; updateExtras(); setMode('B');
     } else {
       Object.keys(DEFAULTS).forEach(function(k){ setVal(k, k in p ? p[k] : DEFAULTS[k]); });
       if (p.rMode) P.rMode = p.rMode;
@@ -1358,6 +1414,7 @@ function tkOldLens(img, w, h, P){
     $('badge').style.display = 'block'; $('cmp').disabled = false; $('change').textContent = '写真を変更'; setTimeout(renderLookThumbs, 30);
     $('reset').disabled = false; $('save').disabled = false;
     regNewPhoto();
+    try{ renderMatchTable(); }catch(e){}
     schedule();
   }
 
@@ -1946,6 +2003,42 @@ function tkOldLens(img, w, h, P){
     rr.appendChild(xbtn('参考写真を選ぶ', 'ghost', function(){ fi.click(); }));
     XE.mFeed = xbtn('フィードの写真に合わせる', 'ghost', matchFromFeed); rr.appendChild(XE.mFeed);
     col.appendChild(XE.mStat); col.appendChild(rr); row.appendChild(XE.mThumb); row.appendChild(col); body.appendChild(row);
+    // 合わせ方：部分ごと（肌は肌へ、植物は植物へ）／全体
+    var seg = xel('div', 'seg'); XE.mModeBtns = [];
+    [['part', '部分ごとに合わせる'], ['all', '全体で合わせる']].forEach(function(m){
+      var bt = xel('button', '', m[1]); bt.type = 'button'; bt.dataset.m = m[0];
+      bt.addEventListener('click', function(){ P.mMode = m[0]; updateExtras(); clearPresetMark(); schedule(); });
+      seg.appendChild(bt); XE.mModeBtns.push(bt);
+    });
+    body.appendChild(seg);
+    XE.mTable = xel('div', 'mtable'); body.appendChild(XE.mTable);
+    body.appendChild(xel('div', 'hint', '部分ごと：参考写真とこの写真を、肌・植物・空・白グレー・その他に分け、同じ部分どうしで色と明るさを合わせます。片方にしか無い部分は、全体の色かぶりで合わせます。'));
+  }
+  // 部分ごとの判定表（参考写真とこの写真に、各部分がどれくらいあるか）
+  var MT_CACHE = { img: null, st: null };
+  function renderMatchTable(){
+    var T = XE.mTable; if (!T) return;
+    (XE.mModeBtns || []).forEach(function(b){ b.classList.toggle('on', (P.mMode || 'part') === b.dataset.m); });
+    T.innerHTML = '';
+    if (!P.mref || !P.mref.cat || (P.mMode || 'part') !== 'part'){ T.style.display = 'none'; return; }
+    T.style.display = '';
+    var st = null;
+    if (img){
+      if (MT_CACHE.img !== img){ var sz = sizeFor(200); MT_CACHE.st = tkColorStats(readPixels(sz[0], sz[1]), sz[0] * sz[1], true); MT_CACHE.img = img; }
+      st = MT_CACHE.st;
+    }
+    function row(cells, cls){ var r = xel('div', 'mtr' + (cls ? ' ' + cls : '')); cells.forEach(function(c){ var e = xel('span', c[1] || '', c[0]); r.appendChild(e); }); T.appendChild(r); }
+    row([['部分'], ['参考'], ['この写真'], ['判定']], 'mth');
+    TK_CATS.forEach(function(nm, k){
+      var a = P.mref.cat[k].w, b = st ? st.cat[k].w : null;
+      var pa = Math.round(a * 100) + '%', pb = b == null ? '—' : Math.round(b * 100) + '%';
+      var j;
+      if (k === 3) j = ['色かぶり', 'ok'];
+      else if (b == null) j = ['—', ''];
+      else if (a >= 0.006 && b >= 0.006) j = ['合わせる', 'ok'];
+      else j = ['全体で代用', 'ng'];
+      row([[nm], [pa, 'num'], [pb, 'num'], j]);
+    });
   }
   function smallPixels(im, maxL){
     var s = Math.min(1, maxL / Math.max(im.naturalWidth || im.width, im.naturalHeight || im.height));
@@ -2229,6 +2322,7 @@ function tkOldLens(img, w, h, P){
     if (XE.mStat){
       XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
       if (!P.mref){ var x = XE.mThumb.getContext('2d'); x.clearRect(0, 0, 112, 112); }
+      renderMatchTable();
       XE.mFeed.disabled = !FEED.length;
     }
     if (XE.fSeg){
