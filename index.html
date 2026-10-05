@@ -225,6 +225,31 @@
   .app.sliding .sheet *{visibility:hidden}
   .app.sliding .sheet .keep,.app.sliding .sheet .keep *{visibility:visible}
   .app.sliding .keep{background:rgba(13,15,17,.62); box-shadow:0 0 0 8px rgba(13,15,17,.62); border-radius:10px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px)}
+  /* カラーグレーディング（写真の下のパネルに収まる大きさ） */
+  .cgsel{display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 8px}
+  .cgb{position:relative; width:34px; height:34px; border-radius:50%; border:0; background:transparent; padding:0; cursor:pointer; display:flex; align-items:center; justify-content:center}
+  .cgb .cgdot{width:22px; height:22px; border-radius:50%; display:block; border:1.5px solid rgba(255,255,255,.35)}
+  .cgb-s .cgdot{background:#15181b} .cgb-m .cgdot{background:#6d747a} .cgb-h .cgdot{background:#e9edf0} .cgb-g .cgdot{background:linear-gradient(90deg,#15181b 50%,#e9edf0 50%)}
+  .cgb .cgx{font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:12px; padding:3px 8px; white-space:nowrap}
+  .cgb.on .cgdot{outline:2px solid var(--accent); outline-offset:3px}
+  .cgb.on .cgx{color:var(--ink); border-color:var(--accent)}
+  .cgb-x{width:auto; margin-left:6px}
+  .cgb.used::after{content:""; position:absolute; bottom:-5px; left:50%; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:var(--warm)}
+  .cgname{display:none}
+  /* パネルが小さい時は見出しを省いて、ホイールを写真の下に収める */
+  .app:not(.expanded) .panel #g-cg .ghead{display:none}
+  .app:not(.expanded) .panel #g-cg .hint{display:none}
+  .cgsel .cgnm{font-size:11px; color:var(--faint); letter-spacing:.06em; min-width:5.5em; text-align:right; white-space:nowrap}
+  .cgmain{display:flex; gap:14px; align-items:center}
+  .cgwheel{position:relative; flex:none; width:min(142px,38vw); aspect-ratio:1; touch-action:none; cursor:crosshair}
+  .cgwheel canvas{width:100%; height:100%; display:block; border-radius:50%}
+  .cgmk{position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%; border:2.5px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4); pointer-events:none}
+  .cgcol{flex:1; min-width:0; display:flex; flex-direction:column; gap:6px}
+  .cgtop{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted)}
+  .cgrow input[type=range]{width:100%; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:rgba(255,255,255,.18); outline:none; margin:6px 0 4px}
+  .cgrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); border:3px solid var(--surface)}
+  .cgrow input.huetrack{height:6px; background:linear-gradient(90deg,hsl(0,75%,55%),hsl(60,75%,55%),hsl(120,75%,55%),hsl(180,75%,55%),hsl(240,75%,55%),hsl(300,75%,55%),hsl(360,75%,55%))}
+  .app.sliding .cgwrap.keep{box-shadow:0 0 0 8px rgba(13,15,17,.62)}
   /* トーンカーブ */
   .crvbox{margin:4px 0 8px}
   .crv{display:block; width:100%; height:180px; touch-action:none; border-radius:10px; background:rgba(0,0,0,.22); border:1px solid var(--line-soft); cursor:crosshair}
@@ -256,7 +281,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v19</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v20</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -432,6 +457,7 @@ function tkProcess(src, w, h, P){
 
   // 0) 基本補正（露光量・ハイライト・ホワイトバランス・トーンカーブ・カラーミキサーなど）
   tkBasic(img, w, h, P);
+  tkGrade(img, n, P);
 
   // 1) 自動明るさ（平均の明るさを目標へ。掛け算でなくガンマ＝白と黒は動かさず中間調だけ動かす→白飛びしない）
   if (P.on.bright){
@@ -836,6 +862,41 @@ function tkBasic(img, w, h, P){
     tkApplyLut3(img, n, LUT, N3);
 
   }
+}
+
+
+// ---------- カラーグレーディング（シャドウ・中間調・ハイライト・全体に、それぞれ色と明るさ） ----------
+var TK_CG_R = ['s', 'm', 'h', 'g'];
+function tkGradeActive(P){
+  if (!P.on || !P.on.cg) return false;
+  for (var i = 0; i < 4; i++){ var r = TK_CG_R[i]; if (P['cg' + r + 'S'] || P['cg' + r + 'L']) return true; }
+  return false;
+}
+// 色相（度）→ 色の向き（YCbCr の Cb, Cr）。ホイールの色と同じ並び
+function tkHueDir(h){
+  var c = function(n){ var k = (n + h / 30) % 12; return 0.5 - 0.5 * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  var r = c(0), g = c(8), b = c(4), Y = 0.299 * r + 0.587 * g + 0.114 * b, cb = (b - Y) * 0.564, cr = (r - Y) * 0.713, m = Math.sqrt(cb * cb + cr * cr) || 1;
+  return [cb / m, cr / m];
+}
+function tkGrade(img, n, P){
+  if (!tkGradeActive(P)) return;
+  var R = {}, i;
+  TK_CG_R.forEach(function(r){ var d = tkHueDir(P['cg' + r + 'H'] || 0), s = (P['cg' + r + 'S'] || 0) / 100 * 0.12; R[r] = { b: d[0] * s, r: d[1] * s, l: (P['cg' + r + 'L'] || 0) / 100 }; });
+  var bl = (P.cgBlend == null ? 50 : P.cgBlend) / 100, ba = (P.cgBal || 0) / 100;
+  var wd = 0.05 + 0.25 * bl, p1 = 0.33 - ba * 0.2, p2 = 0.67 - ba * 0.2;
+  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = 0;
+  for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
+    var rr = ri / 32, gg = gi / 32, bb = bi / 32, Y = 0.299 * rr + 0.587 * gg + 0.114 * bb, Cb = (bb - Y) * 0.564, Cr = (rr - Y) * 0.713;
+    var ws = 1 - tkSS((Y - (p1 - wd)) / (2 * wd)), wh = tkSS((Y - (p2 - wd)) / (2 * wd)), wm = Math.max(0, 1 - ws - wh);
+    // 黒と白の端では色を弱める（真っ黒・真っ白に色が乗りすぎない）
+    var edge = tkSS(Y / 0.06) * (1 - tkSS((Y - 0.94) / 0.06));
+    Cb += (ws * R.s.b + wm * R.m.b + wh * R.h.b + R.g.b) * edge; Cr += (ws * R.s.r + wm * R.m.r + wh * R.h.r + R.g.r) * edge;
+    var dl = ws * R.s.l + wm * R.m.l + wh * R.h.l + R.g.l;
+    if (dl) Y += dl * 0.22 * (dl > 0 ? (1 - Y) : Y) * 2;
+    var r2 = Y + Cr / 0.713, b2 = Y + Cb / 0.564, g2 = (Y - 0.299 * r2 - 0.114 * b2) / 0.587;
+    LUT[o++] = tkClamp01(r2); LUT[o++] = tkClamp01(g2); LUT[o++] = tkClamp01(b2);
+  }
+  tkApplyLut3(img, n, LUT, N3);
 }
 
 var TK_PRESETS = {
@@ -1333,6 +1394,8 @@ function tkOldLens(img, w, h, P){
       modes: [['h','色相'],['s','彩度'],['l','輝度']],
       sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l']],
       hint: '色相は ±30度まで。グレーや白には効きません。' },
+    { key: 'cg', title: 'カラーグレーディング', sub: 'シャドウ・中間調・ハイライト・全体に色と明るさ', sliders: [], custom: buildGradeExtra,
+      hint: 'ホイールをなぞると、向きで色、中心からの距離で強さが決まります。ダブルタップで中心へ。「調整」でブレンド（境目のなめらかさ）とバランス（影とハイライトの境の位置）。' },
     { key: 'crv', title: 'トーンカーブ', sub: '点を動かして明るさと色を細かく', sliders: [], custom: buildCurveExtra,
       hint: '線をタップで点を追加、点をドラッグで移動、点をダブルタップで削除。RGBは全体、赤・緑・青は色ごと。' },
     { sect: '光（Lightroomにできない部分）' },
@@ -1423,6 +1486,8 @@ function tkOldLens(img, w, h, P){
   var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1 };
   function crvBlank(){ return { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] }; }
   P.crv = crvBlank();
+  ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0;
+  function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; }
   P.dmode = 'B';
   P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null; P.mMode = 'part';
   var PICK = null, FEED = [], FEEDPOS = 0, XE = {};
@@ -1510,9 +1575,9 @@ function tkOldLens(img, w, h, P){
   buildLookTiles();
   function markPreset(key){ Array.prototype.forEach.call(pbox.children, function(c){ c.classList.toggle('on', c.dataset.p === key); }); }
   function clearPresetMark(){ markPreset('__none__'); }
-  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1 };
+  var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
-  function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv'; }
+  function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg'; }
   function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d)/.test(k); }
   function applyPreset(key){
     var p = TK_PRESETS[key];
@@ -1704,7 +1769,7 @@ function tkOldLens(img, w, h, P){
   cmp.addEventListener('pointerdown', function(e){ e.preventDefault(); if (hi) showOriginal(true); });
   ['pointerup','pointercancel','pointerleave'].forEach(function(ev){ cmp.addEventListener(ev, function(){ if (showOrig) showOriginal(false); }); });
 
-  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); ['basic','wb','mix','crv'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
+  $('reset').addEventListener('click', function(){ Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); }); P.crv = crvBlank(); cgReset(); ['basic','wb','mix','crv','cg'].forEach(function(k){ P.on[k] = 1; syncGroup(k); }); applyPreset('none'); regResetParams(); schedule(); });
 
   // 回転・ウィンドウサイズ変更：表示サイズが大きく変わったら解像度を合わせ直す
   var rsTimer = null;
@@ -2228,6 +2293,103 @@ function tkOldLens(img, w, h, P){
   document.addEventListener('input', function(e){ if (slDown && e.target && e.target.type === 'range') startSliding(e.target.closest('.row') || e.target); }, true);
   ['pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(function(t){ document.addEventListener(t, stopSliding, true); });
   window.addEventListener('blur', stopSliding);
+  // ---- カラーグレーディング（ホイール＋連動スライダー） ----
+  // グループ作成時に呼ばれるので、表は関数で返す（変数だとまだ用意されていない）
+  function cgRanges(){ return [['s', 'シャドウ'], ['m', '中間調'], ['h', 'ハイライト'], ['g', '全体'], ['x', '境目と配分']]; }
+  function buildGradeExtra(body){
+    XE.cgSel = 's';
+    var wrap = xel('div', 'cgwrap');
+    var sel = xel('div', 'cgsel'); XE.cgBtns = [];
+    cgRanges().forEach(function(m){
+      var bt = xel('button', 'cgb cgb-' + m[0]); bt.type = 'button'; bt.dataset.m = m[0]; bt.setAttribute('aria-label', m[1]);
+      bt.innerHTML = m[0] === 'x' ? '<span class="cgx">調整</span>' : '<span class="cgdot"></span>';
+      bt.addEventListener('click', function(){ XE.cgSel = m[0]; syncGrade(); });
+      sel.appendChild(bt); XE.cgBtns.push(bt);
+    });
+    XE.cgName = xel('span', 'cgnm'); sel.insertBefore(XE.cgName, sel.firstChild);
+    wrap.appendChild(sel);
+    var main = xel('div', 'cgmain');
+    var wbox = xel('div', 'cgwheel'); var cv = xel('canvas'); wbox.appendChild(cv); var mk = xel('div', 'cgmk'); wbox.appendChild(mk);
+    XE.cgCv = cv; XE.cgMk = mk; XE.cgWheel = wbox;
+    var col = xel('div', 'cgcol'); XE.cgRows = {};
+    [['H', '色相', 0, 359], ['S', '強さ', 0, 100], ['L', '明るさ', -100, 100]].forEach(function(d){
+      var row = xel('div', 'cgrow'); var top = xel('div', 'cgtop'); var lb = xel('span', '', d[1]); var vv = xel('span', 'num', '0'); top.appendChild(lb); top.appendChild(vv);
+      var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3]; r.value = 0; if (d[0] === 'H') r.className = 'huetrack';
+      r.addEventListener('input', function(){ var k = 'cg' + XE.cgSel + d[0]; P[k] = +r.value; vv.textContent = r.value; afterGrade(false); });
+      lb.addEventListener('dblclick', function(){ var k = 'cg' + XE.cgSel + d[0]; P[k] = 0; afterGrade(true); });
+      row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
+    });
+    // ブレンド・バランス
+    [['Blend', 'ブレンド', 0, 100], ['Bal', 'バランス', -100, 100]].forEach(function(d){
+      var row = xel('div', 'cgrow cgx-row'); var top = xel('div', 'cgtop'); var lb = xel('span', '', d[1]); var vv = xel('span', 'num', '0'); top.appendChild(lb); top.appendChild(vv);
+      var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3];
+      r.addEventListener('input', function(){ P['cg' + d[0]] = +r.value; vv.textContent = r.value; afterGrade(false); });
+      lb.addEventListener('dblclick', function(){ P['cg' + d[0]] = d[0] === 'Blend' ? 50 : 0; afterGrade(true); });
+      row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
+    });
+    main.appendChild(wbox); main.appendChild(col); wrap.appendChild(main); body.appendChild(wrap);
+    // ホイールの操作：なぞると色相（向き）と強さ（中心からの距離）。ダブルタップで中心に戻す
+    var dragging = false, last = 0;
+    function setFrom(e){
+      var rc = cv.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2, R = rc.width / 2;
+      var dx = e.clientX - cx, dy = cy - e.clientY, a = Math.atan2(dy, dx) * 180 / Math.PI; if (a < 0) a += 360;
+      var d = Math.min(1, Math.hypot(dx, dy) / R);
+      P['cg' + XE.cgSel + 'H'] = Math.round(a) % 360; P['cg' + XE.cgSel + 'S'] = Math.round(d * 100);
+    }
+    wbox.addEventListener('pointerdown', function(e){
+      if (XE.cgSel === 'x') return;
+      e.preventDefault(); wbox.setPointerCapture(e.pointerId);
+      var now = Date.now();
+      if (now - last < 320){ P['cg' + XE.cgSel + 'H'] = 0; P['cg' + XE.cgSel + 'S'] = 0; last = 0; afterGrade(true); return; }
+      last = now; dragging = true; setFrom(e); afterGrade(false);
+    });
+    wbox.addEventListener('pointermove', function(e){ if (!dragging) return; startSliding(wrap); setFrom(e); afterGrade(false); });
+    function up(){ dragging = false; }
+    wbox.addEventListener('pointerup', up); wbox.addEventListener('pointercancel', up);
+  }
+  function afterGrade(full){ P.on.cg = 1; syncGroup('cg'); clearPresetMark(); syncGrade(); schedule(); }
+  var CG_IMG = CG_IMG || { size: 0, data: null };
+  function drawWheel(){
+    var cv = XE.cgCv; if (!cv) return;
+    var rc = cv.getBoundingClientRect(); if (!rc.width) return;
+    var d = window.devicePixelRatio || 1, S = Math.round(rc.width * d);
+    if (cv.width !== S){ cv.width = S; cv.height = S; }
+    if (CG_IMG.size !== S){
+      var x = cv.getContext('2d'), im = x.createImageData(S, S), c = S / 2;
+      for (var y = 0; y < S; y++) for (var xx = 0; xx < S; xx++){
+        var dx = xx - c + 0.5, dy = c - y - 0.5, rr = Math.hypot(dx, dy) / c, o = (y * S + xx) * 4;
+        if (rr > 1){ im.data[o + 3] = 0; continue; }
+        var a = Math.atan2(dy, dx) * 180 / Math.PI; if (a < 0) a += 360;
+        var f = function(n){ var k = (n + a / 30) % 12; return 0.5 - 0.5 * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+        var t = Math.pow(rr, 0.9), w = 0.97;
+        im.data[o] = (w + (f(0) - w) * t) * 255; im.data[o + 1] = (w + (f(8) - w) * t) * 255; im.data[o + 2] = (w + (f(4) - w) * t) * 255;
+        im.data[o + 3] = rr > 0.985 ? (1 - rr) / 0.015 * 255 : 255;
+      }
+      CG_IMG.data = im; CG_IMG.size = S;
+    }
+    cv.getContext('2d').putImageData(CG_IMG.data, 0, 0);
+  }
+  function syncGrade(){
+    if (!XE.cgBtns) return;
+    var sel = XE.cgSel, nm = cgRanges().filter(function(m){ return m[0] === sel; })[0][1];
+    XE.cgBtns.forEach(function(b){
+      var m = b.dataset.m; b.classList.toggle('on', m === sel);
+      var used = m === 'x' ? ((P.cgBlend != null && P.cgBlend !== 50) || !!P.cgBal) : !!(P['cg' + m + 'S'] || P['cg' + m + 'L']);
+      b.classList.toggle('used', used);
+      if (m !== 'x'){ var dot = b.querySelector('.cgdot'); dot.style.boxShadow = P['cg' + m + 'S'] ? 'inset 0 0 0 3px hsl(' + (P['cg' + m + 'H'] || 0) + ',70%,60%)' : ''; }
+    });
+    XE.cgName.textContent = nm;
+    var isX = sel === 'x';
+    XE.cgWheel.style.display = isX ? 'none' : '';
+    ['H', 'S', 'L'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? 'none' : ''; if (!isX){ var v = P['cg' + sel + k] || 0; o.r.value = v; o.v.textContent = v; } });
+    ['Blend', 'Bal'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? '' : 'none'; var v = P['cg' + k]; if (v == null) v = k === 'Blend' ? 50 : 0; o.r.value = v; o.v.textContent = v; });
+    if (!isX){
+      drawWheel();
+      var h = P['cg' + sel + 'H'] || 0, s = (P['cg' + sel + 'S'] || 0) / 100, a = h * Math.PI / 180;
+      XE.cgMk.style.left = (50 + Math.cos(a) * s * 50) + '%'; XE.cgMk.style.top = (50 - Math.sin(a) * s * 50) + '%';
+      XE.cgMk.style.background = s ? 'hsl(' + h + ',70%,' + (85 - s * 30) + '%)' : '#fff';
+    }
+  }
   // ---- トーンカーブ ----
   var CRV_COL = { rgb: '#E6EBEF', r: '#E8786A', g: '#7CC48A', b: '#79A6E8' };
   function buildCurveExtra(body){
@@ -2639,6 +2801,7 @@ function tkOldLens(img, w, h, P){
   // ---- 表示の同期 ----
   function updateExtras(){
     try{ drawCurve(); }catch(e){}
+    try{ syncGrade(); }catch(e){}
     if (XE.raySeg){
       Array.prototype.forEach.call(XE.raySeg.children, function(b){ b.classList.toggle('on', b.dataset.m === P.rMode); });
       ['rAng','rBars'].forEach(function(k){ var r = rowOf(k); if (r) r.style.display = P.rMode === 'leak' ? 'none' : ''; });
@@ -2685,7 +2848,7 @@ function tkOldLens(img, w, h, P){
   };
   var TABS = [
     { key: 'look', label: '仕上げ' },
-    { key: 'adj', label: '調整', chips: [['basic','ライト',['basic']],['wb','カラー',['wb']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']]] },
+    { key: 'adj', label: '調整', chips: [['basic','ライト',['basic']],['wb','カラー',['wb']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['cg','グレーディング',['cg']]] },
     { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
     { key: 'part', label: '部分', chips: [['reg','部分調整',['reg']]] },
@@ -2806,7 +2969,7 @@ function tkOldLens(img, w, h, P){
     }
     if (!(document.getElementById('app').classList.contains('expanded') && chip)) panel.scrollTop = 0;
     Array.prototype.forEach.call(tabbar.children, function(b){ b.classList.toggle('on', b.dataset.t === key); });
-    setTimeout(function(){ try{ drawCurve(); }catch(e){} }, 0);
+    setTimeout(function(){ try{ drawCurve(); }catch(e){} try{ syncGrade(); }catch(e){} }, 0);
     updateIndicators();
     if (typeof drawOverlay === 'function') drawOverlay();
   }
@@ -2818,6 +2981,7 @@ function tkOldLens(img, w, h, P){
     if (k === 'wb') return !!P.on.wb && TK_WB_KEYS.some(function(q){ return P[q]; });
     if (k === 'mix') return tkMixActive(P);
     if (k === 'crv') return tkCurveActive(P);
+    if (k === 'cg') return tkGradeActive(P);
     return !!P.on[k];
   }
   function updateIndicators(){
