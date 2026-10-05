@@ -235,7 +235,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v15</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v16</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1270,18 +1270,6 @@ function tkOldLens(img, w, h, P){
     if (f) loadFile(f);
     e.target.value = '';
   });
-  // 表示の調査用：画面の高さの数字を版番号の横に出す（ホーム画面アプリの下の余白の原因確認）
-  (function(){
-    var sub = document.querySelector('#drop .sub'); if (!sub) return;
-    var t = document.createElement('div'); t.className = 'num'; t.style.cssText = 'margin-top:6px; font-size:11px; color:var(--faint)'; sub.appendChild(t);
-    var pr = document.createElement('div'); pr.style.cssText = 'position:fixed; left:0; width:0; height:0; padding-bottom:env(safe-area-inset-bottom,0px); padding-top:env(safe-area-inset-top,0px); visibility:hidden'; document.body.appendChild(pr);
-    function upd(){
-      var cs = getComputedStyle(pr), a = document.getElementById('app').getBoundingClientRect(), vv = window.visualViewport;
-      var sa = (window.navigator.standalone ? 'app' : 'web');
-      t.textContent = sa + ' 画面' + screen.height + ' 窓' + window.innerHeight + (vv ? ' 見' + Math.round(vv.height) : '') + ' 枠' + Math.round(a.top) + '–' + Math.round(a.bottom) + ' 上' + parseInt(cs.paddingTop) + ' 下' + parseInt(cs.paddingBottom);
-    }
-    upd(); window.addEventListener('resize', upd); setTimeout(upd, 500); setTimeout(upd, 2000);
-  })();
   // 写真を置く場所：全面に透明な入力欄を重ね、どこを押しても直接その欄を押す形（プログラムから押すと白いちらつきが出るため）
   (function(){
     var dz = $('drop'), df = $('dropfile');
