@@ -233,7 +233,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます</span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v10</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2483,6 +2483,16 @@ function tkOldLens(img, w, h, P){
   function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
 })();
 </script>
-<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(function(){});</script>
+<script>
+// 更新を確実に反映：保存の仕組み（sw.js）は毎回サーバーに確認し、新しい版に切り替わったら1度だけ読み直す
+if ("serviceWorker" in navigator && location.protocol === "https:"){
+  var hadSW = !!navigator.serviceWorker.controller, reloaded = false;
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function(r){
+    r.update();
+    document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") r.update(); });
+  }).catch(function(){});
+  navigator.serviceWorker.addEventListener("controllerchange", function(){ if (hadSW && !reloaded && !window.TK_BUSY_IMG){ reloaded = true; location.reload(); } });
+}
+</script>
 </body>
 </html>
