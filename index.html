@@ -350,7 +350,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v24</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v25</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1844,6 +1844,7 @@ function tkOldLens(img, w, h, P){
     var dispW = cw;
     var ch = st.clientHeight || window.innerHeight; dispW = Math.min(cw, ch * aspect);
     var long = dispW * dpr * Math.max(nw, nh) / nw;   // 実際に表示される大きさの実ピクセル
+    if (P.geo && !CROPMODE){ var cf = Math.max(P.geo.w, P.geo.h); if (cf < 0.98) long /= Math.max(0.35, cf); }   // トリミングで拡大して見る分
     return Math.max(800, Math.min(2400, Math.round(long)));
   }
   function setupPreview(){
@@ -2704,7 +2705,8 @@ function tkOldLens(img, w, h, P){
   // 画面に出す：加工済みの全体（fullCanvas）から、トリミング等をかけて view に描く
   function present(){
     if (!hi || !fullCanvas) return;
-    var useGeo = !rawView() && (geoOn() || vigOn() || CROPMODE);
+    if (CROPMODE && !rawView()){ presentCrop(); return; }
+    var useGeo = !rawView() && (geoOn() || vigOn());
     if (!useGeo){
       if (view.width !== hi.w || view.height !== hi.h){ view.width = hi.w; view.height = hi.h; }
       vctx.setTransform(1, 0, 0, 1, 0, 0); vctx.drawImage(fullCanvas, 0, 0);
@@ -2713,14 +2715,58 @@ function tkOldLens(img, w, h, P){
       if (view.width !== sz[0] || view.height !== sz[1]){ view.width = sz[0]; view.height = sz[1]; }
       renderGeoTo(vctx, sz[0], sz[1], fullCanvas, hi.w, hi.h, crop);
     }
+    fitView();
     positionCropUI();
+  }
+  // 表示の大きさ：トリミング後に小さくなった画像も、画面いっぱいに合わせて表示（縦横比は保つ）
+  function fitView(){
+    var st = $('stage'), cs = getComputedStyle(st);
+    var W = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (W < 10 || H < 10 || !view.width) return;
+    var a = view.width / view.height, w = Math.min(W, H * a), h = w / a;
+    view.style.width = Math.round(w) + 'px'; view.style.height = Math.round(h) + 'px';
+  }
+  // トリミングで写真の一部を拡大して見る時は、その分だけ細かい解像度で計算し直す
+  function refreshHiRes(){
+    if (!img || !hi) return;
+    var want = hiLongSide(), have = Math.max(hi.w, hi.h);
+    if (Math.abs(want - have) / have > 0.12){
+      var sh = sizeFor(want); hi = { w: sh[0], h: sh[1], src: readPixels(sh[0], sh[1]) };
+      if (last && last.kind === 'hi') last = null;
+      schedule();
+    }
   }
   function showOriginalPixels(){ fullCtx.putImageData(new ImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
   // トリミング枠
-  var cropui = null, cimg = null;
+  var cropui = null, cimg = null, CL = null, CLIVE = null, geoCv = document.createElement('canvas');
+  // トリミング画面（Lightroomと同じ）：枠は画面の中央に固定、写真の方を動かす・拡大縮小する
+  //   1本指＝写真を動かす／ピンチ＝写真を拡大・縮小／辺と角＝枠の大きさ（指を離すと枠が中央に戻り、写真が合わせて拡大）
+  function presentCrop(){
+    var st = $('stage'), cs = getComputedStyle(st);
+    var W = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (W < 10 || H < 10) return;
+    var d = Math.min(3, window.devicePixelRatio || 1), pw = Math.round(W * d), ph = Math.round(H * d);
+    view.style.width = W + 'px'; view.style.height = H + 'px';
+    if (view.width !== pw || view.height !== ph){ view.width = pw; view.height = ph; }
+    var F = geoOutSize(hi.w, hi.h, false), Wf = F[0], Hf = F[1];
+    if (geoCv.width !== Wf || geoCv.height !== Hf){ geoCv.width = Wf; geoCv.height = Hf; }
+    renderGeoTo(geoCv.getContext('2d'), Wf, Hf, fullCanvas, hi.w, hi.h, false);
+    var g = P.geo, L;
+    if (CLIVE){ L = { fx: CLIVE.fx, fy: CLIVE.fy, fw: CLIVE.fw, fh: CLIVE.fh, k: CL.k, imgL: CL.imgL, imgT: CL.imgT }; }
+    else {
+      var M = 22, aw = W - M * 2, ah = H - M * 2, fa = (g.w * Wf) / (g.h * Hf), fw = Math.min(aw, ah * fa), fh = fw / fa;
+      var fx = (W - fw) / 2, fy = (H - fh) / 2, k = fw / (g.w * Wf);
+      L = { fx: fx, fy: fy, fw: fw, fh: fh, k: k, imgL: fx - g.x * Wf * k, imgT: fy - g.y * Hf * k };
+    }
+    L.Wf = Wf; L.Hf = Hf; L.W = W; L.H = H; CL = L;
+    var x = vctx; x.setTransform(1, 0, 0, 1, 0, 0); x.fillStyle = '#08090A'; x.fillRect(0, 0, pw, ph);
+    x.setTransform(d, 0, 0, d, 0, 0); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+    x.drawImage(geoCv, L.imgL, L.imgT, Wf * L.k, Hf * L.k);
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    positionCropUI();
+  }
   function ensureCropUI(){
     if (cropui) return cropui;
-    // 写真の周り（ステージ全体）で指の操作を受ける：1本指で枠を移動、2本指のピンチで枠の大きさ、辺と角で大きさ
     cropui = xel('div', 'cropui'); cropui.id = 'cropui';
     cimg = xel('div', 'cimg');
     var box = xel('div', 'cbox'); box.innerHTML = '<i class="th th1"></i><i class="th th2"></i><i class="tv tv1"></i><i class="tv tv2"></i>';
@@ -2728,83 +2774,82 @@ function tkOldLens(img, w, h, P){
     ['tl', 'tr', 'bl', 'br'].forEach(function(c){ var hd = xel('span', 'chd chd-' + c); hd.dataset.c = c; box.appendChild(hd); });
     cimg.appendChild(box); cropui.appendChild(cimg); $('stage').appendChild(cropui);
     var pts = {}, mode = null, st = null;
-    function rect(){ return view.getBoundingClientRect(); }
     function cnt(){ return Object.keys(pts).length; }
     function two(){ var k = Object.keys(pts), a = pts[k[0]], b = pts[k[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
-    function begin(m, e){ var g = P.geo; mode = m; st = { x: e ? e.clientX : 0, y: e ? e.clientY : 0, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() }; if (m === 'pinch'){ var t = two(); st.d = t.d; st.x = t.x; st.y = t.y; st.z = { s: CZ.s, x: CZ.x, y: CZ.y }; st.vr = view.getBoundingClientRect(); } }
+    function begin(m, e){
+      var g = P.geo; mode = m;
+      st = { x: e ? e.clientX : 0, y: e ? e.clientY : 0, g: { x: g.x, y: g.y, w: g.w, h: g.h }, L: JSON.parse(JSON.stringify(CL)), vr: view.getBoundingClientRect() };
+      if (m === 'pinch'){ var t = two(); st.d = t.d; st.x = t.x; st.y = t.y; }
+    }
     cropui.addEventListener('pointerdown', function(e){
       e.preventDefault(); e.stopPropagation(); try{ cropui.setPointerCapture(e.pointerId); }catch(er){}
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (cnt() >= 2) begin('pinch');
-      else begin((e.target.dataset && e.target.dataset.c) || 'move', e);
+      if (!CL) return;
+      if (cnt() >= 2){ CLIVE = null; begin('pinch'); }
+      else begin((e.target.dataset && e.target.dataset.c) || 'pan', e);
     });
     cropui.addEventListener('pointermove', function(e){
-      if (!pts[e.pointerId] || !mode) return;
+      if (!pts[e.pointerId] || !mode || !st) return;
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
-      startSliding(cropui);   // 動かしている間は、ほかの表示を消して写真全体を見せる
-      var g = P.geo, r = st.r, o = st.g, F = geoFrame(hi.w, hi.h), A = aspNum(g.asp, F[0], F[1]), An = A ? A * F[1] / F[0] : null;
-      if (mode === 'pinch'){
-        // ピンチ＝写真の表示だけを拡大・縮小（枠の範囲は変わらない）
+      startSliding(cropui);   // 動かしている間は、ほかの表示を消す
+      var g = P.geo, o = st.g, L0 = st.L, Wf = L0.Wf, Hf = L0.Hf;
+      var A = aspNum(g.asp, Wf, Hf);
+      if (mode === 'pan'){
+        // 写真を指と一緒に動かす（＝枠の中に見える範囲が反対に動く）
+        g.x = Math.min(1 - o.w, Math.max(0, o.x - (e.clientX - st.x) / (Wf * L0.k)));
+        g.y = Math.min(1 - o.h, Math.max(0, o.y - (e.clientY - st.y) / (Hf * L0.k)));
+      } else if (mode === 'pinch'){
         if (cnt() < 2) return;
-        var t = two(), ns = Math.min(6, Math.max(1, st.z.s * (st.d > 0 ? t.d / st.d : 1)));
-        var bcx = st.vr.left + st.vr.width / 2 - st.z.x, bcy = st.vr.top + st.vr.height / 2 - st.z.y;
-        var px = (st.x - (bcx + st.z.x)) / st.z.s, py = (st.y - (bcy + st.z.y)) / st.z.s;
-        var nx = t.x - bcx - px * ns, ny = t.y - bcy - py * ns;
-        var lx = (ns - 1) * st.vr.width / st.z.s / 2 + 40, ly = (ns - 1) * st.vr.height / st.z.s / 2 + 40;
-        CZ.s = ns; CZ.x = ns <= 1.01 ? 0 : Math.max(-lx, Math.min(lx, nx)); CZ.y = ns <= 1.01 ? 0 : Math.max(-ly, Math.min(ly, ny));
-        applyZoom(); positionCropUI(); return;
-      } else if (mode === 'move'){
-        var dx = (e.clientX - st.x) / r.width, dy = (e.clientY - st.y) / r.height;
-        g.x = Math.min(1 - o.w, Math.max(0, o.x + dx)); g.y = Math.min(1 - o.h, Math.max(0, o.y + dy));
+        var t = two(), sr = st.d > 0 ? t.d / st.d : 1;
+        var w = o.w / sr, h = o.h / sr;
+        if (w > 1){ h /= w; w = 1; } if (h > 1){ w /= h; h = 1; }
+        var mn = 0.05; if (w < mn){ h *= mn / w; w = mn; } if (h < mn){ w *= mn / h; h = mn; }
+        // 指の間にある写真の点が、指についてくるように
+        var mx0 = st.x - st.vr.left, my0 = st.y - st.vr.top, px = (mx0 - L0.imgL) / L0.k, py = (my0 - L0.imgT) / L0.k;
+        var k2 = L0.fw / (w * Wf), mx = t.x - st.vr.left, my = t.y - st.vr.top;
+        g.w = w; g.h = h;
+        g.x = Math.min(1 - w, Math.max(0, (px - (mx - L0.fx) / k2) / Wf));
+        g.y = Math.min(1 - h, Math.max(0, (py - (my - L0.fy) / k2) / Hf));
       } else {
-        var dx2 = (e.clientX - st.x) / r.width, dy2 = (e.clientY - st.y) / r.height;
-        var L0 = o.x, R0 = o.x + o.w, T0 = o.y, B0 = o.y + o.h, L = L0, R = R0, T = T0, B = B0, MIN = 0.08;
-        if (mode.indexOf('l') >= 0) L = Math.min(R0 - MIN, Math.max(0, L0 + dx2));
-        if (mode.indexOf('r') >= 0) R = Math.max(L0 + MIN, Math.min(1, R0 + dx2));
-        if (mode.indexOf('t') >= 0) T = Math.min(B0 - MIN, Math.max(0, T0 + dy2));
-        if (mode.indexOf('b') >= 0) B = Math.max(T0 + MIN, Math.min(1, B0 + dy2));
-        var nw = R - L, nh = B - T;
-        if (An){
-          var corner = mode.length === 2;
-          if (corner){
-            if (nw / nh > An) nw = nh * An; else nh = nw / An;
-            if (mode.indexOf('l') >= 0) L = R0 - nw; else R = L0 + nw;
-            if (mode.indexOf('t') >= 0) T = B0 - nh; else B = T0 + nh;
-          } else if (mode === 'l' || mode === 'r'){
-            nh = nw / An; var mcy = (T0 + B0) / 2; if (nh > 1){ nh = 1; nw = An; if (mode === 'l') L = R0 - nw; else R = L0 + nw; }
-            T = Math.min(1 - nh, Math.max(0, mcy - nh / 2)); B = T + nh;
-          } else {
-            nw = nh * An; var mcx = (L0 + R0) / 2; if (nw > 1){ nw = 1; nh = 1 / An; if (mode === 't') T = B0 - nh; else B = T0 + nh; }
-            L = Math.min(1 - nw, Math.max(0, mcx - nw / 2)); R = L + nw;
-          }
-          if (L < 0 || R > 1 || T < 0 || B > 1) return;   // はみ出す動きは止める
+        // 辺・角：画面の上で枠を動かす（写真は止めたまま）。写真の外には出さない
+        var dx = e.clientX - st.x, dy = e.clientY - st.y, iL = L0.imgL, iT = L0.imgT, iR = iL + Wf * L0.k, iB = iT + Hf * L0.k;
+        var l0 = L0.fx, r0 = L0.fx + L0.fw, t0 = L0.fy, b0 = L0.fy + L0.fh, l = l0, r = r0, tp = t0, bt = b0, MIN = 40;
+        if (mode.indexOf('l') >= 0) l = Math.min(r0 - MIN, Math.max(Math.max(iL, 0), l0 + dx));
+        if (mode.indexOf('r') >= 0) r = Math.max(l0 + MIN, Math.min(Math.min(iR, L0.W), r0 + dx));
+        if (mode.indexOf('t') >= 0) tp = Math.min(b0 - MIN, Math.max(Math.max(iT, 0), t0 + dy));
+        if (mode.indexOf('b') >= 0) bt = Math.max(t0 + MIN, Math.min(Math.min(iB, L0.H), b0 + dy));
+        var nw = r - l, nh = bt - tp;
+        if (A){
+          if (mode.length === 2){ if (nw / nh > A) nw = nh * A; else nh = nw / A; if (mode.indexOf('l') >= 0) l = r0 - nw; else r = l0 + nw; if (mode.indexOf('t') >= 0) tp = b0 - nh; else bt = t0 + nh; }
+          else if (mode === 'l' || mode === 'r'){ nh = nw / A; var cy = (t0 + b0) / 2; tp = cy - nh / 2; bt = cy + nh / 2; }
+          else { nw = nh * A; var cx = (l0 + r0) / 2; l = cx - nw / 2; r = cx + nw / 2; }
+          if (l < Math.max(iL, 0) - 0.5 || r > Math.min(iR, L0.W) + 0.5 || tp < Math.max(iT, 0) - 0.5 || bt > Math.min(iB, L0.H) + 0.5) return;
         }
-        g.x = L; g.y = T; g.w = R - L; g.h = B - T;
+        g.x = (l - iL) / (Wf * L0.k); g.y = (tp - iT) / (Hf * L0.k); g.w = (r - l) / (Wf * L0.k); g.h = (bt - tp) / (Hf * L0.k);
+        CLIVE = { fx: l, fy: tp, fw: r - l, fh: bt - tp };
       }
-      positionCropUI(); updateGeoInfo();
+      presentCrop(); updateGeoInfo();
     });
     function up(e){
       delete pts[e.pointerId];
-      if (cnt() === 1){ var k = Object.keys(pts)[0]; begin('move', { clientX: pts[k].x, clientY: pts[k].y }); return; }
-      if (cnt() === 0 && mode){ mode = null; clearPresetMark(); schedule(); }
+      if (cnt() === 1){ var k = Object.keys(pts)[0]; begin('pan', { clientX: pts[k].x, clientY: pts[k].y }); return; }
+      if (cnt() === 0 && mode){ mode = null; CLIVE = null; presentCrop(); clearPresetMark(); schedule(); }
     }
     cropui.addEventListener('pointerup', up); cropui.addEventListener('pointercancel', up);
     return cropui;
   }
   function positionCropUI(){
-    if (!CROPMODE || !hi || rawView()){ if (cropui) cropui.style.display = 'none'; return; }
+    if (!CROPMODE || !hi || !CL){ if (cropui) cropui.style.display = 'none'; return; }
     ensureCropUI(); cropui.style.display = 'block';
-    var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect(), g = P.geo;
+    var vr = view.getBoundingClientRect(), sr = $('stage').getBoundingClientRect();
     cimg.style.left = (vr.left - sr.left) + 'px'; cimg.style.top = (vr.top - sr.top) + 'px'; cimg.style.width = vr.width + 'px'; cimg.style.height = vr.height + 'px';
-    var b = cimg.firstChild; b.style.left = g.x * 100 + '%'; b.style.top = g.y * 100 + '%'; b.style.width = g.w * 100 + '%'; b.style.height = g.h * 100 + '%';
+    var b = cimg.firstChild; b.style.left = CL.fx + 'px'; b.style.top = CL.fy + 'px'; b.style.width = CL.fw + 'px'; b.style.height = CL.fh + 'px';
   }
-  var CZ = { s: 1, x: 0, y: 0 };
-  function applyZoom(){ view.style.transform = (CZ.s > 1.001) ? 'translate(' + CZ.x + 'px,' + CZ.y + 'px) scale(' + CZ.s + ')' : ''; }
   function setCropMode(on){
     on = !!on; if (on === CROPMODE) return;
-    CZ = { s: 1, x: 0, y: 0 }; applyZoom();
+    CL = null; CLIVE = null;
     CROPMODE = on; document.getElementById('app').classList.toggle('cropping', on);
-    present(); updateGeoInfo();
+    present(); updateGeoInfo(); setTimeout(refreshHiRes, 60);
   }
   // 比率を当てる：今の中心のまま、入る一番大きな枠に
   function fitAspect(a){
