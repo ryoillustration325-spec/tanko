@@ -355,6 +355,18 @@
   .lmlist{display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 6px}
   .lmlist:empty{display:none}
   .app.sliding .lmui.keep{background:none !important; box-shadow:none !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important}
+  /* 編集履歴 */
+  .histlist{display:flex; flex-direction:column; gap:2px; margin:2px 0 6px; max-height:46vh; overflow-y:auto}
+  .hrowb{display:flex; align-items:center; gap:10px; font:inherit; font-size:12.5px; text-align:left; padding:9px 10px; border-radius:10px; border:1px solid transparent; background:transparent; color:var(--muted); cursor:pointer}
+  .hrowb .hnum{width:2.2em; color:var(--faint); font-size:11px; text-align:right}
+  .hrowb.on{border-color:var(--accent); color:var(--ink); background:var(--surface2)}
+  .hrowb.fut{opacity:.45}
+  /* 前の設定を貼り付け */
+  .pastechip{position:absolute; left:50%; bottom:14px; transform:translate(-50%, 20px); z-index:4; opacity:0; pointer-events:none; font:inherit; font-size:13px; font-weight:600; padding:10px 16px; border-radius:20px; border:0; background:var(--accent); color:#0E1418; box-shadow:0 6px 20px rgba(0,0,0,.45); transition:opacity .2s, transform .2s}
+  .pastechip.show{opacity:1; pointer-events:auto; transform:translate(-50%, 0)}
+  .app:not(.collapsed):not(.expanded) .pastechip{bottom:calc(min(32dvh,270px) + 14px)}
+  .row.sub2 label{padding-left:10px; color:var(--faint)}
+  .rstat.okc{color:var(--accent)}
   /* トーンカーブ */
   .crvbox{margin:4px 0 8px}
   .crv{display:block; width:100%; height:180px; touch-action:none; border-radius:10px; background:rgba(0,0,0,.22); border:1px solid var(--line-soft); cursor:crosshair}
@@ -386,7 +398,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v31</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v32</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -552,7 +564,19 @@ function tkBlurGrid(G, sigmaFull){
 function tkSS(t){ t = tkClamp01(t); return t * t * (3 - 2 * t); }
 
 // P（パラメータ）: 0–100のスライダー値そのまま。on.* でグループのON/OFF
+// 仕上げの強さを「光」と「色」で別々に：該当する項目の量だけを割合で弱める
+var TK_MIXL = ['diff','glow','hal','mist','comp','rAmt','lCa','lSoft','lVeil','lVig'];
+var TK_MIXC = ['lift','roll','con','sat','shb','hiw','dens','grain','skAmt','gAtemp','gBtemp','gAtint','gBtint','gAev','gBev','mAmt'];
+function tkScaleMix(P){
+  var l = P.mixL == null ? 100 : P.mixL, c = P.mixC == null ? 100 : P.mixC;
+  if (l >= 100 && c >= 100) return P;
+  var Q = {}; for (var k in P) Q[k] = P[k];
+  if (l < 100) TK_MIXL.forEach(function(k){ if (typeof Q[k] === 'number') Q[k] = Q[k] * l / 100; });
+  if (c < 100) TK_MIXC.forEach(function(k){ if (typeof Q[k] === 'number') Q[k] = Q[k] * c / 100; });
+  return Q;
+}
 function tkProcess(src, w, h, P){
+  P = tkScaleMix(P);
   var n = w * h, i, c, x, y, p4;
   var L = Math.max(w, h);
   var img = new Float32Array(n * 3);
@@ -1110,6 +1134,34 @@ function tkLmWeight(m, w, h){
   } else if (m.type === 'linear'){
     var x0 = m.x0 * w, y0 = m.y0 * h, ddx = m.x1 * w - x0, ddy = m.y1 * h - y0, L2 = Math.max(1, ddx * ddx + ddy * ddy);
     for (y = 0; y < h; y++) for (x = 0; x < w; x++){ var t = ((x - x0) * ddx + (y - y0) * ddy) / L2; W[y * w + x] = 1 - tkSS(t); }
+  } else if (m.type === 'ai'){
+    // AIで切り分けた部分（主役・手前・まわり・奥）をそのまま範囲に
+    if (TK_REG && TK_REG.data){
+      var M = TK_REG, mw = M.mw, mh = M.mh, nn = M.n, d = M.data, ch = m.role || 0;
+      for (y = 0; y < h; y++){ var fy2 = Math.min(mh - 1, Math.max(0, (y + 0.5) * mh / h - 0.5)), ya = fy2 | 0, yb = Math.min(mh - 1, ya + 1), ty2 = fy2 - ya;
+        for (x = 0; x < w; x++){ var fx2 = Math.min(mw - 1, Math.max(0, (x + 0.5) * mw / w - 0.5)), xa = fx2 | 0, xb = Math.min(mw - 1, xa + 1), tx2 = fx2 - xa;
+          var p00 = d[(ya * mw + xa) * nn + ch], p01 = d[(ya * mw + xb) * nn + ch], p10 = d[(yb * mw + xa) * nn + ch], p11 = d[(yb * mw + xb) * nn + ch];
+          W[y * w + x] = ((p00 + (p01 - p00) * tx2) * (1 - ty2) + (p10 + (p11 - p10) * tx2) * ty2) / 255; } }
+    }
+  } else if (m.type === 'sky'){
+    // 空：明るく、青〜白で、画面の上の方にあり、細かい模様が少ない所（縮小して判定 → 輪郭に沿わせる）
+    var sc2 = Math.min(1, 400 / Math.max(w, h)), sw = Math.max(1, Math.round(w * sc2)), sh2 = Math.max(1, Math.round(h * sc2)), Ys = new Float32Array(sw * sh2), Sk = new Float32Array(sw * sh2);
+    if (m.img){
+      var im = m.img, iw = m.iw, ih = m.ih;
+      for (y = 0; y < sh2; y++) for (x = 0; x < sw; x++){
+        var sx = Math.min(iw - 1, (x * iw / sw) | 0), sy = Math.min(ih - 1, (y * ih / sh2) | 0), q = (sy * iw + sx) * 3, r = im[q], g = im[q + 1], b = im[q + 2];
+        var Yv = 0.2126 * r + 0.7152 * g + 0.0722 * b, mx = Math.max(r, g, b), mn = Math.min(r, g, b), sat = mx > 0 ? (mx - mn) / mx : 0, hue = 0;
+        if (mx - mn > 1e-4){ if (mx === r) hue = 60 * (((g - b) / (mx - mn)) % 6); else if (mx === g) hue = 60 * ((b - r) / (mx - mn) + 2); else hue = 60 * ((r - g) / (mx - mn) + 4); if (hue < 0) hue += 360; }
+        var blue = tkSS((hue - 170) / 15) * (1 - tkSS((hue - 260) / 15)) * tkSS((sat - 0.06) / 0.1), white = (1 - tkSS((sat - 0.08) / 0.1)) * tkSS((Yv - 0.62) / 0.15);
+        var top = 1 - tkSS((y / sh2 - 0.45) / 0.4);
+        Ys[y * sw + x] = Yv; Sk[y * sw + x] = Math.max(blue, white * 0.9) * tkSS((Yv - 0.3) / 0.25) * (0.35 + 0.65 * top);
+      }
+      // 模様の多い所（木の葉・建物）は空ではない
+      var Yb2 = tkBlur1(Ys, sw, sh2, 2), tx3 = new Float32Array(sw * sh2); for (i = 0; i < sw * sh2; i++) tx3[i] = Math.abs(Ys[i] - Yb2[i]);
+      tx3 = tkBlur1(tx3, sw, sh2, 2); for (i = 0; i < sw * sh2; i++) Sk[i] *= 1 - tkSS((tx3[i] - 0.015) / 0.04);
+      Sk = tkGuided(Ys, Sk, sw, sh2, 4, 2e-3);
+      for (y = 0; y < h; y++){ var gy = Math.min(sh2 - 1, (y * sh2 / h) | 0); for (x = 0; x < w; x++) W[y * w + x] = tkClamp01(Sk[gy * sw + Math.min(sw - 1, (x * sw / w) | 0)] * 1.15); }
+    }
   } else if (m.type === 'brush'){
     // ブラシは縮小した下書きに丸を打ってから、ぼかして写真の大きさへ
     var Ls = Math.max(w, h), sc = Math.min(1, 512 / Ls), bw = Math.max(1, Math.round(w * sc)), bh = Math.max(1, Math.round(h * sc)), B = new Float32Array(bw * bh);
@@ -1127,6 +1179,17 @@ function tkLmWeight(m, w, h){
         var a0 = Bb[y0i * bw + x0i] + (Bb[y0i * bw + x1i] - Bb[y0i * bw + x0i]) * tx, a1 = Bb[y1i * bw + x0i] + (Bb[y1i * bw + x1i] - Bb[y1i * bw + x0i]) * tx;
         W[y * w + x] = tkClamp01(a0 + (a1 - a0) * ty); } }
   }
+  // AI・空の範囲は、ブラシで足したり消したりして直せる
+  if ((m.type === 'ai' || m.type === 'sky') && m.strokes && m.strokes.length){
+    var Ls2 = Math.max(w, h);
+    m.strokes.forEach(function(st){
+      var px = st[0] * w, py = st[1] * h, r = Math.max(1, st[2] * Ls2), er = st[3];
+      for (var yy = Math.max(0, (py - r) | 0); yy <= Math.min(h - 1, Math.ceil(py + r)); yy++) for (var xx = Math.max(0, (px - r) | 0); xx <= Math.min(w - 1, Math.ceil(px + r)); xx++){
+        var dd = Math.hypot(xx - px, yy - py) / r; if (dd > 1) continue; var vv = 1 - tkSS((dd - 0.5) / 0.5), k = yy * w + xx;
+        W[k] = er ? W[k] * (1 - vv) : Math.max(W[k], vv);
+      }
+    });
+  }
   if (m.inv) for (i = 0; i < n; i++) W[i] = 1 - W[i];
   return W;
 }
@@ -1135,6 +1198,7 @@ function tkLocalMasks(img, w, h, P){
   var n = w * h;
   P.lm.forEach(function(m){
     if (!tkLmActive(m)) return;
+    if (m.type === 'sky'){ m = Object.assign({}, m, { img: img, iw: w, ih: h }); }
     var a = m.adj, Wt = tkLmWeight(m, w, h), q = tkRegPrep({ ev: a.ev, sat: a.sat, temp: (a.temp || 0) * 1.6, tint: (a.tint || 0) * 1.4 });
     var con = (a.con || 0) / 100, hi = (a.hi || 0) / 100, sh = (a.sh || 0) / 100, T = null;
     if (con || hi || sh){
@@ -1737,6 +1801,9 @@ function tkOldLens(img, w, h, P){
     { key: 'reg', title: '部分調整', sub: '主役・手前・まわり・奥を、奥行きとピントと物の形で分けて調整', sliders: [], custom: true },
     { sect: '便利機能' },
     { key: 'lm', title: 'マスク', sub: '円形・線形・ブラシで決めた範囲だけを調整', sliders: [], custom: buildLmExtra, noToggle: true },
+    { key: 'hist', title: '編集履歴', sub: '変えた順に並び、タップでその時点へ', sliders: [], custom: buildHistExtra, noToggle: true },
+    { key: 'clip', title: '設定のコピー', sub: '今の仕上げを、次の写真にそのまま', sliders: [], custom: buildClipExtra, noToggle: true },
+    { key: 'aiprep', title: 'AIの準備', sub: 'AIのファイルを先に端末へ入れておく', sliders: [], custom: buildAiExtra, noToggle: true },
     { key: 'feed', title: 'フィード確認', sub: '過去の投稿と並べて、なじむか確かめる', sliders: [], custom: buildFeedExtra, noToggle: true },
     { key: 'mypre', title: '自分の設定を保存', sub: '今の設定に名前を付けて保存・呼び出し', sliders: [], custom: buildMyPreExtra, noToggle: true },
     { key: 'batch', title: 'まとめて書き出し', sub: '今の設定を複数の写真に当てて、ZIPで書き出す', sliders: [], custom: buildBatchExtra, noToggle: true },
@@ -1946,6 +2013,7 @@ function tkOldLens(img, w, h, P){
           if (P.on.reg && !REG.ready) runSegmentation();
         }catch(e){}
       }
+      if (!opt.restore) setTimeout(offerPaste, 600);
       if (opt.onDone) opt.onDone();
     };
     im.onerror = function(){ toast('この形式は読み込めませんでした'); };
@@ -3216,15 +3284,19 @@ function tkOldLens(img, w, h, P){
   // ---- 自由な部分補正（円形・線形・ブラシ） ----
   var LMEDIT = false, lmui = null, lmov = null;
   function lmAdjKeys(){ return [['ev', '露光量'], ['con', 'コントラスト'], ['hi', 'ハイライト'], ['sh', 'シャドウ'], ['temp', '色温度'], ['tint', '色かぶり'], ['sat', '彩度']]; }
-  function lmName(m, i){ return (i + 1) + ' ' + (m.type === 'radial' ? '円形' : m.type === 'linear' ? '線形' : 'ブラシ'); }
+  function lmName(m, i){ return (i + 1) + ' ' + (m.type === 'radial' ? '円形' : m.type === 'linear' ? '線形' : m.type === 'sky' ? '空' : m.type === 'ai' ? (m.role === 0 ? '主役' : '背景') : 'ブラシ'); }
+  function lmPaintable(m){ return m && (m.type === 'brush' || m.type === 'ai' || m.type === 'sky'); }
   function lmNew(type){
     if (!img){ toast('先に写真を選んでください'); return; }
+    if ((type === 'ai-subj' || type === 'ai-bg') && !REG.ready){ toast('AIで写真を見分けています…'); runSegmentation().then(function(){ if (REG.ready) lmNew(type); else toast('AIで見分けられませんでした'); }); return; }
     var a = img.naturalWidth / img.naturalHeight, m = { type: type, feather: 50, inv: 0, adj: {} };
     if (type === 'radial'){ m.cx = 0.5; m.cy = 0.45; m.rx = 0.28; m.ry = 0.28 * a; }
     else if (type === 'linear'){ m.x0 = 0.5; m.y0 = 0.08; m.x1 = 0.5; m.y1 = 0.5; }
     else { m.strokes = []; m.feather = 30; }
+    if (type === 'ai-subj' || type === 'ai-bg'){ m.type = 'ai'; m.role = type === 'ai-subj' ? 0 : 3; m.strokes = []; }
+    if (type === 'sky'){ m.strokes = []; }
     P.lm.push(m); LM.sel = P.lm.length - 1; P.on.lm = 1;
-    toast(type === 'radial' ? '円の中をドラッグで移動、白い点で大きさ' : type === 'linear' ? '白い点をドラッグで、効き始めと終わりを決めます' : '写真の上をなぞって範囲を塗ります');
+    toast(type === 'radial' ? '円の中をドラッグで移動、白い点で大きさ' : type === 'linear' ? '白い点をドラッグで、効き始めと終わりを決めます' : type === 'brush' ? '写真の上をなぞって範囲を塗ります' : '範囲を自動で選びました。ずれていたら「塗る／消す」でなぞって直せます');
     lmSync(); lmDraw(); clearPresetMark(); schedule();
   }
   function buildLmExtra(body){
@@ -3234,6 +3306,11 @@ function tkOldLens(img, w, h, P){
     add.appendChild(xbtn('＋ 線形', 'ghost', function(){ lmNew('linear'); }));
     add.appendChild(xbtn('＋ ブラシ', 'ghost', function(){ lmNew('brush'); }));
     body.appendChild(add);
+    var add2 = xel('div', 'rrow');
+    add2.appendChild(xbtn('＋ 主役（AI）', 'ghost', function(){ lmNew('ai-subj'); }));
+    add2.appendChild(xbtn('＋ 背景（AI）', 'ghost', function(){ lmNew('ai-bg'); }));
+    add2.appendChild(xbtn('＋ 空', 'ghost', function(){ lmNew('sky'); }));
+    body.appendChild(add2);
     XE.lmBox = xel('div', 'lmbox'); body.appendChild(XE.lmBox);
     var tools = xel('div', 'rrow');
     XE.lmInv = xbtn('反転', 'ghost', function(){ var m = P.lm[LM.sel]; if (!m) return; m.inv = m.inv ? 0 : 1; lmSync(); lmDraw(); schedule(); });
@@ -3268,7 +3345,7 @@ function tkOldLens(img, w, h, P){
     var m = P.lm[LM.sel];
     XE.lmBox.style.display = m ? '' : 'none'; XE.lmEmpty.style.display = (P.lm && P.lm.length) ? 'none' : '';
     if (!m) return;
-    XE.lmBrush.style.display = m.type === 'brush' ? '' : 'none';
+    XE.lmBrush.style.display = lmPaintable(m) ? '' : 'none';
     XE.lmBm.forEach(function(b){ b.classList.toggle('on', b.dataset.m === LM.bmode); });
     XE.lmInv.classList.toggle('pri', !!m.inv); XE.lmShow.classList.toggle('pri', LM.show);
     Object.keys(XE.lmRows).forEach(function(k){ var v = k === 'feather' ? (m.feather == null ? 50 : m.feather) : (m.adj[k] || 0); XE.lmRows[k].r.value = v; XE.lmRows[k].v.textContent = v; });
@@ -3285,7 +3362,7 @@ function tkOldLens(img, w, h, P){
       var m = P.lm[LM.sel]; if (!m) return;
       e.preventDefault(); e.stopPropagation(); try{ lmui.setPointerCapture(e.pointerId); }catch(er){}
       var q = pos(e), h = e.target.getAttribute && e.target.getAttribute('data-h');
-      if (m.type === 'brush'){ drag = { k: 'paint' }; lmPaint(m, q); return; }
+      if (lmPaintable(m)){ if (!m.strokes) m.strokes = []; drag = { k: 'paint' }; lmPaint(m, q); return; }
       if (h){ drag = { k: h, q: q, m0: JSON.parse(JSON.stringify(m)) }; return; }
       // 範囲の中なら移動
       drag = { k: 'move', q: q, m0: JSON.parse(JSON.stringify(m)) };
@@ -3323,7 +3400,7 @@ function tkOldLens(img, w, h, P){
     [lmui, lmov].forEach(function(e){ e.style.display = 'block'; e.style.left = L; e.style.top = T; e.style.width = vr.width + 'px'; e.style.height = vr.height + 'px'; });
     var W = vr.width, H = vr.height, m = P.lm[LM.sel], svg = '';
     lmui.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    (P.lm || []).forEach(function(o, i){ if (i === LM.sel) return; var cx = o.type === 'radial' ? o.cx : o.type === 'linear' ? (o.x0 + o.x1) / 2 : (o.strokes[0] ? o.strokes[0][0] : 0.5), cy = o.type === 'radial' ? o.cy : o.type === 'linear' ? (o.y0 + o.y1) / 2 : (o.strokes[0] ? o.strokes[0][1] : 0.5); svg += '<circle cx="' + cx * W + '" cy="' + cy * H + '" r="7" class="lpin"/>'; });
+    (P.lm || []).forEach(function(o, i){ if (i === LM.sel) return; var cx = o.type === 'radial' ? o.cx : o.type === 'linear' ? (o.x0 + o.x1) / 2 : (o.strokes && o.strokes[0] ? o.strokes[0][0] : 0.5), cy = o.type === 'radial' ? o.cy : o.type === 'linear' ? (o.y0 + o.y1) / 2 : (o.strokes && o.strokes[0] ? o.strokes[0][1] : (o.type === 'sky' ? 0.15 : 0.5)); svg += '<circle cx="' + cx * W + '" cy="' + cy * H + '" r="7" class="lpin"/>'; });
     if (m){
       var f = Math.max(0.02, (m.feather == null ? 50 : m.feather) / 100);
       if (m.type === 'radial'){
@@ -3339,14 +3416,124 @@ function tkOldLens(img, w, h, P){
     }
     lmui.innerHTML = svg;
     // 範囲の赤い表示（「範囲を表示」か、動かしている間）
-    var showOv = m && (LM.show || dragging || m.type === 'brush');
+    var showOv = m && (LM.show || dragging || lmPaintable(m));
     lmov.style.display = showOv ? 'block' : 'none';
     if (showOv){
-      var sc = Math.min(1, 320 / Math.max(hi.w, hi.h)), w = Math.max(1, Math.round(hi.w * sc)), h = Math.max(1, Math.round(hi.h * sc)), Wt = tkLmWeight(m, w, h);
+      var sc = Math.min(1, 320 / Math.max(hi.w, hi.h)), w = Math.max(1, Math.round(hi.w * sc)), h = Math.max(1, Math.round(hi.h * sc)), mm = m;
+      if (m.type === 'sky'){
+        // 空の判定には写真の色が要るので、表示用に小さく読み出して渡す
+        var sp = readPixels(w, h), fl = new Float32Array(w * h * 3); for (var qi = 0; qi < w * h; qi++){ fl[qi * 3] = sp[qi * 4] / 255; fl[qi * 3 + 1] = sp[qi * 4 + 1] / 255; fl[qi * 3 + 2] = sp[qi * 4 + 2] / 255; }
+        mm = Object.assign({}, m, { img: fl, iw: w, ih: h });
+      }
+      var Wt = tkLmWeight(mm, w, h);
       lmov.width = w; lmov.height = h; var x = lmov.getContext('2d'), id = x.createImageData(w, h);
       for (var i = 0; i < w * h; i++){ id.data[i * 4] = 255; id.data[i * 4 + 1] = 60; id.data[i * 4 + 2] = 70; id.data[i * 4 + 3] = Wt[i] * 120; }
       x.putImageData(id, 0, 0);
     }
+  }
+  // ---- 編集履歴の一覧（C2）：どこを変えたかの名前を付けて並べ、好きな時点へ戻る ----
+  function keyLabel(k){
+    var hit = null;
+    GROUPS.forEach(function(g){ (g.sliders || []).forEach(function(s){ if (s[0] === k) hit = s[1]; }); });
+    if (hit) return hit;
+    var M = { geo: 'トリミング', lm: 'マスク', crv: 'トーンカーブ', mix: '仕上げの強さ', mixL: '光の強さ', mixC: '色の強さ', mref: 'カラーマッチ', reg: '部分調整（AI）', dmode: '濃さの方式', rMode: '光の差し込み', mMode: 'カラーマッチの方式', cgBlend: 'グレーディングのブレンド', cgBal: 'グレーディングのバランス' };
+    if (M[k]) return M[k];
+    if (/^cg[smhg][HSL]$/.test(k)) return 'カラーグレーディング（' + ({ s: 'シャドウ', m: '中間調', h: 'ハイライト', g: '全体' })[k[2]] + '）';
+    if (/^m[hsl]\d$/.test(k)) return 'カラーミキサー';
+    if (/^g[xy][01]$/.test(k)) return '寒暖グラデーションの位置';
+    if (/^r[xy]$/.test(k)) return '光の位置';
+    return k;
+  }
+  function groupTitle(k){ var t = null; GROUPS.forEach(function(g){ if (g.key === k) t = g.title; }); return t || k; }
+  function histLabel(aStr, bStr){
+    if (!aStr) return '写真を開いた';
+    var a = JSON.parse(aStr), b = JSON.parse(bStr), out = [];
+    Object.keys(b).forEach(function(k){
+      if (k === 'on'){ Object.keys(b.on).forEach(function(g){ if (!!a.on[g] !== !!b.on[g]) out.push(groupTitle(g) + (b.on[g] ? ' ON' : ' OFF')); }); return; }
+      if (JSON.stringify(a[k]) === JSON.stringify(b[k])) return;
+      var v = b[k];
+      out.push(keyLabel(k) + (typeof v === 'number' ? ' ' + (v > 0 && DEFAULTS[k] === 0 ? '+' : '') + (Math.round(v * 10) / 10) : ''));
+    });
+    if (!out.length) return '（変更なし）';
+    var uniq = out.filter(function(x, i){ return out.indexOf(x) === i; });
+    return uniq.length > 2 ? uniq.slice(0, 2).join('・') + ' ほか' + (uniq.length - 2) + '件' : uniq.join('・');
+  }
+  function buildHistExtra(body){
+    XE.histList = xel('div', 'histlist'); body.appendChild(XE.histList);
+    body.appendChild(xel('div', 'hint', 'タップした時点の状態に戻ります（その後の変更は「やり直し」で戻せます）。「取り消し」ボタンの長押しでもここを開けます。'));
+  }
+  function renderHist(){
+    if (!XE.histList) return;
+    XE.histList.innerHTML = '';
+    var all = HIST.concat(REDO.slice().reverse()), cur = HIST.length - 1;
+    for (var i = all.length - 1; i >= 0; i--){ (function(i){
+      var b = xel('button', 'hrowb' + (i === cur ? ' on' : '') + (i > cur ? ' fut' : '')); b.type = 'button';
+      b.appendChild(xel('span', 'hnum num', String(i + 1))); b.appendChild(xel('span', 'hlab', histLabel(i ? all[i - 1] : null, all[i])));
+      b.addEventListener('click', function(){ jumpHist(i); });
+      XE.histList.appendChild(b);
+    })(i); }
+  }
+  function jumpHist(i){
+    var all = HIST.concat(REDO.slice().reverse()); if (i < 0 || i >= all.length) return;
+    HIST = all.slice(0, i + 1); REDO = all.slice(i + 1).reverse();
+    applyState(HIST[HIST.length - 1]); renderHist(); toast('その時点に戻りました');
+  }
+  // ---- 設定のコピー＆貼り付け（C3）：トリミング・マスク・カラーマッチの参考写真は写真ごとなので除く ----
+  function clipGet(){ try{ return JSON.parse(localStorage.getItem('retouch-clip') || 'null'); }catch(e){ return null; } }
+  function copySettings(){
+    var q = JSON.parse(snapState()); delete q.geo; delete q.lm;
+    try{ localStorage.setItem('retouch-clip', JSON.stringify({ P: q, at: Date.now() })); }catch(e){}
+    XE.clipStat && (XE.clipStat.textContent = 'コピーしました。次の写真で「貼り付け」を押すと、同じ仕上げになります。');
+    toast('今の設定をコピーしました');
+  }
+  function pasteSettings(){
+    var c = clipGet(); if (!c){ toast('コピーした設定がありません'); return; }
+    if (!img){ toast('先に写真を選んでください'); return; }
+    var cur = JSON.parse(snapState()), d = c.P; d.geo = cur.geo; d.lm = cur.lm;
+    applyState(JSON.stringify(d)); if (P.on.reg && !REG.ready) runSegmentation();
+    toast('設定を貼り付けました');
+  }
+  function buildClipExtra(body){
+    var r = xel('div', 'rrow'); r.appendChild(xbtn('今の設定をコピー', 'ghost', copySettings)); r.appendChild(xbtn('貼り付け', null, pasteSettings)); body.appendChild(r);
+    XE.clipStat = xel('div', 'rstat', clipGet() ? 'コピーした設定があります。' : 'まだコピーしていません。'); body.appendChild(XE.clipStat);
+    body.appendChild(xel('div', 'hint', '光・色・調整・部分調整の値をまとめて写します。トリミングとマスクは写真ごとなので写しません。'));
+  }
+  // 新しい写真を開いた時、コピーがあれば「貼り付け」を少しの間だけ出す
+  function offerPaste(){
+    if (!clipGet()) return;
+    var b = $('pasteChip'); if (!b){ b = xel('button', 'pastechip', '前の設定を貼り付け'); b.id = 'pasteChip'; b.type = 'button'; b.addEventListener('click', function(e){ e.stopPropagation(); b.classList.remove('show'); pasteSettings(); }); b.addEventListener('pointerdown', function(e){ e.stopPropagation(); }); $('stage').appendChild(b); }
+    b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(function(){ b.classList.remove('show'); }, 7000);
+  }
+  // ---- AIの準備（C6）：AIのファイル（約65MB）を、使う前に端末へ入れておく ----
+  function aiFiles(){ var f = ['ort.wasm.min.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']; Object.keys(MODELS).forEach(function(k){ MODELS[k].forEach(function(x){ f.push(x); }); }); return f; }
+  function aiCachedCount(){
+    if (!window.caches) return Promise.resolve(-1);
+    var fs = aiFiles();
+    return Promise.all(fs.map(function(f){ return caches.match(new URL((f.indexOf('ort') === 0 ? ORT_BASE : MODEL_BASE) + f, location.href).href).then(function(r){ return r ? 1 : 0; }, function(){ return 0; }); })).then(function(a){ return a.reduce(function(x, y){ return x + y; }, 0); });
+  }
+  function aiPrepare(silent){
+    var fs = aiFiles(), done = 0, ok = 0;
+    if (XE.aiPrep) XE.aiPrep.disabled = true;
+    var chain = Promise.resolve();
+    fs.forEach(function(f){ chain = chain.then(function(){
+      if (XE.aiStat2) XE.aiStat2.textContent = '準備中… ' + done + ' / ' + fs.length;
+      return fetch(new URL((f.indexOf('ort') === 0 ? ORT_BASE : MODEL_BASE) + f, location.href).href).then(function(r){ if (r.ok){ ok++; return r.arrayBuffer(); } }).catch(function(){}).then(function(){ done++; });
+    }); });
+    return chain.then(function(){ if (XE.aiPrep) XE.aiPrep.disabled = false; aiRefresh(); if (!silent) toast(ok === fs.length ? 'AIの準備ができました（次から通信なしで使えます）' : '一部のファイルを取得できませんでした'); });
+  }
+  function aiRefresh(){
+    if (!XE.aiStat2) return;
+    aiCachedCount().then(function(c){ var t = aiFiles().length; XE.aiStat2.textContent = c < 0 ? 'この環境では保存状態を確かめられません' : c >= t ? '準備済み：AIは通信なしで使えます' : '未準備：' + c + ' / ' + t + '（初めて使う時に約65MBを読み込みます）'; XE.aiStat2.className = 'rstat ' + (c >= t ? 'okc' : ''); });
+  }
+  function buildAiExtra(body){
+    XE.aiStat2 = xel('div', 'rstat', '確認中…'); body.appendChild(XE.aiStat2);
+    XE.aiPrep = xbtn('今のうちにAIを準備（約65MB・Wi-Fi推奨）', null, function(){ aiPrepare(false); }); body.appendChild(XE.aiPrep);
+    var ln = xel('div', 'rline'); ln.appendChild(xel('span', '', 'アプリを開いた時に、未準備なら自動で準備')); ln.appendChild(xel('span', 'sp'));
+    var tg = xel('button', 'tg'); tg.type = 'button'; var on = false; try{ on = localStorage.getItem('retouch-aiauto') === '1'; }catch(e){} tg.classList.toggle('on', on);
+    tg.addEventListener('click', function(){ on = !on; tg.classList.toggle('on', on); try{ localStorage.setItem('retouch-aiauto', on ? '1' : '0'); }catch(e){} });
+    ln.appendChild(tg); body.appendChild(ln);
+    body.appendChild(xel('div', 'hint', 'iPhoneでは、Wi-Fiかモバイル通信かをアプリから見分けられないため、自動準備は最初はOFFにしています。一度準備すれば、アプリを消さない限り再ダウンロードはありません。'));
+    setTimeout(aiRefresh, 300);
   }
   // ---- トーンカーブ ----
   var CRV_COL = { rgb: '#E6EBEF', r: '#E8786A', g: '#7CC48A', b: '#79A6E8' };
@@ -3842,7 +4029,7 @@ function tkOldLens(img, w, h, P){
     { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
     { key: 'part', label: '部分', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
-    { key: 'util', label: '便利', chips: [['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']]] }
+    { key: 'util', label: '便利', chips: [['hist','履歴',['hist']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
   var CUR = { tab: 'look', chip: { adj: 'basic' } };   // 調整タブは「ライト」から（トリミングは選んだ時だけ）
@@ -3866,6 +4053,14 @@ function tkOldLens(img, w, h, P){
     row.innerHTML = '<label>強さ</label><input type="range" min="0" max="100" value="100" id="s-mix"><span class="val num" id="v-mix">100</span>';
     looksPanel.appendChild(row);
     row.querySelector('input').addEventListener('input', function(e){ P.mix = +e.target.value; $('v-mix').textContent = e.target.value; schedule(); });
+    // 強さを「光」と「色」で別々に（仕上げを選んだあと、光だけ弱く…などの微調整に）
+    [['mixL', '光の強さ'], ['mixC', '色の強さ']].forEach(function(d){
+      var r2 = document.createElement('div'); r2.className = 'row sub2';
+      r2.innerHTML = '<label>' + d[1] + '</label><input type="range" min="0" max="100" value="100" id="s-' + d[0] + '"><span class="val num" id="v-' + d[0] + '">100</span>';
+      looksPanel.appendChild(r2); P[d[0]] = 100;
+      r2.querySelector('input').addEventListener('input', function(e){ P[d[0]] = +e.target.value; $('v-' + d[0]).textContent = e.target.value; schedule(); });
+      r2.querySelector('label').addEventListener('dblclick', function(){ P[d[0]] = 100; $('s-' + d[0]).value = 100; $('v-' + d[0]).textContent = 100; schedule(); });
+    });
     var ai = document.createElement('button'); ai.type = 'button'; ai.className = 'rbtn aibtn'; ai.id = 'aiBtn'; ai.textContent = 'AIで主役を立てる';
     ai.addEventListener('click', aiSubject); looksPanel.appendChild(ai);
     var st = document.createElement('div'); st.className = 'rstat'; st.id = 'aiStat'; st.textContent = '主役を明るく、手前と奥を控えめに。写真ごとにAIが見分けます（端末の中で処理）。'; looksPanel.appendChild(st);
@@ -4046,10 +4241,11 @@ function tkOldLens(img, w, h, P){
     GROUPS.forEach(function(g){ (g.sliders || []).forEach(function(s){ if (P[s[0]] != null) setVal(s[0], P[s[0]]); }); });
     Object.keys(P.on).forEach(function(k){ syncGroup(k); });
     $('s-mix').value = P.mix; $('v-mix').textContent = P.mix;
+    ['mixL', 'mixC'].forEach(function(k){ var v = P[k] == null ? 100 : P[k]; P[k] = v; $('s-' + k).value = v; $('v-' + k).textContent = v; });
     setMode(P.dmode || 'B'); updateRegUI(); updateExtras(); markPreset('__none__');
     schedule(); restoring = false; updateHistBtns();
   }
-  function updateHistBtns(){ $('undo').disabled = HIST.length < 2; $('redo').disabled = !REDO.length; }
+  function updateHistBtns(){ $('undo').disabled = HIST.length < 2; $('redo').disabled = !REDO.length; try{ renderHist(); }catch(e){} }
   function noteChange(){
     sessSaveState();
     if (restoring) return;
@@ -4059,6 +4255,7 @@ function tkOldLens(img, w, h, P){
       HIST.push(s); if (HIST.length > 60) HIST.shift(); REDO = []; updateHistBtns();
     }, 450);
   }
+  (function(){ var t = null, lp = false, u = $('undo'); u.addEventListener('pointerdown', function(){ lp = false; t = setTimeout(function(){ lp = true; setCollapsed(false); showTab('util', 'hist'); }, 500); }); ['pointerup', 'pointerleave', 'pointercancel'].forEach(function(e){ u.addEventListener(e, function(){ clearTimeout(t); }); }); u.addEventListener('click', function(e){ if (lp){ e.stopImmediatePropagation(); lp = false; } }, true); })();
   $('undo').addEventListener('click', function(){ if (HIST.length < 2) return; REDO.push(HIST.pop()); applyState(HIST[HIST.length - 1]); toast('取り消しました'); });
   $('redo').addEventListener('click', function(){ if (!REDO.length) return; var s = REDO.pop(); HIST.push(s); applyState(s); toast('やり直しました'); });
   HIST.push(snapState());
@@ -4072,6 +4269,7 @@ function tkOldLens(img, w, h, P){
   showTab('look');
   buildHisto();
   setTimeout(sessRestore, 50);   // 前回の続きから
+  setTimeout(function(){ var on = false; try{ on = localStorage.getItem('retouch-aiauto') === '1'; }catch(e){} if (!on) return; aiCachedCount().then(function(c){ if (c >= 0 && c < aiFiles().length) aiPrepare(true); }); }, 4000);   // 自動準備（ONの時だけ）
 
   var tt = null;
   function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
