@@ -51,16 +51,16 @@
   .stagewrap{grid-area:stage; min-height:0; position:relative; padding:0 8px 8px}
   .stage{position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:#08090A}
   .stage canvas{display:block; max-width:100%; max-height:100%; width:auto; height:auto}
-  /* 写真の選択：枠のどこを押しても中央のボタンを押したことにする。
-     iPhoneの選択メニューは「押された入力欄」の位置に出るので、透明な入力欄を中央ボタンに重ね、枠を押した時もそれを押す＝メニューは常に中央に出る */
-  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; width:100%; height:100%; padding:24px; cursor:pointer; -webkit-user-select:none; user-select:none}
-  .dropbtn{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:min(260px,80%); padding:28px 32px 24px; border-radius:22px;
+  /* 写真の選択：点線の枠（大きめ）を押すと選択。枠の外は反応しない。
+     iPhoneの選択メニューは押した指の位置に出るため、押せる所を枠に限ると、メニューの位置が毎回そろう */
+  .drop{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; width:100%; height:100%; padding:24px; -webkit-user-select:none; user-select:none}
+  .dropbtn{position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:min(280px,84%); min-height:170px; padding:28px 32px 24px; border-radius:22px;
     background:rgba(255,255,255,.03); border:1px dashed rgba(255,255,255,.14); transition:background-color .15s, border-color .15s}
   .dropbtn input[type=file]{display:block; position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; font-size:16px}
   .app:not(.collapsed) .drop{padding-bottom:calc(min(32dvh,270px) + 8px)}  /* 下のパネルに隠れない位置で中央に */
   @media (min-width:900px), (min-width:600px) and (orientation:landscape){ .app:not(.collapsed) .drop{padding-bottom:24px} }
-  .drop.press .dropbtn{background:var(--surface); border-color:var(--accent)}
-  @media (hover:hover){ .drop:hover .dropbtn{background:var(--surface); border-color:var(--line)} }
+  .dropbtn.press{background:var(--surface); border-color:var(--accent)}
+  @media (hover:hover){ .dropbtn:hover{background:var(--surface); border-color:var(--line)} }
   .drop .big{font-size:16px; font-weight:500}
   .drop .sub{font-size:12px; color:var(--faint)}
   .drop .mark{width:64px; height:64px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent); margin-bottom:6px}
@@ -233,7 +233,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v11</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v12</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1268,13 +1268,24 @@ function tkOldLens(img, w, h, P){
     if (f) loadFile(f);
     e.target.value = '';
   });
-  // 写真を置く枠：どこを押しても中央の入力欄を押したことにする（選択メニューが常に中央に出る）
+  // 表示の調査用：画面の高さの数字を版番号の横に出す（ホーム画面アプリの下の余白の原因確認）
+  (function(){
+    var sub = document.querySelector('#drop .sub'); if (!sub) return;
+    var t = document.createElement('div'); t.className = 'num'; t.style.cssText = 'margin-top:6px; font-size:11px; color:var(--faint)'; sub.appendChild(t);
+    var pr = document.createElement('div'); pr.style.cssText = 'position:fixed; left:0; width:0; height:0; padding-bottom:env(safe-area-inset-bottom,0px); padding-top:env(safe-area-inset-top,0px); visibility:hidden'; document.body.appendChild(pr);
+    function upd(){
+      var cs = getComputedStyle(pr), a = document.getElementById('app').getBoundingClientRect(), vv = window.visualViewport;
+      var sa = (window.navigator.standalone ? 'app' : 'web');
+      t.textContent = sa + ' 画面' + screen.height + ' 窓' + window.innerHeight + (vv ? ' 見' + Math.round(vv.height) : '') + ' 枠' + Math.round(a.top) + '–' + Math.round(a.bottom) + ' 上' + parseInt(cs.paddingTop) + ' 下' + parseInt(cs.paddingBottom);
+    }
+    upd(); window.addEventListener('resize', upd); setTimeout(upd, 500); setTimeout(upd, 2000);
+  })();
+  // 写真を置く枠：点線の枠に透明な入力欄を重ね、直接押してもらう（プログラムから押すと白いちらつきが出るため）
   (function(){
     var dz = $('drop'), df = $('dropfile');
     df.addEventListener('change', function(e){ var f = e.target.files && e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
-    dz.addEventListener('click', function(e){ if (e.target !== df) df.click(); });
-    function on(){ dz.classList.add('press'); } function off(){ dz.classList.remove('press'); }
-    dz.addEventListener('pointerdown', on); dz.addEventListener('pointerup', off); dz.addEventListener('pointercancel', off); dz.addEventListener('pointerleave', off);
+    var bt = $('dropbtn'); function on(){ bt.classList.add('press'); } function off(){ bt.classList.remove('press'); }
+    bt.addEventListener('pointerdown', on); bt.addEventListener('pointerup', off); bt.addEventListener('pointercancel', off); bt.addEventListener('pointerleave', off);
   })();
   // PC：ドラッグ＆ドロップで読み込み
   var dragDepth = 0;
