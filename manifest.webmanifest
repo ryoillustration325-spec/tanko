@@ -1,6 +1,6 @@
 {
-  "name": "淡光",
-  "short_name": "淡光",
+  "name": "photo retouch",
+  "short_name": "photo retouch",
   "description": "光と色を、部分ごとに整える写真の仕上げアプリ。写真は端末の中だけで処理されます。",
   "start_url": "./",
   "scope": "./",

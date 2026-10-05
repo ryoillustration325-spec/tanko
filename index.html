@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>淡光</title>
+<title>photo retouch</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0D0F11">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="淡光">
+<meta name="apple-mobile-web-app-title" content="photo retouch">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -235,7 +235,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v16</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v17</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1473,7 +1473,7 @@ function tkOldLens(img, w, h, P){
   });
   function finishSave(blob){
     if (!blob){ endSave(); toast('書き出しに失敗しました'); return; }
-    var name = 'tanko_' + stamp() + '.jpg';
+    var name = 'retouch_' + stamp() + '.jpg';
     if (downloads){
       downloads.save({ filename: name, data: blob }).then(function(r){
         endSave(); toast(r && r.status === 'delivered' ? '受け渡しました' : '保存しました');
@@ -2125,7 +2125,7 @@ function tkOldLens(img, w, h, P){
                 c.toBlob(function(b){ c.width = 1; c.height = 1; res(b); }, 'image/jpeg', 0.94);
               });
             });
-          }).then(function(b){ zip.file(f.name.replace(/\.[^.]+$/, '') + '_tanko.jpg', b); done++; });
+          }).then(function(b){ zip.file(f.name.replace(/\.[^.]+$/, '') + '_retouch.jpg', b); done++; });
         }).catch(function(){ fails++; });
       });
     });
@@ -2137,7 +2137,7 @@ function tkOldLens(img, w, h, P){
       stat('ZIPにまとめています…');
       return zip.generateAsync({ type: 'blob' });
     }).then(function(blob){
-      return saveBlob(blob, 'tanko_' + stamp() + '_' + done + '枚.zip');
+      return saveBlob(blob, 'retouch_' + stamp() + '_' + done + '枚.zip');
     }).then(function(msg){
       stat(done + '枚を書き出しました（' + ((Date.now() - t0) / 1000).toFixed(0) + '秒）' + (fails ? '。読み込めなかった写真：' + fails + '枚' : '') + '。');
       toast(msg);
