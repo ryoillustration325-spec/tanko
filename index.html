@@ -278,6 +278,9 @@
   /* トリミング中は、写真全体が下のパネルに隠れない大きさで表示 */
   .app.cropping:not(.collapsed):not(.expanded) .stage{padding-bottom:calc(min(32dvh,270px) + 6px); box-sizing:border-box}
   @media (min-width:900px), (min-width:600px) and (orientation:landscape){ .app.cropping .stage{padding-bottom:0 !important} }
+  /* トリミングの指の受け口は、調整中の「残す部分」の見た目（ぼかし・影）を付けない＝写真がぼけない */
+  .app.sliding .cropui.keep{background:none !important; box-shadow:none !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important}
+  .stage canvas#view{transform-origin:center center}
   /* トリミング操作中：写真の外の暗い部分を少し薄くして、全体が見えるように */
   .app.sliding .cbox{box-shadow:0 0 0 9999px rgba(8,9,10,.45)}
   .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
@@ -347,7 +350,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v23</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v24</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2728,7 +2731,7 @@ function tkOldLens(img, w, h, P){
     function rect(){ return view.getBoundingClientRect(); }
     function cnt(){ return Object.keys(pts).length; }
     function two(){ var k = Object.keys(pts), a = pts[k[0]], b = pts[k[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
-    function begin(m, e){ var g = P.geo; mode = m; st = { x: e ? e.clientX : 0, y: e ? e.clientY : 0, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() }; if (m === 'pinch'){ var t = two(); st.d = t.d; st.x = t.x; st.y = t.y; } }
+    function begin(m, e){ var g = P.geo; mode = m; st = { x: e ? e.clientX : 0, y: e ? e.clientY : 0, g: { x: g.x, y: g.y, w: g.w, h: g.h }, r: rect() }; if (m === 'pinch'){ var t = two(); st.d = t.d; st.x = t.x; st.y = t.y; st.z = { s: CZ.s, x: CZ.x, y: CZ.y }; st.vr = view.getBoundingClientRect(); } }
     cropui.addEventListener('pointerdown', function(e){
       e.preventDefault(); e.stopPropagation(); try{ cropui.setPointerCapture(e.pointerId); }catch(er){}
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
@@ -2741,14 +2744,15 @@ function tkOldLens(img, w, h, P){
       startSliding(cropui);   // 動かしている間は、ほかの表示を消して写真全体を見せる
       var g = P.geo, r = st.r, o = st.g, F = geoFrame(hi.w, hi.h), A = aspNum(g.asp, F[0], F[1]), An = A ? A * F[1] / F[0] : null;
       if (mode === 'pinch'){
+        // ピンチ＝写真の表示だけを拡大・縮小（枠の範囲は変わらない）
         if (cnt() < 2) return;
-        var t = two(), sc = st.d > 0 ? t.d / st.d : 1;
-        // 指を広げる＝写真を拡大＝枠は小さく（Lightroomと同じ感覚）
-        var w = o.w / sc, h = o.h / sc;
-        if (w > 1){ h *= 1 / w; w = 1; } if (h > 1){ w *= 1 / h; h = 1; }
-        if (w < 0.08){ h *= 0.08 / w; w = 0.08; } if (h < 0.08){ w *= 0.08 / h; h = 0.08; }
-        var cx = o.x + o.w / 2 + (t.x - st.x) / r.width, cy = o.y + o.h / 2 + (t.y - st.y) / r.height;
-        g.w = w; g.h = h; g.x = Math.min(1 - w, Math.max(0, cx - w / 2)); g.y = Math.min(1 - h, Math.max(0, cy - h / 2));
+        var t = two(), ns = Math.min(6, Math.max(1, st.z.s * (st.d > 0 ? t.d / st.d : 1)));
+        var bcx = st.vr.left + st.vr.width / 2 - st.z.x, bcy = st.vr.top + st.vr.height / 2 - st.z.y;
+        var px = (st.x - (bcx + st.z.x)) / st.z.s, py = (st.y - (bcy + st.z.y)) / st.z.s;
+        var nx = t.x - bcx - px * ns, ny = t.y - bcy - py * ns;
+        var lx = (ns - 1) * st.vr.width / st.z.s / 2 + 40, ly = (ns - 1) * st.vr.height / st.z.s / 2 + 40;
+        CZ.s = ns; CZ.x = ns <= 1.01 ? 0 : Math.max(-lx, Math.min(lx, nx)); CZ.y = ns <= 1.01 ? 0 : Math.max(-ly, Math.min(ly, ny));
+        applyZoom(); positionCropUI(); return;
       } else if (mode === 'move'){
         var dx = (e.clientX - st.x) / r.width, dy = (e.clientY - st.y) / r.height;
         g.x = Math.min(1 - o.w, Math.max(0, o.x + dx)); g.y = Math.min(1 - o.h, Math.max(0, o.y + dy));
@@ -2794,8 +2798,11 @@ function tkOldLens(img, w, h, P){
     cimg.style.left = (vr.left - sr.left) + 'px'; cimg.style.top = (vr.top - sr.top) + 'px'; cimg.style.width = vr.width + 'px'; cimg.style.height = vr.height + 'px';
     var b = cimg.firstChild; b.style.left = g.x * 100 + '%'; b.style.top = g.y * 100 + '%'; b.style.width = g.w * 100 + '%'; b.style.height = g.h * 100 + '%';
   }
+  var CZ = { s: 1, x: 0, y: 0 };
+  function applyZoom(){ view.style.transform = (CZ.s > 1.001) ? 'translate(' + CZ.x + 'px,' + CZ.y + 'px) scale(' + CZ.s + ')' : ''; }
   function setCropMode(on){
     on = !!on; if (on === CROPMODE) return;
+    CZ = { s: 1, x: 0, y: 0 }; applyZoom();
     CROPMODE = on; document.getElementById('app').classList.toggle('cropping', on);
     present(); updateGeoInfo();
   }
