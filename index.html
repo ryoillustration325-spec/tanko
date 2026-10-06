@@ -131,7 +131,9 @@
   .autobox{margin:2px 0 12px; padding:10px 12px 8px; border:1px solid var(--line); border-radius:12px; background:var(--surface2)}
   .autobox[hidden]{display:none}
   .autohead{font-size:12.5px; font-weight:600; color:var(--accent); letter-spacing:.02em; margin-bottom:2px}
-  .autobox .row label{width:64px}
+  .autobox .row label{width:72px}
+  .autoseg{margin:6px 0 4px}
+  .autoseg[hidden]{display:none}
   .autobox .rbtn{width:100%; margin-top:4px}
   .autolearn{display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--faint); border-top:1px solid var(--line-soft); padding-top:6px; margin-top:2px}
   .linkbtn{background:none; border:0; color:var(--muted); font-size:11px; text-decoration:underline; padding:4px 0; cursor:pointer}
@@ -406,7 +408,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v37</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v38</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1282,6 +1284,8 @@ var TK_PRESETS = {
   none:   { label: 'なし（手動）' },
   // おまかせ：写真を測ってルック（標準・夜・淡）を選び、明るさと色を目標へ合わせる。人物・空も補正し、好みを学ぶ
   auto:   { label: 'おまかせ', auto: 1 },
+  // 見本ルック：見本写真の明るさ・色の数値（TK_REF）に寄せる。光・ぼかし・粒子には触れない
+  ref:    { label: '見本ルック', ref: 1 },
   // 深い青（黒を浮かせ白を抑えたローキー＋ティールの影）：基本補正・カーブ・グレーディングまで一式で入れる
   blue_std: { label: '深い青 標準', grain: 10, glow: 12, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
     on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
@@ -1762,7 +1766,7 @@ function tkOldLens(img, w, h, P){
   }
 }
 // ---------- おまかせ（写真を測り、ルックを選んで、狙いの明るさ・色に着地させる） ----------
-// ルックごとの目標：黒（下2%）・中間（50%）・白（上2%）の明るさ。大林さんの写真の実測と深い青の調整値から
+// ルックごとの目標：黒（下2%）・中間（50%）・白（上2%）の明るさ。見本写真の実測と深い青の調整値から
 var TK_AUTO_T = {
   std:   { p2: 0.10, p50: 0.44, p98: 0.87 },
   night: { p2: 0.08, p50: 0.30, p98: 0.76 },
@@ -1781,16 +1785,17 @@ function tkAutoNeutralIdx(px, n){
   return idx.length > n * 0.04 ? idx : null;
 }
 function tkAutoStats(px, n, nidx){
-  var Y = new Float32Array(n), skin = 0, clip = 0, i;
+  var Y = new Float32Array(n), skin = 0, clip = 0, sat = 0, i;
   for (i = 0; i < n; i++){
     var r = px[i * 4] / 255, g = px[i * 4 + 1] / 255, b = px[i * 4 + 2] / 255, y = 0.299 * r + 0.587 * g + 0.114 * b;
+    var mxs = Math.max(r, g, b); if (mxs > 0) sat += (mxs - Math.min(r, g, b)) / mxs;
     Y[i] = y; if (y > 0.985) clip++;
     skin += tkSkinW(y, 0.596 * r - 0.274 * g - 0.322 * b, 0.211 * r - 0.523 * g + 0.312 * b);
   }
   var s = Float32Array.from(Y).sort(), p = function(q){ return s[Math.min(n - 1, Math.floor(q * (n - 1)))]; };
   var nb = 0, ng = 0, m = nidx ? nidx.length : 0;
   for (i = 0; i < m; i++){ var j = nidx[i] * 4, R = px[j] / 255, G = px[j + 1] / 255, B = px[j + 2] / 255; nb += B - R; ng += G - (R + B) / 2; }
-  return { p2: p(0.02), p50: p(0.5), p90: p(0.9), p98: p(0.98), nb: m ? nb / m : 0, ng: m ? ng / m : 0, skin: skin / n, clip: clip / n };
+  return { p2: p(0.02), p50: p(0.5), p90: p(0.9), p98: p(0.98), nb: m ? nb / m : 0, ng: m ? ng / m : 0, skin: skin / n, clip: clip / n, sat: sat / n };
 }
 // 写真の明るさの性格からルックを選ぶ
 function tkAutoPickLook(s){
@@ -1816,8 +1821,8 @@ function tkAutoLookCast(P){
 // 縮小画像で「当てる→測る→直す」を数回くり返し、露光量・黒・白・色温度・色かぶり補正を決める
 function tkAutoFit(src, w, h, P, T, opt){
   opt = opt || {};
-  var n = w * h, nidx = tkAutoNeutralIdx(src, n), s0 = tkAutoStats(src, n, nidx), wbOk = !!nidx;
-  var cast = tkAutoLookCast(P), keep = opt.keepCast == null ? 0.3 : opt.keepCast;
+  var n = w * h, nidx = tkAutoNeutralIdx(src, n), s0 = tkAutoStats(src, n, nidx), wbOk = !!nidx && !opt.noWB;
+  var cast = opt.noWB ? { nb: 0, ng: 0 } : tkAutoLookCast(P), keep = opt.keepCast == null ? 0.3 : opt.keepCast;
   // 狙いの色：ルックの色＋元の写真の色かぶりを少しだけ残す（夕方は夕方らしく）＋学習したずれ
   var tnb = cast.nb + (s0.nb) * keep + (T.nb || 0), tng = cast.ng + (s0.ng) * keep + (T.ng || 0);
   var base = { bTemp: P.bTemp || 0, bTint: P.bTint || 0 };
@@ -1833,17 +1838,18 @@ function tkAutoFit(src, w, h, P, T, opt){
     var e2 = T.p2 - st.p2, e98 = T.p98 - st.p98;
     if (e98 > 0 && st.p90 > 0.72) e98 = 0;   // 白い面が広い（白い猫・白壁）時は白をさらに持ち上げない
     var eb = wbOk ? st.nb - tnb : 0, eg = wbOk ? st.ng - tng : 0;
-    if (Math.abs(e50) < 0.04 && Math.abs(e2) < 0.008 && Math.abs(e98) < 0.012 && Math.abs(eb) < 0.004 && Math.abs(eg) < 0.004) break;
+    if (Math.abs(e50) < 0.04 && Math.abs(e2) < 0.008 && Math.abs(e98) < 0.012 && Math.abs(eb) < 0.004 && Math.abs(eg) < 0.004 && (T.sat == null || Math.abs(T.sat - st.sat) < 0.01)) break;
     Q.bExp = Math.round(cl((Q.bExp || 0) + e50 * 42, -90, 70));
     Q.bBl = Math.round(cl((Q.bBl || 0) + e2 / 0.16 * 85, -90, 50));
     Q.bWh = Math.round(cl((Q.bWh || 0) + e98 / 0.22 * 75, -80, 80));
     // 黒と白の幅が足りない（霞んだ写真など）／広すぎる時はコントラストで
     var esp = (st.p98 + e98 - T.p2) - (st.p98 - st.p2);
     if (Math.abs(esp) > 0.03) Q.bCon = Math.round(cl((Q.bCon || 0) + esp * 90, -40, 60));
+    if (T.sat != null){ var es = T.sat - st.sat; if (Math.abs(es) > 0.008) Q.bSat = Math.round(cl((Q.bSat || 0) + es / 0.2 * 100 * 0.8, -30, 25)); }
     Q.bTemp = Math.round(cl((Q.bTemp || 0) + eb / 0.12 * 100 * 0.7, base.bTemp - 8, base.bTemp + 20));   // 冷やす方向は控えめ（クリーム色の被写体まで青くしない）
     Q.bTint = Math.round(cl((Q.bTint || 0) + eg / 0.05 * 100 * 0.5, base.bTint - 6, base.bTint + 6));
   }
-  return { P: { bExp: Q.bExp, bSh: Q.bSh || 0, bCon: Q.bCon || 0, bBl: Q.bBl, bWh: Q.bWh, bTemp: Q.bTemp, bTint: Q.bTint }, src: s0, out: st };
+  return { P: { bExp: Q.bExp, bSh: Q.bSh || 0, bSat: Q.bSat || 0, bCon: Q.bCon || 0, bBl: Q.bBl, bWh: Q.bWh, bTemp: Q.bTemp, bTint: Q.bTint }, src: s0, out: st };
 }
 // 空の広さ（上半分で空らしい所の割合）
 function tkAutoSky(src, w, h){
@@ -1852,6 +1858,19 @@ function tkAutoSky(src, w, h){
   var W = tkLmWeight({ type: 'sky', strokes: [], feather: 30, inv: 0, img: f, iw: w, ih: h }, w, h), s = 0, c = 0;
   for (var y = 0; y < h / 2; y++) for (var x = 0; x < w; x++){ s += W[y * w + x]; c++; }
   return c ? s / c : 0;
+}
+// ---------- 見本ルック：見本写真の「明るさの配分」と「部分ごとの色」の数値だけを持つ（写真そのものは持たない） ----------
+// person＝人物、land＝風景・物、dark＝暗い場面。tone は黒・中間・白、sat は鮮やかさ、st は部分ごとの色（カラーマッチと同じ形）
+var TK_REF = {"person": {"n": 49, "tone": {"p2": 0.121, "p50": 0.3947, "p98": 0.8216}, "sat": 0.1831, "st": {"Ym": 0.412, "Ys": 0.2094, "b": [{"w": 0.4106, "mb": 0.0027, "mr": -0.0046, "sb": 0.0174, "sr": 0.0194}, {"w": 0.418, "mb": 0.0003, "mr": -0.0041, "sb": 0.0296, "sr": 0.0314}, {"w": 0.1715, "mb": 0.0033, "mr": -0.0037, "sb": 0.02, "sr": 0.0173}], "cat": [{"w": 0.1111, "Ym": 0.4472, "mb": -0.0391, "mr": 0.0529, "sb": 0.0161, "sr": 0.0198}, {"w": 0.0262, "Ym": 0.397, "mb": -0.0156, "mr": -0.0501, "sb": 0.0242, "sr": 0.0244}, {"w": 0.2188, "Ym": 0.4081, "mb": 0.0448, "mr": -0.0448, "sb": 0.0151, "sr": 0.0167}, {"w": 0.3486, "Ym": 0.5114, "mb": 0.0027, "mr": -0.0032, "sb": 0.0096, "sr": 0.0088}, {"w": 0.2953, "Ym": 0.2884, "mb": -0.0142, "mr": 0.0072, "sb": 0.0231, "sr": 0.0197}]}}, "dark": {"n": 15, "tone": {"p2": 0.0659, "p50": 0.1558, "p98": 0.5055}, "sat": 0.2908, "st": {"Ym": 0.1756, "Ys": 0.1174, "b": [{"w": 0.8033, "mb": 0.0089, "mr": -0.0154, "sb": 0.013, "sr": 0.0163}, {"w": 0.1746, "mb": 0.0247, "mr": -0.0231, "sb": 0.0139, "sr": 0.0181}, {"w": 0.0221, "mb": 0.037, "mr": -0.0234, "sb": 0.0071, "sr": 0.0069}], "cat": [{"w": 0.0335, "Ym": 0.2947, "mb": -0.0292, "mr": 0.0548, "sb": 0.0148, "sr": 0.0251}, {"w": 0.124, "Ym": 0.1877, "mb": -0.0092, "mr": -0.0335, "sb": 0.0088, "sr": 0.0082}, {"w": 0.315, "Ym": 0.278, "mb": 0.0447, "mr": -0.0408, "sb": 0.0158, "sr": 0.0153}, {"w": 0.0883, "Ym": 0.2654, "mb": 0.0023, "mr": -0.0028, "sb": 0.0068, "sr": 0.0049}, {"w": 0.4392, "Ym": 0.1444, "mb": 0.0003, "mr": -0.0033, "sb": 0.0114, "sr": 0.0126}]}}, "land": {"n": 59, "tone": {"p2": 0.1241, "p50": 0.3572, "p98": 0.7095}, "sat": 0.2696, "st": {"Ym": 0.3817, "Ys": 0.1675, "b": [{"w": 0.3957, "mb": 0.0194, "mr": -0.0271, "sb": 0.0166, "sr": 0.0174}, {"w": 0.4859, "mb": 0.0261, "mr": -0.036, "sb": 0.0178, "sr": 0.0205}, {"w": 0.1184, "mb": 0.0204, "mr": -0.0213, "sb": 0.0152, "sr": 0.0163}], "cat": [{"w": 0.0297, "Ym": 0.4124, "mb": -0.035, "mr": 0.0644, "sb": 0.018, "sr": 0.0234}, {"w": 0.0871, "Ym": 0.3127, "mb": -0.0206, "mr": -0.0342, "sb": 0.0147, "sr": 0.012}, {"w": 0.5129, "Ym": 0.3824, "mb": 0.0524, "mr": -0.0548, "sb": 0.0126, "sr": 0.0152}, {"w": 0.1548, "Ym": 0.5967, "mb": 0.0075, "mr": -0.0095, "sb": 0.0094, "sr": 0.0093}, {"w": 0.2155, "Ym": 0.3038, "mb": -0.0111, "mr": -0.0005, "sb": 0.0183, "sr": 0.0168}]}}};
+// 写真の場面を判定：肌が十分写っていれば人物、暗ければ暗い場面、それ以外は風景
+function tkRefScene(s0, faceHint){ if (faceHint != null) return faceHint ? 'person' : (s0.p50 < 0.2 ? 'dark' : 'land'); if (s0.skin > 0.06 && s0.skin < 0.35) return 'person'; if (s0.p50 < 0.2) return 'dark'; return 'land'; }
+function tkRefTarget(sc, s0, L){
+  var t = TK_REF[sc].tone, l = L || {}, cl = function(v){ return Math.max(-0.08, Math.min(0.08, v || 0)); };
+  // 中間の明るさは写真の元の明るさを半分残す（暗い場面は暗く、明るい場面は明るく）
+  var p50 = t.p50 * 0.5 + Math.max(t.p50 - 0.15, Math.min(t.p50 + 0.15, s0.p50)) * 0.5;
+    // 白と鮮やかさも、写真の元の性格を少し残す（花畑が灰色にならない、霞んだ写真が硬くならない）
+  var p98 = t.p98 * 0.7 + Math.min(0.97, s0.p98) * 0.3, sat = TK_REF[sc].sat * 0.5 + s0.sat * 0.5;
+  return { p2: t.p2 + cl(l.p2), p50: p50 + cl(l.p50), p98: p98 + cl(l.p98), sat: sat + cl(l.sat), nb: 0, ng: 0 };
 }
 // CORE-END
 
@@ -2106,6 +2125,7 @@ function tkAutoSky(src, w, h){
   function applyPreset(key){
     var p = TK_PRESETS[key];
     if (p.auto){ applyAuto(); return; }
+    if (p.ref){ applyRef(); return; }
     if (!AUTO_APPLYING){ autoOff(); P.lm = (P.lm || []).filter(function(m){ return !m.auto; }); }
     if (p.full || LAST_FULL){
       fullInto(P, p.full || null, true);
@@ -4182,7 +4202,7 @@ function tkAutoSky(src, w, h){
     }
     if (XE.gradPick) XE.gradPick.textContent = PICK === 'grad' ? '写真の上でドラッグ中…（もう一度押すと中止）' : '写真の上でドラッグして線を引く';
     if (XE.mStat){
-      XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
+      XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'ref' ? '見本ルックの色に寄せています。' : XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
       if (!P.mref){ var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112); }
       renderMatchTable();
       XE.mFeed.disabled = !FEED.length;
@@ -4283,6 +4303,24 @@ function tkAutoSky(src, w, h){
     else aiCachedCount().then(function(c){ if (AUTO && c >= aiFiles().length) autoSubjectRun(); else syncAutoUI(); });
     toast('おまかせ：' + AUTO_NAME[f.look] + 'で合わせました');
   }
+  // ---- 見本ルック：見本写真の明るさの配分と部分ごとの色だけに寄せる（光・ぼかし・粒子・構図には触れない） ----
+  var REF_NAME = { person: '人物', land: '風景', dark: '暗い場面' };
+  function applyRef(scene){
+    if (!img){ toast('先に写真を選んでください'); return; }
+    var sm = autoSmall(), n = sm.w * sm.h, s0 = tkAutoStats(sm.px, n, null);
+    var sc = scene || tkRefScene(s0), L = alLoad()['ref_' + sc] || {};
+    AUTO_APPLYING = true; autoOff(); AUTO_APPLYING = false;
+    // 明るさ・色の基本補正は一度まっさらにして、見本の色合わせ（カラーマッチ）＋明るさ合わせだけで作る
+    fullInto(P, null, true); LAST_FULL = true; P.on.basic = 1; P.on.wb = 1; syncGroup('basic'); syncGroup('wb');
+    P.on.match = 1; P.mMode = 'part'; P.mref = TK_REF[sc].st; setVal('mAmt', Math.round(L.amt != null ? L.amt : 90)); setVal('mLum', 0); XE.mThumbSrc = 'ref'; syncGroup('match');
+    var r = tkAutoFit(sm.px, sm.w, sm.h, P, tkRefTarget(sc, s0, L), { noWB: true });
+    Object.keys(r.P).forEach(function(k){ setVal(k, r.P[k]); });
+    AUTO = { kind: 'ref', look: sc, base: { bExp: P.bExp || 0 }, sm: sm, learned: false, macro: { bright: 0, amt: P.mAmt }, notes: [] };
+    AUTO.out = autoMeasure(sm, P);
+    try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
+    markPreset('ref'); syncAutoUI(); schedule();
+    toast('見本ルック：' + REF_NAME[sc] + 'で合わせました');
+  }
   function autoSubject(){
     if (!REG.ready || !AUTO) return;
     var L = P.reg.list;
@@ -4320,24 +4358,34 @@ function tkAutoSky(src, w, h){
   function autoLearn(){
     if (!AUTO || AUTO.learned || !AUTO.out) return;
     try{
-      var st = autoMeasure(AUTO.sm, P), o = alLoad(), L = o[AUTO.look] || { n: 0 }, a = Math.max(0.2, 1 / (L.n + 1));
-      ['p2', 'p50', 'p98', 'nb', 'ng'].forEach(function(k){
+      var key = AUTO.kind === 'ref' ? 'ref_' + AUTO.look : AUTO.look;
+      var st = autoMeasure(AUTO.sm, P), o = alLoad(), L = o[key] || { n: 0 }, a = Math.max(0.2, 1 / (L.n + 1));
+      (AUTO.kind === 'ref' ? ['p2', 'p50', 'p98', 'sat'] : ['p2', 'p50', 'p98', 'nb', 'ng']).forEach(function(k){
         var d = (st[k] - AUTO.out[k]) + (L[k] || 0);   // 今回の目標（学習込み）からのずれ＝新しい好み
         L[k] = Math.max(-0.08, Math.min(0.08, (L[k] || 0) * (1 - a) + d * a));
       });
-      L.m = L.m || {}; ['light', 'air'].forEach(function(k){ L.m[k] = L.m[k] == null ? AUTO.macro[k] : L.m[k] * (1 - a) + AUTO.macro[k] * a; });
-      L.n = Math.min(99, L.n + 1); o[AUTO.look] = L; alSave(o); AUTO.learned = true; syncAutoUI();
+      if (AUTO.kind === 'ref'){ L.amt = L.amt == null ? P.mAmt : L.amt * (1 - a) + P.mAmt * a; }
+      else { L.m = L.m || {}; ['light', 'air'].forEach(function(k){ L.m[k] = L.m[k] == null ? AUTO.macro[k] : L.m[k] * (1 - a) + AUTO.macro[k] * a; }); }
+      L.n = Math.min(99, L.n + 1); o[key] = L; alSave(o); AUTO.learned = true; syncAutoUI();
     }catch(e){}
   }
-  function autoOff(){ if (!AUTO) return; AUTO = null; syncAutoUI(); }
+  function autoOff(){
+    if (!AUTO) return;
+    if (AUTO.kind === 'ref' && P.mref && P.mref === TK_REF[AUTO.look].st){ P.on.match = 0; P.mref = null; syncGroup('match'); }
+    AUTO = null; syncAutoUI();
+  }
   function syncAutoUI(){
     var box = XE.autoBox; if (!box) return;
     box.hidden = !AUTO;
     var c = alCount(); XE.autoLearn.textContent = c ? '好みの学習：' + c + '枚分' : '書き出すたびに、好みを学習します';
     XE.autoForget.hidden = !c;
     if (!AUTO) return;
-    XE.autoHead.textContent = 'おまかせ：' + AUTO_NAME[AUTO.look] + (AUTO.notes.length ? '（' + AUTO.notes.join('・') + 'も補正）' : '');
-    ['bright', 'light', 'air', 'blue'].forEach(function(k){ var r = XE.autoR[k]; r.i.value = AUTO.macro[k]; r.v.textContent = AUTO.macro[k]; });
+    var isRef = AUTO.kind === 'ref';
+    XE.autoSeg.hidden = !isRef;
+    Array.prototype.forEach.call(XE.autoSeg.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.look); });
+    XE.autoHead.textContent = isRef ? '見本ルック：' + REF_NAME[AUTO.look] : 'おまかせ：' + AUTO_NAME[AUTO.look] + (AUTO.notes.length ? '（' + AUTO.notes.join('・') + 'も補正）' : '');
+    ['bright', 'light', 'air', 'blue', 'amt'].forEach(function(k){ var r = XE.autoR[k]; var show = isRef ? (k === 'bright' || k === 'amt') : k !== 'amt'; r.row.style.display = show ? '' : 'none'; if (show){ r.i.value = AUTO.macro[k]; r.v.textContent = AUTO.macro[k]; } });
+    if (isRef){ XE.autoAi.hidden = true; XE.autoSt.textContent = '色と明るさだけを見本に寄せています。光・ぼかし・粒子は今の設定のまま'; return; }
     var needAi = !REG.ready && AUTO.notes.indexOf('主役') < 0;
     XE.autoAi.hidden = !needAi || AUTO.busy;
     if (!AUTO.busy) XE.autoSt.textContent = needAi ? '人物・主役の補正はAIの準備が必要です（初回は約55MBの読み込み）' : '色の細かい調整は「調整」タブでそのまま上書きできます';
@@ -4346,11 +4394,18 @@ function tkAutoSky(src, w, h){
     var box = xel('div', 'autobox'); box.hidden = true; XE.autoBox = box;
     XE.autoHead = xel('div', 'autohead', 'おまかせ'); box.appendChild(XE.autoHead);
     XE.autoR = {};
-    [['bright', '明るさ', -50, 50], ['light', '光', 0, 100], ['air', '空気感', 0, 100], ['blue', '青さ', -50, 50]].forEach(function(d){
+    var seg = xel('div', 'seg autoseg'); XE.autoSeg = seg;
+    [['person', '人物'], ['land', '風景'], ['dark', '暗い場面']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.s = d[0]; b.addEventListener('click', function(){ applyRef(d[0]); }); seg.appendChild(b); });
+    box.appendChild(seg);
+    [['bright', '明るさ', -50, 50], ['amt', '寄せる強さ', 0, 100], ['light', '光', 0, 100], ['air', '空気感', 0, 100], ['blue', '青さ', -50, 50]].forEach(function(d){
       var row = xel('div', 'row'); var lb = xel('label', '', d[1]); var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3]; var v = xel('span', 'val num', '0');
-      row.appendChild(lb); row.appendChild(r); row.appendChild(v); box.appendChild(row); XE.autoR[d[0]] = { i: r, v: v };
-      r.addEventListener('input', function(){ if (!AUTO) return; AUTO.macro[d[0]] = +r.value; v.textContent = r.value; autoMacro(); });
-      lb.addEventListener('dblclick', function(){ if (!AUTO) return; AUTO.macro[d[0]] = d[0] === 'light' ? Math.round((TK_PRESETS[TK_AUTO_LOOK[AUTO.look]].glow || 12) / 0.6) : 0; syncAutoUI(); autoMacro(); });
+      row.appendChild(lb); row.appendChild(r); row.appendChild(v); box.appendChild(row); XE.autoR[d[0]] = { i: r, v: v, row: row };
+      r.addEventListener('input', function(){
+        if (!AUTO) return; AUTO.macro[d[0]] = +r.value; v.textContent = r.value;
+        if (AUTO.kind === 'ref'){ if (d[0] === 'bright') setVal('bExp', Math.round(AUTO.base.bExp + AUTO.macro.bright * 0.6)); else setVal('mAmt', AUTO.macro.amt); schedule(); }
+        else autoMacro();
+      });
+      lb.addEventListener('dblclick', function(){ if (!AUTO || AUTO.kind === 'ref') return; AUTO.macro[d[0]] = d[0] === 'light' ? Math.round((TK_PRESETS[TK_AUTO_LOOK[AUTO.look]].glow || 12) / 0.6) : 0; syncAutoUI(); autoMacro(); });
     });
     XE.autoAi = xbtn('AIで人物・主役も合わせる', 'ghost', function(){ if (AUTO) autoSubjectRun(); }); box.appendChild(XE.autoAi);
     XE.autoSt = xel('div', 'rstat', ''); box.appendChild(XE.autoSt);
@@ -4523,6 +4578,11 @@ function tkAutoSky(src, w, h){
       q = JSON.parse(JSON.stringify(o.P)); q.on = q.on || {}; q.on.reg = 0; q.mix = q.mix == null ? 100 : q.mix; return q;
     }
     var p = TK_PRESETS[key] || {};
+    if (p.ref){
+      var sm2 = autoSmall(), n2 = sm2.w * sm2.h, s2 = tkAutoStats(sm2.px, n2, null), sc2 = tkRefScene(s2), q2 = JSON.parse(JSON.stringify(P)); q2.mix = 100; q2.on.reg = 0;
+      fullInto(q2, null, false); q2.on.basic = 1; q2.on.wb = 1; q2.on.match = 1; q2.mMode = 'part'; q2.mref = TK_REF[sc2].st; q2.mAmt = 90; q2.mLum = 0;
+      var r2 = tkAutoFit(sm2.px, sm2.w, sm2.h, q2, tkRefTarget(sc2, s2, (alLoad()['ref_' + sc2] || {})), { noWB: true }); Object.keys(r2.P).forEach(function(k){ q2[k] = r2.P[k]; }); return q2;
+    }
     if (p.auto){
       var sm = autoSmall(), f = autoFitParams(q, sm), qq = presetParams(TK_AUTO_LOOK[f.look]); if (!qq) return null;
       var rr = tkAutoFit(sm.px, sm.w, sm.h, qq, f.T); Object.keys(rr.P).forEach(function(k){ qq[k] = rr.P[k]; }); return qq;
