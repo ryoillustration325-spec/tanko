@@ -138,6 +138,17 @@
   .autolearn{display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--faint); border-top:1px solid var(--line-soft); padding-top:6px; margin-top:2px}
   .linkbtn{background:none; border:0; color:var(--muted); font-size:11px; text-decoration:underline; padding:4px 0; cursor:pointer}
   .linkbtn[hidden]{display:none}
+  .prefinfo{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--faint); margin:6px 0 2px}
+  .prefinfo b{color:var(--muted); font-weight:600; font-family:"Inter",sans-serif}
+  .prefinfo[hidden]{display:none}
+  .prefmodal{position:fixed; inset:0; z-index:80; background:rgba(8,10,12,.92); display:flex; align-items:center; justify-content:center; padding:max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))}
+  .prefmodal[hidden]{display:none}
+  .prefbox{width:100%; max-width:720px; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px}
+  .prefhead{font-size:13px; color:var(--ink); text-align:center; letter-spacing:.02em}
+  .prefgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; align-items:center}
+  .prefcell{padding:0; border:2px solid transparent; border-radius:10px; overflow:hidden; background:var(--surface); cursor:pointer; line-height:0}
+  .prefcell:active, .prefcell:hover{border-color:var(--accent)}
+  .prefcell canvas{width:100%; height:auto; max-height:34vh; object-fit:contain; display:block}
   .lookrow{display:flex; gap:8px; align-items:center}
   .lookrow .rbtn{flex:1}
   .aibtn{background:linear-gradient(180deg, rgba(143,176,196,.16), rgba(143,176,196,.06)); border-color:rgba(143,176,196,.45) !important}
@@ -408,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v40</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v41</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1288,7 +1299,8 @@ var TK_PRESETS = {
   // おまかせ：写真を測ってルック（標準・夜・淡）を選び、明るさと色を目標へ合わせる。人物・空も補正し、好みを学ぶ
   auto:   { label: 'おまかせ', auto: 1 },
   // 見本ルック：見本写真の明るさ・色の数値（TK_REF）に寄せる。光・ぼかし・粒子には触れない
-  ref:    { label: '見本ルック', ref: 1 },
+  // 好みのルック：6案から選ぶたびに好みを学ぶ（色数を絞る・影の色・濃さ・黒の浮き・白の抑え・彩度・色温度）
+  pref:   { label: '好みのルック', pref: 1 },
   // 深い青（黒を浮かせ白を抑えたローキー＋ティールの影）：基本補正・カーブ・グレーディングまで一式で入れる
   blue_std: { label: '深い青 標準', grain: 10, glow: 12, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
     on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
@@ -2245,6 +2257,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     var p = TK_PRESETS[key];
     if (p.auto){ applyAuto(); return; }
     if (p.ref){ applyRef(); return; }
+    if (p.pref){ applyPref(); return; }
     if (!AUTO_APPLYING){ autoOff(); P.lm = (P.lm || []).filter(function(m){ return !m.auto; }); }
     if (p.full || LAST_FULL){
       fullInto(P, p.full || null, true);
@@ -4472,6 +4485,103 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     markPreset('ref'); syncAutoUI(); schedule();
     toast('見本ルック：' + REF_NAME[sc] + 'で合わせました' + (hint != null ? '（AI判定）' : ''));
   }
+  // ---------- 好みのルック：6案から一番いいものを選ぶ → 選んだ方向へ中心を寄せ、探す幅を少しずつ狭める（好みを学ぶ） ----------
+  // 動かす要素（デザインの軸）：色数を絞る・影の色・影の色の強さ・濃さ・黒の浮き・白の抑え・彩度・色温度
+  var PREF_K = 'retouch-pref';
+  var PREF_DEF = { sep: [50, 35, 0, 100], sh: [195, 30, 140, 240], ss: [16, 12, 0, 45], dens: [15, 18, 0, 60], lift: [0.07, 0.05, 0, 0.18], white: [0.94, 0.045, 0.8, 1], sat: [-6, 12, -35, 25], temp: [-5, 9, -28, 18] };
+  var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度' };
+  function prefLoad(){
+    var o = null; try{ o = JSON.parse(localStorage.getItem(PREF_K)); }catch(e){}
+    if (!o || !o.mu){ o = { mu: {}, sig: {}, n: 0 }; Object.keys(PREF_DEF).forEach(function(k){ o.mu[k] = PREF_DEF[k][0]; o.sig[k] = PREF_DEF[k][1]; }); }
+    return o;
+  }
+  function prefSave(o){ try{ localStorage.setItem(PREF_K, JSON.stringify(o)); }catch(e){} }
+  function prefClamp(k, v){ var d = PREF_DEF[k]; return Math.max(d[2], Math.min(d[3], v)); }
+  function gauss(){ var u = 1 - Math.random(), v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  // 6案：1つは今の中心、残り5つは中心のまわりをばらして作る（似すぎないよう、2つの軸を大きめに動かす）
+  function prefCandidates(o){
+    var out = [JSON.parse(JSON.stringify(o.mu))], ks = Object.keys(PREF_DEF);
+    // 5案それぞれ、3つの軸をはっきり（±1.6〜2.4倍の幅で）動かし、残りは少しだけ揺らす＝違いが目で分かる
+    var order = ks.slice().sort(function(){ return Math.random() - 0.5; });
+    for (var c = 0; c < 5; c++){
+      var v = {}, big = [order[(c * 3) % ks.length], order[(c * 3 + 1) % ks.length], order[(c * 3 + 2) % ks.length]];
+      ks.forEach(function(k){
+        var d = big.indexOf(k) >= 0 ? (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 0.8) : gauss() * 0.3;
+        var t = o.mu[k] + d * o.sig[k];
+        // 端に張り付いたら反対側へ
+        if (t < PREF_DEF[k][2] || t > PREF_DEF[k][3]) t = o.mu[k] - d * o.sig[k];
+        v[k] = prefClamp(k, t);
+      });
+      out.push(v);
+    }
+    // 並びを混ぜる（中心がいつも同じ場所にならないように）
+    for (var i = out.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)), t = out[i]; out[i] = out[j]; out[j] = t; }
+    return out;
+  }
+  function prefToP(q, v, nz, bright, live){
+    fullInto(q, null, live);
+    var lift = v.lift, wh = v.white;
+    var crv = { rgb: [[0, lift], [0.25, 0.25 + lift * 0.45], [0.5, 0.5], [0.75, 0.75 - (1 - wh) * 0.35], [1, wh]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] };
+    var kv = { mxSep: Math.round(v.sep), bSat: Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
+    Object.keys(kv).forEach(function(k){ if (live) setVal(k, kv[k]); else q[k] = kv[k]; });
+    q.crv = crv;
+    q.cgsH = Math.round(v.sh); q.cgsS = Math.round(v.ss); q.cgmH = Math.round(v.sh); q.cgmS = Math.round(v.ss * 0.3); q.cgBlend = 40; q.cgBal = -20; q.cgSkin = 85;
+    if (live){ setVal('dens', Math.round(v.dens)); } else q.dens = Math.round(v.dens);
+    q.dmode = 'B'; q.dskin = 70;
+    ['basic', 'wb', 'mix', 'crv', 'cg'].forEach(function(k){ q.on[k] = 1; }); q.on.dens = v.dens > 0.5 ? 1 : 0;
+    if (q.mref && (q.mref.ref2 || q.mMode === 'safe')){ q.on.match = 0; q.mref = null; }
+  }
+  function applyPref(v){
+    if (!img){ toast('先に写真を選んでください'); return; }
+    var o = prefLoad(), sm = autoSmall(), nz = tkNormFit(sm.px, sm.w, sm.h);
+    AUTO_APPLYING = true; autoOff(); AUTO_APPLYING = false;
+    v = v || o.mu;
+    prefToP(P, v, nz, 0, true); LAST_FULL = true;
+    ['basic', 'wb', 'mix', 'crv', 'cg', 'dens', 'match'].forEach(syncGroup);
+    try{ setMode('B'); }catch(e){}
+    AUTO = { kind: 'pref', look: 'pref', nz: nz, sm: sm, v: JSON.parse(JSON.stringify(v)), macro: { bright: 0 }, notes: [] };
+    try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
+    markPreset('pref'); syncAutoUI(); schedule();
+  }
+  // 6案の画面
+  var PM = { el: null, cands: null, src: null };
+  function prefOpen(){
+    if (!img){ toast('先に写真を選んでください'); return; }
+    if (!PM.el){
+      var m = xel('div', 'prefmodal'); m.hidden = true;
+      var box = xel('div', 'prefbox'); m.appendChild(box);
+      PM.head = xel('div', 'prefhead', ''); box.appendChild(PM.head);
+      PM.grid = xel('div', 'prefgrid'); box.appendChild(PM.grid);
+      var row = xel('div', 'lookrow');
+      row.appendChild(xbtn('どれも違う（作り直す）', 'ghost', function(){ var o = prefLoad(); Object.keys(o.sig).forEach(function(k){ o.sig[k] = Math.min(PREF_DEF[k][1] * 1.6, o.sig[k] * 1.15); }); prefSave(o); prefRound(); }));
+      row.appendChild(xbtn('閉じる', 'ghost', function(){ m.hidden = true; }));
+      box.appendChild(row);
+      document.body.appendChild(m); PM.el = m;
+    }
+    PM.el.hidden = false; prefRound();
+  }
+  function prefRound(){
+    var o = prefLoad(), sz = sizeFor(320), px = readPixels(sz[0], sz[1]), nz = AUTO && AUTO.nz ? AUTO.nz : tkNormFit(autoSmall().px, autoSmall().w, autoSmall().h);
+    PM.cands = prefCandidates(o);
+    PM.head.textContent = '一番いいものを選んでください（' + (o.n + 1) + '回目）';
+    PM.grid.innerHTML = '';
+    PM.cands.forEach(function(v, i){
+      var b = xel('button', 'prefcell'); b.type = 'button'; var cv = document.createElement('canvas'); cv.width = sz[0]; cv.height = sz[1]; b.appendChild(cv); PM.grid.appendChild(b);
+      b.addEventListener('click', function(){ prefPick(i); });
+      setTimeout(function(){
+        var q = JSON.parse(JSON.stringify(P)); q.mix = 100; q.on.reg = 0; prefToP(q, v, nz, AUTO && AUTO.kind === 'pref' ? AUTO.macro.bright : 0, false);
+        try{ var out = tkProcess(px, sz[0], sz[1], q); var x = cv.getContext('2d', { colorSpace: CS }); x.putImageData(mkImageData(out, sz[0], sz[1]), 0, 0); }catch(e){}
+      }, 30 + i * 10);
+    });
+  }
+  function prefPick(i){
+    var o = prefLoad(), v = PM.cands[i];
+    // 選んだ案へ中心を半分寄せ、探す幅を少し狭める（狭めすぎない）
+    Object.keys(PREF_DEF).forEach(function(k){ o.mu[k] = prefClamp(k, o.mu[k] + (v[k] - o.mu[k]) * 0.5); o.sig[k] = Math.max(PREF_DEF[k][1] * 0.35, o.sig[k] * 0.88); });
+    o.n++; prefSave(o);
+    applyPref(v); toast('選んだ案を当てました。好みを学習しました（' + o.n + '回）');
+    prefRound();
+  }
   function autoSubject(){
     if (!REG.ready || !AUTO) return;
     var L = P.reg.list;
@@ -4528,10 +4638,20 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   function syncAutoUI(){
     var box = XE.autoBox; if (!box) return;
     box.hidden = !AUTO;
-    var c = alCount(); XE.autoLearn.textContent = c ? '好みの学習：' + c + '枚分' : '書き出すたびに、好みを学習します';
-    XE.autoForget.hidden = !c;
+    var c = alCount(), pn = prefLoad().n; XE.autoLearn.textContent = AUTO && AUTO.kind === 'pref' ? '選んだ回数：' + pn : (c ? '好みの学習：' + c + '枚分' : '書き出すたびに、好みを学習します');
+    XE.autoForget.hidden = !(c || pn);
     if (!AUTO) return;
-    var isRef = AUTO.kind === 'ref';
+    var isRef = AUTO.kind === 'ref', isPref = AUTO.kind === 'pref';
+    XE.prefBtn.hidden = !isPref; XE.prefInfo.hidden = !isPref;
+    if (isPref){
+      var po = prefLoad(); XE.autoSeg.hidden = true;
+      XE.autoHead.textContent = '好みのルック' + (po.n ? '（' + po.n + '回選んで学習済み）' : '（まだ学習前）');
+      ['bright', 'light', 'air', 'blue', 'str', 'amt'].forEach(function(k){ var r = XE.autoR[k]; r.row.style.display = k === 'bright' ? '' : 'none'; if (k === 'bright'){ r.i.value = AUTO.macro.bright; r.v.textContent = AUTO.macro.bright; } });
+      XE.autoAi.hidden = true;
+      XE.prefInfo.innerHTML = Object.keys(PREF_DEF).map(function(k){ var v = AUTO.v[k]; return '<span>' + PREF_NAME[k] + ' <b>' + (k === 'lift' || k === 'white' ? Math.round(v * 100) : Math.round(v)) + '</b></span>'; }).join('');
+      XE.autoSt.textContent = '光・ぼかし・粒子は今の設定のまま。「6案から選ぶ」を続けるほど好みに近づきます';
+      return;
+    }
     XE.autoSeg.hidden = !isRef;
     Array.prototype.forEach.call(XE.autoSeg.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.look); });
     XE.autoHead.textContent = isRef ? '見本ルック：' + REF_NAME[AUTO.look] : 'おまかせ：' + AUTO_NAME[AUTO.look] + (AUTO.notes.length ? '（' + AUTO.notes.join('・') + 'も補正）' : '');
@@ -4553,6 +4673,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       row.appendChild(lb); row.appendChild(r); row.appendChild(v); box.appendChild(row); XE.autoR[d[0]] = { i: r, v: v, row: row };
       r.addEventListener('input', function(){
         if (!AUTO) return; AUTO.macro[d[0]] = +r.value; v.textContent = r.value;
+        if (AUTO.kind === 'pref'){ if (d[0] === 'bright') setVal('bExp', Math.round(AUTO.nz.bExp + AUTO.macro.bright * 0.6)); schedule(); return; }
         if (AUTO.kind === 'ref'){
           if (d[0] === 'bright') setVal('bExp', Math.round(AUTO.nz.bExp + AUTO.macro.bright * 0.6));
           else if (d[0] === 'amt') setVal('mAmt', AUTO.macro.amt);
@@ -4564,10 +4685,12 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       lb.addEventListener('dblclick', function(){ if (!AUTO || AUTO.kind === 'ref') return; AUTO.macro[d[0]] = d[0] === 'light' ? Math.round((TK_PRESETS[TK_AUTO_LOOK[AUTO.look]].glow || 12) / 0.6) : 0; syncAutoUI(); autoMacro(); });
     });
     XE.autoAi = xbtn('AIで人物・主役も合わせる', 'ghost', function(){ if (AUTO) autoSubjectRun(); }); box.appendChild(XE.autoAi);
+    XE.prefBtn = xbtn('6案から選ぶ', '', function(){ prefOpen(); }); XE.prefBtn.hidden = true; box.appendChild(XE.prefBtn);
+    XE.prefInfo = xel('div', 'prefinfo'); XE.prefInfo.hidden = true; box.appendChild(XE.prefInfo);
     XE.autoSt = xel('div', 'rstat', ''); box.appendChild(XE.autoSt);
     var lr = xel('div', 'autolearn'); XE.autoLearn = xel('span', '', ''); lr.appendChild(XE.autoLearn);
     XE.autoForget = xel('button', 'linkbtn', '学習を消す'); XE.autoForget.type = 'button';
-    XE.autoForget.addEventListener('click', function(){ if (!confirm('おまかせの学習を消して、初期の目標に戻しますか？')) return; alSave({}); syncAutoUI(); toast('学習を消しました'); });
+    XE.autoForget.addEventListener('click', function(){ if (!confirm('学習（おまかせ・好みのルック）を消して、初期の状態に戻しますか？')) return; alSave({}); try{ localStorage.removeItem(PREF_K); }catch(e){} syncAutoUI(); toast('学習を消しました'); });
     lr.appendChild(XE.autoForget); box.appendChild(lr);
     parent.appendChild(box);
   }
@@ -4734,6 +4857,9 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       q = JSON.parse(JSON.stringify(o.P)); q.on = q.on || {}; q.on.reg = 0; q.mix = q.mix == null ? 100 : q.mix; return q;
     }
     var p = TK_PRESETS[key] || {};
+    if (p.pref){
+      var smp = autoSmall(), qp = JSON.parse(JSON.stringify(P)); qp.mix = 100; qp.on.reg = 0; prefToP(qp, prefLoad().mu, tkNormFit(smp.px, smp.w, smp.h), 0, false); return qp;
+    }
     if (p.ref){
       var sm2 = autoSmall(), n2 = sm2.w * sm2.h, s2 = tkAutoStats(sm2.px, n2, null), sc2 = tkRefScene(s2, aiPersonHint()), q2 = JSON.parse(JSON.stringify(P)); q2.mix = 100; q2.on.reg = 0;
       var L2 = alLoad()['ref_' + sc2] || {};
