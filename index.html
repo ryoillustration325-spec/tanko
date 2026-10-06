@@ -398,7 +398,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v33</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v34</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1239,6 +1239,16 @@ function tkSkinSmooth(img, w, h, P){
 
 var TK_PRESETS = {
   none:   { label: 'なし（手動）' },
+  // 深い青（黒を浮かせ白を抑えたローキー＋ティールの影）：基本補正・カーブ・グレーディングまで一式で入れる
+  blue_std: { label: '深い青 標準', grain: 10, glow: 12, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
+    on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
+    full: {"bExp": -8, "bCon": 8, "bHi": -10, "bSh": -5, "bWh": 0, "bBl": -25, "bSat": -10, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.09], [0.25, 0.22], [0.5, 0.45], [0.75, 0.71], [1, 0.91]]}, "cgsH": 195, "cgsS": 22, "cgsL": -4, "cgmH": 195, "cgmS": 10, "cgmL": 0, "cghH": 40, "cghS": 4, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
+  blue_night: { label: '深い青 夜', grain: 12, glow: 18, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
+    on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
+    full: {"bExp": -28, "bCon": 12, "bHi": -15, "bSh": -12, "bWh": -5, "bBl": -30, "bSat": -22, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.08], [0.25, 0.17], [0.5, 0.38], [0.75, 0.66], [1, 0.87]]}, "cgsH": 195, "cgsS": 30, "cgsL": -6, "cgmH": 198, "cgmS": 14, "cgmL": 0, "cghH": 40, "cghS": 6, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
+  blue_pale: { label: '深い青 淡', grain: 8, glow: 8, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
+    on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
+    full: {"bExp": 2, "bCon": -5, "bHi": -10, "bSh": 5, "bWh": 0, "bBl": -15, "bSat": -14, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.11], [0.25, 0.28], [0.5, 0.52], [0.75, 0.75], [1, 0.93]]}, "cgsH": 195, "cgsS": 16, "cgsL": 0, "cgmH": 195, "cgmS": 7, "cgmL": 0, "cghH": 40, "cghS": 3, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
   fuwari: { label: 'ふんわり輪郭', target: 54, thr: 60, diff: 70, diffR: 9, glow: 15, glowR: 10, hal: 0, comp: 25, mist: 10, lift: 8, roll: 8, con: -6, sat: -6, shb: 6, hiw: 8, grain: 10,
             on: { bright: 1, diff: 1, glow: 1, hal: 0, comp: 1, mist: 1, tone: 1, split: 1, grain: 1 } },
   waao:   { label: '和青ソフト', target: 54, thr: 66, diff: 40, diffR: 6, glow: 28, glowR: 12, hal: 6, comp: 30, mist: 6, lift: 6, roll: 10, con: -4, sat: -10, shb: 14, hiw: 4, grain: 10,
@@ -1945,8 +1955,27 @@ function tkOldLens(img, w, h, P){
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
   function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg' || k === 'fx' || k === 'det'; }
   function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
+  // 一式プリセット（深い青など）：基本補正・ミキサー・カーブ・グレーディングまで入れる
+  var FULL_ON = ['basic', 'wb', 'mix', 'crv', 'cg', 'fx', 'det'];
+  function fullInto(q, f, live){
+    Object.keys(DEFAULTS).forEach(function(k){ if (!isBasicKey(k)) return; var v = (f && k in f) ? f[k] : DEFAULTS[k]; if (live) setVal(k, v); else q[k] = v; });
+    var c = { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] };
+    if (f && f.crv) Object.keys(f.crv).forEach(function(ch){ c[ch] = JSON.parse(JSON.stringify(f.crv[ch])); });
+    q.crv = c;
+    ['s','m','h','g'].forEach(function(r){ ['H','S','L'].forEach(function(t){ var k = 'cg' + r + t; q[k] = (f && k in f) ? f[k] : 0; }); });
+    q.cgBlend = (f && 'cgBlend' in f) ? f.cgBlend : 50; q.cgBal = (f && 'cgBal' in f) ? f.cgBal : 0;
+    if (f){ FULL_ON.forEach(function(k){ q.on[k] = 1; }); q.on.grain = 1; }
+  }
+  var LAST_FULL = false;
   function applyPreset(key){
     var p = TK_PRESETS[key];
+    if (p.full || LAST_FULL){
+      fullInto(P, p.full || null, true);
+      FULL_ON.concat(['grain']).forEach(function(k){ syncGroup(k); });
+      if (typeof syncGrade === 'function') try{ syncGrade(); }catch(e){}
+      if (typeof drawCurve === 'function') try{ drawCurve(); }catch(e){}
+      LAST_FULL = !!p.full;
+    }
     if (key === 'none'){
       Object.keys(DEFAULTS).forEach(function(k){ if (!isBasicKey(k)) setVal(k, DEFAULTS[k]); });
       Object.keys(P.on).forEach(function(k){ if (KEEP_ON[k] && isBasicGroup(k)) return; P.on[k] = OFF_KEYS[k] ? 0 : 1; syncGroup(k); }); P.mref = null; P.mMode = 'part'; updateExtras(); setMode('B');
@@ -4236,6 +4265,7 @@ function tkOldLens(img, w, h, P){
     Object.keys(DEFAULTS).forEach(function(k){ q[k] = (key !== 'none' && k in p) ? p[k] : DEFAULTS[k]; });
     if (p.rMode) q.rMode = p.rMode;
     Object.keys(q.on).forEach(function(k){ if (KEEP_ON[k]) return; q.on[k] = (key !== 'none' && p.on && (k in p.on)) ? (p.on[k] ? 1 : 0) : (OFF_KEYS[k] ? 0 : 1); });
+    if (key !== 'none' && p.full) fullInto(q, p.full, false); else if (LAST_FULL) fullInto(q, null, false);
     q.on.reg = 0; return q;
   }
   function renderLookThumbs(){
