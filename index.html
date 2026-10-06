@@ -419,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v46</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v47</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2089,16 +2089,16 @@ function tkLkEval(L, r, g, b, o){
 }
 function tkLook2(img, n, P){
   if (!P.on || !P.on.look2) return;
-  var amt = (P.lkAmt == null ? 100 : P.lkAmt) / 100, hue = (P.lkHue || 0) / 100, sk = (P.lkSkin || 0) / 100;
+  var amt = (P.lkAmt == null ? 100 : P.lkAmt) / 100, hue = (P.lkHue || 0) / 100, sk = (P.lkSkin || 0) / 100, bl = (P.lkBlend == null ? 40 : P.lkBlend) / 100;
   if (amt <= 0 && !hue && !sk) return;
-  var key = [amt, hue, sk].join(',');
+  var key = [amt, hue, sk, bl].join(',');
   if (TK_LUTC.lkK !== key){
     var L = tkLkBase(), N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], k = [0, 0, 0], p = 0;
     for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
       var r = ri / 32, g = gi / 32, b = bi / 32;
       tkLkEval(L, r, g, b, o);
       var R = r + (o[0] - r) * amt, G = g + (o[1] - g) * amt, B = b + (o[2] - b) * amt;
-      if (hue || sk){
+      if (hue || sk || bl){
         tkToOk(tkClamp01(R), tkClamp01(G), tkClamp01(B), k);
         var Lk = k[0], A = k[1], Bk = k[2], C = Math.sqrt(A * A + Bk * Bk), h = Math.atan2(Bk, A) * 180 / Math.PI; if (h < 0) h += 360;
         // 青の向き：寒色（OKLabで色相 180〜290 度あたり）だけを回す。紺＝深い青へ回して少し暗く濃く、青緑＝シアン側へ
@@ -2110,6 +2110,11 @@ function tkLook2(img, n, P){
             if (hue > 0){ Lk -= hue * 0.03 * wc * Math.min(1, C / 0.06); C *= 1 + hue * 0.12 * wc; }
             else { C *= 1 + (-hue) * 0.05 * wc; }
           }
+        }
+        // 青を馴染ませる：鮮やかな青ほど彩度を少し落とし、周りの明るさに寄せる（他の色から浮いてパキッと見えない）
+        if (bl && C > 0.01){
+          var wb = (1 - tkSS((Math.abs(tkHueDist(h, 240)) - 35) / 25)) * tkSS((C - 0.03) / 0.08);
+          if (wb > 0){ C *= 1 - bl * 0.35 * wb; Lk += (0.6 - Lk) * bl * 0.08 * wb; h += (215 - h) * bl * 0.15 * wb; }
         }
         // 肌を暖かく：肌の色相（OKLabでおよそ 30〜80 度）だけ、少し暖かく・明るく
         if (sk && C > 0.01){
@@ -4676,8 +4681,8 @@ function tkLook2(img, n, P){
     fullInto(P, null, true); LAST_FULL = true;
     if (P.mref && (P.mref.ref2 || P.mMode === 'safe')){ P.on.match = 0; P.mref = null; }
     ['basic', 'wb', 'mix', 'crv', 'cg', 'match'].forEach(syncGroup);
-    P.on.look2 = 1; P.lkAmt = Math.round(L.amt != null ? L.amt : 100); P.lkHue = Math.round(L.hue || 0); P.lkSkin = Math.round(L.skin != null ? L.skin : 0);
-    AUTO = { kind: 'lk', look: 'lk', learned: false, macro: { bright: 0, lkAmt: P.lkAmt, lkHue: P.lkHue, lkSkin: P.lkSkin }, notes: [] };
+    P.on.look2 = 1; P.lkAmt = Math.round(L.amt != null ? L.amt : 100); P.lkHue = Math.round(L.hue || 0); P.lkSkin = Math.round(L.skin != null ? L.skin : 0); P.lkBlend = Math.round(L.blend != null ? L.blend : 40);
+    AUTO = { kind: 'lk', look: 'lk', learned: false, macro: { bright: 0, lkAmt: P.lkAmt, lkHue: P.lkHue, lkSkin: P.lkSkin, lkBlend: P.lkBlend }, notes: [] };
     try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
     markPreset('look2'); syncAutoUI(); schedule();
   }
@@ -4770,7 +4775,7 @@ function tkLook2(img, n, P){
     if (!AUTO || AUTO.learned || !AUTO.out) return;
     try{
       if (AUTO.kind === 'lk'){ var ol = alLoad(), Ll = ol.lk || { n: 0 }, al = Math.max(0.2, 1 / (Ll.n + 1));
-        [['amt', P.lkAmt], ['hue', P.lkHue], ['skin', P.lkSkin]].forEach(function(z){ Ll[z[0]] = Ll[z[0]] == null ? z[1] : Ll[z[0]] * (1 - al) + z[1] * al; });
+        [['amt', P.lkAmt], ['hue', P.lkHue], ['skin', P.lkSkin], ['blend', P.lkBlend]].forEach(function(z){ Ll[z[0]] = Ll[z[0]] == null ? z[1] : Ll[z[0]] * (1 - al) + z[1] * al; });
         Ll.n = Math.min(99, Ll.n + 1); ol.lk = Ll; alSave(ol); AUTO.learned = true; syncAutoUI(); return; }
       var key = AUTO.kind === 'ref' ? 'ref_' + AUTO.look : AUTO.look;
       var st = autoMeasure(AUTO.sm, P), o = alLoad(), L = o[key] || { n: 0 }, a = Math.max(0.2, 1 / (L.n + 1));
@@ -4799,7 +4804,7 @@ function tkLook2(img, n, P){
     if (isLk){
       XE.prefBtn.hidden = true; XE.prefInfo.hidden = true; XE.autoSeg.hidden = true; XE.autoAi.hidden = true;
       XE.autoHead.textContent = '青の光（自分の仕上げから学習）';
-      Object.keys(XE.autoR).forEach(function(k){ var r = XE.autoR[k], show = k === 'bright' || k === 'lkAmt' || k === 'lkHue' || k === 'lkSkin'; r.row.style.display = show ? '' : 'none'; if (show){ r.i.value = AUTO.macro[k]; r.v.textContent = AUTO.macro[k]; } });
+      Object.keys(XE.autoR).forEach(function(k){ var r = XE.autoR[k], show = k === 'bright' || k === 'lkAmt' || k === 'lkHue' || k === 'lkBlend' || k === 'lkSkin'; r.row.style.display = show ? '' : 'none'; if (show){ r.i.value = AUTO.macro[k]; r.v.textContent = AUTO.macro[k]; } });
       XE.autoSt.textContent = '青の向き：左で青緑、右で紺。肌の温度で肌だけ暖かく。光・ぼかし・粒子は今の設定のまま';
       return;
     }
@@ -4829,7 +4834,7 @@ function tkLook2(img, n, P){
     var seg = xel('div', 'seg autoseg'); XE.autoSeg = seg;
     [['person', '人物'], ['land', '風景'], ['dark', '暗い場面']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.s = d[0]; b.addEventListener('click', function(){ applyRef(d[0]); }); seg.appendChild(b); });
     box.appendChild(seg);
-    [['bright', '明るさ', -50, 50], ['lkAmt', '強さ', 0, 100], ['lkHue', '青の向き（青緑↔紺）', -100, 100], ['lkSkin', '肌の温度', 0, 100], ['str', '見本の強さ', 0, 100], ['amt', '部分の仕上げ', 0, 100], ['light', '光', 0, 100], ['air', '空気感', 0, 100], ['blue', '青さ', -50, 50]].forEach(function(d){
+    [['bright', '明るさ', -50, 50], ['lkAmt', '強さ', 0, 100], ['lkHue', '青の向き（青緑↔紺）', -100, 100], ['lkBlend', '青の馴染み', 0, 100], ['lkSkin', '肌の温度', 0, 100], ['str', '見本の強さ', 0, 100], ['amt', '部分の仕上げ', 0, 100], ['light', '光', 0, 100], ['air', '空気感', 0, 100], ['blue', '青さ', -50, 50]].forEach(function(d){
       var row = xel('div', 'row'); var lb = xel('label', '', d[1]); var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3]; var v = xel('span', 'val num', '0');
       row.appendChild(lb); row.appendChild(r); row.appendChild(v); box.appendChild(row); XE.autoR[d[0]] = { i: r, v: v, row: row };
       r.addEventListener('input', function(){
@@ -5021,7 +5026,7 @@ function tkLook2(img, n, P){
     var p = TK_PRESETS[key] || {};
     if (p.lk){
       var ql = JSON.parse(JSON.stringify(P)); ql.mix = 100; ql.on.reg = 0; fullInto(ql, null, false); var Lq = alLoad().lk || {};
-      ql.on.look2 = 1; ql.lkAmt = Lq.amt != null ? Lq.amt : 100; ql.lkHue = Lq.hue || 0; ql.lkSkin = Lq.skin || 0; return ql;
+      ql.on.look2 = 1; ql.lkAmt = Lq.amt != null ? Lq.amt : 100; ql.lkHue = Lq.hue || 0; ql.lkSkin = Lq.skin || 0; ql.lkBlend = Lq.blend != null ? Lq.blend : 40; return ql;
     }
     if (p.pref){
       var smp = autoSmall(), qp = JSON.parse(JSON.stringify(P)); qp.mix = 100; qp.on.reg = 0; prefToP(qp, prefLoad().mu, tkNormFit(smp.px, smp.w, smp.h), 0, false, smp); return qp;
