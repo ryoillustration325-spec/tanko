@@ -419,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v43</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v44</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4490,7 +4490,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   // ---------- 好みのルック：6案から一番いいものを選ぶ → 選んだ方向へ中心を寄せ、探す幅を少しずつ狭める（好みを学ぶ） ----------
   // 動かす要素（デザインの軸）：色数を絞る・影の色・影の色の強さ・濃さ・黒の浮き・白の抑え・彩度・色温度
   var PREF_K = 'retouch-pref';
-  var PREF_DEF = { sep: [55, 35, 0, 100], sh: [192, 30, 140, 240], ss: [18, 12, 0, 45], dens: [20, 18, 0, 60], lift: [0.05, 0.05, 0, 0.18], white: [0.92, 0.045, 0.8, 1], sat: [0, 12, -35, 25], temp: [-4, 9, -28, 18], mc: [0.7, 0.35, -0.3, 1.3], roll: [0.45, 0.3, 0, 1], mt: [16, 8, 0, 34], csep: [50, 25, 0, 95] };
+  var PREF_DEF = { sep: [40, 30, 0, 100], sh: [200, 25, 140, 240], ss: [10, 8, 0, 40], dens: [38, 15, 0, 65], lift: [0.09, 0.04, 0, 0.18], white: [0.82, 0.05, 0.68, 1], sat: [0, 10, -30, 25], temp: [-8, 8, -28, 15], mc: [0.75, 0.3, -0.3, 1.3], roll: [0.45, 0.3, 0, 1], mt: [12, 7, 0, 34], csep: [50, 22, 0, 95] };
   var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度', mc: '中間のコントラスト', roll: 'ハイライトの丸み', mt: '全体の色調', csep: '色の分離' };
   function prefLoad(){
     var o = null; try{ o = JSON.parse(localStorage.getItem(PREF_K)); }catch(e){}
