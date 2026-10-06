@@ -398,7 +398,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v34</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v35</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -843,8 +843,21 @@ function tkBasicActive(P){
 }
 function tkMixActive(P){
   if (!P.on || !P.on.mix) return false;
+  if (P.mxSep) return true;
   for (var i = 0; i < 8; i++) if (P['mh' + i] || P['ms' + i] || P['ml' + i]) return true;
   return false;
+}
+// 色分け（キャリブレーションの「青の原色」相当）：暖色は橙へ、寒色は青緑へ押し分ける。返り値は [色相のずれ(度), 彩度の増分]
+var TK_SEP_WARM = 28, TK_SEP_COOL = 192;
+function tkHueDist(a, b){ var d = a - b; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
+function tkSepShift(hu, sep){
+  var dw = tkHueDist(TK_SEP_WARM, hu), dc = tkHueDist(TK_SEP_COOL, hu);
+  // 暖色の帯（赤〜黄、おおよそ330〜80度）／寒色の帯（緑〜青、おおよそ110〜260度）。境目はなめらかに
+  var ww = 1 - tkSS((Math.abs(dw) - 40) / 25), wc = 1 - tkSS((Math.abs(dc) - 55) / 30);
+  var dh = 0, ds = 0;
+  if (ww > 0){ dh += ww * Math.max(-12, Math.min(12, dw * 0.4)); ds += ww * 0.12; }
+  if (wc > 0){ dh += wc * Math.max(-26, Math.min(26, dc * 0.45)); ds += wc * 0.10; }
+  return [dh * sep, ds * sep];
 }
 function tkCurveActive(P){
   if (!P.on || !P.on.crv || !P.crv) return false;
@@ -983,7 +996,7 @@ function tkBasic(img, w, h, P){
       DL[hd] = ((P['ml' + k0] || 0) * (1 - tt) + (P['ml' + k1] || 0) * tt) / 100;
     }
     // 色の変換を 33×33×33 の立体の表にしてから、各画素は表から補間で読む（速さ対策）
-    var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), px = new Float32Array(3);
+    var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), px = new Float32Array(3), SEP = (P.mxSep || 0) / 100;
     function mixOne(r3, g3, b3){
       var mx3 = Math.max(r3, g3, b3), mn3 = Math.min(r3, g3, b3), ch3 = mx3 - mn3;
       px[0] = r3; px[1] = g3; px[2] = b3;
@@ -994,6 +1007,7 @@ function tkBasic(img, w, h, P){
       var hix = hu | 0; if (hix > 359) hix = 359;
       var wv = tkSS((ch3 / Math.max(mx3, 1e-4) - 0.04) / 0.16) * tkSS((ch3 - 0.02) / 0.06);
       var dh = DH[hix] * wv, ds = DS[hix] * wv, dl = DL[hix] * wv;
+      if (SEP){ var sp = tkSepShift(hu, SEP); dh += sp[0] * wv; ds += sp[1] * wv; }
       if (!dh && !ds && !dl) return;
       var Y3 = 0.299 * r3 + 0.587 * g3 + 0.114 * b3, I3 = 0.596 * r3 - 0.274 * g3 - 0.322 * b3, Q3 = 0.211 * r3 - 0.523 * g3 + 0.312 * b3;
       if (dh){ var an = dh * Math.PI / 180, cs = Math.cos(an), sn = Math.sin(an), I4 = I3 * cs - Q3 * sn; Q3 = I3 * sn + Q3 * cs; I3 = I4; }
@@ -1027,13 +1041,24 @@ function tkGrade(img, n, P){
   var R = {}, i;
   TK_CG_R.forEach(function(r){ var d = tkHueDir(P['cg' + r + 'H'] || 0), s = (P['cg' + r + 'S'] || 0) / 100 * 0.12; R[r] = { b: d[0] * s, r: d[1] * s, l: (P['cg' + r + 'L'] || 0) / 100 }; });
   var bl = (P.cgBlend == null ? 50 : P.cgBlend) / 100, ba = (P.cgBal || 0) / 100;
-  var wd = 0.05 + 0.25 * bl, p1 = 0.33 - ba * 0.2, p2 = 0.67 - ba * 0.2;
+  var wd = 0.05 + 0.25 * bl, p1 = 0.33 - ba * 0.2, p2 = 0.67 - ba * 0.2, sk = (P.cgSkin || 0) / 100;
   var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = 0;
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     var rr = ri / 32, gg = gi / 32, bb = bi / 32, Y = 0.299 * rr + 0.587 * gg + 0.114 * bb, Cb = (bb - Y) * 0.564, Cr = (rr - Y) * 0.713;
     var ws = 1 - tkSS((Y - (p1 - wd)) / (2 * wd)), wh = tkSS((Y - (p2 - wd)) / (2 * wd)), wm = Math.max(0, 1 - ws - wh);
     // 黒と白の端では色を弱める（真っ黒・真っ白に色が乗りすぎない）
     var edge = tkSS(Y / 0.06) * (1 - tkSS((Y - 0.94) / 0.06));
+    // 肌色を避ける：橙の帯（肌・暖色）には色を乗せない＝補色が混ざって濁らない。明るさの調整はそのまま
+    if (sk){
+      var mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb), ch = mx - mn;
+      if (ch > 0.004){
+        var hu = mx === rr ? 60 * (((gg - bb) / ch) % 6) : (mx === gg ? 60 * ((bb - rr) / ch + 2) : 60 * ((rr - gg) / ch + 4)); if (hu < 0) hu += 360;
+        var hw = 1 - tkSS((Math.abs(tkHueDist(hu, 27)) - 22) / 20);
+        // 暗い所は色が薄くても肌として扱う（頬の影が対象）
+        var cw = tkSS((ch / Math.max(mx, 0.02) - 0.05) / 0.12);
+        edge *= 1 - sk * hw * cw;
+      }
+    }
     Cb += (ws * R.s.b + wm * R.m.b + wh * R.h.b + R.g.b) * edge; Cr += (ws * R.s.r + wm * R.m.r + wh * R.h.r + R.g.r) * edge;
     var dl = ws * R.s.l + wm * R.m.l + wh * R.h.l + R.g.l;
     if (dl) Y += dl * 0.22 * (dl > 0 ? (1 - Y) : Y) * 2;
@@ -1242,13 +1267,13 @@ var TK_PRESETS = {
   // 深い青（黒を浮かせ白を抑えたローキー＋ティールの影）：基本補正・カーブ・グレーディングまで一式で入れる
   blue_std: { label: '深い青 標準', grain: 10, glow: 12, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
     on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
-    full: {"bExp": -8, "bCon": 8, "bHi": -10, "bSh": -5, "bWh": 0, "bBl": -25, "bSat": -10, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.09], [0.25, 0.22], [0.5, 0.45], [0.75, 0.71], [1, 0.91]]}, "cgsH": 195, "cgsS": 22, "cgsL": -4, "cgmH": 195, "cgmS": 10, "cgmL": 0, "cghH": 40, "cghS": 4, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
+    full: {"bExp": -8, "bCon": 8, "bHi": -10, "bSh": -5, "bBl": -25, "bSat": -10, "cgsH": 195, "cgsS": 18, "cgsL": -4, "cgmH": 195, "cgmS": 8, "cghH": 40, "cghS": 4, "cgBlend": 40, "cgBal": -20, "mh1": 4, "ms1": 8, "ml1": 6, "ms2": -15, "mh3": 25, "ms3": -30, "ml3": -10, "ms4": -10, "mh5": -8, "ms5": -5, "mxSep": 50, "bTemp": -8, "cgSkin": 85, "crv": {"rgb": [[0, 0.09], [0.25, 0.22], [0.5, 0.45], [0.75, 0.71], [1, 0.91]]}} },
   blue_night: { label: '深い青 夜', grain: 12, glow: 18, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
     on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
-    full: {"bExp": -28, "bCon": 12, "bHi": -15, "bSh": -12, "bWh": -5, "bBl": -30, "bSat": -22, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.08], [0.25, 0.17], [0.5, 0.38], [0.75, 0.66], [1, 0.87]]}, "cgsH": 195, "cgsS": 30, "cgsL": -6, "cgmH": 198, "cgmS": 14, "cgmL": 0, "cghH": 40, "cghS": 6, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
+    full: {"bExp": -28, "bCon": 12, "bHi": -15, "bSh": -12, "bWh": -5, "bBl": -30, "bSat": -22, "cgsH": 195, "cgsS": 24, "cgsL": -6, "cgmH": 198, "cgmS": 10, "cghH": 40, "cghS": 6, "cgBlend": 40, "cgBal": -20, "mh1": 4, "ms1": 8, "ml1": 6, "ms2": -15, "mh3": 25, "ms3": -30, "ml3": -10, "ms4": -10, "mh5": -8, "ms5": -5, "mxSep": 50, "bTemp": -12, "cgSkin": 85, "crv": {"rgb": [[0, 0.08], [0.25, 0.17], [0.5, 0.38], [0.75, 0.66], [1, 0.87]]}} },
   blue_pale: { label: '深い青 淡', grain: 8, glow: 8, glowR: 14, thr: 72, skAmt: 25, skShift: 0,
     on: { diff: 0, glow: 1, hal: 0, comp: 0, mist: 0, ray: 0, lens: 0, grad: 0, dens: 0, skin: 1 },
-    full: {"bExp": 2, "bCon": -5, "bHi": -10, "bSh": 5, "bWh": 0, "bBl": -15, "bSat": -14, "bVib": 0, "ms3": -30, "mh3": 25, "ml3": -10, "ms4": -15, "ms5": -10, "mh5": -6, "ms2": -15, "ms0": -10, "ms1": -5, "ml1": 4, "crv": {"rgb": [[0, 0.11], [0.25, 0.28], [0.5, 0.52], [0.75, 0.75], [1, 0.93]]}, "cgsH": 195, "cgsS": 16, "cgsL": 0, "cgmH": 195, "cgmS": 7, "cgmL": 0, "cghH": 40, "cghS": 3, "cghL": 0, "cgBlend": 60, "cgBal": -10} },
+    full: {"bExp": 2, "bCon": -5, "bHi": -10, "bSh": 5, "bBl": -15, "bSat": -14, "cgsH": 195, "cgsS": 12, "cgmH": 195, "cgmS": 6, "cghH": 40, "cghS": 3, "cgBlend": 40, "cgBal": -20, "mh1": 4, "ms1": 8, "ml1": 6, "ms2": -15, "mh3": 25, "ms3": -30, "ml3": -10, "ms4": -10, "mh5": -8, "ms5": -5, "mxSep": 50, "bTemp": -5, "cgSkin": 85, "crv": {"rgb": [[0, 0.11], [0.25, 0.28], [0.5, 0.52], [0.75, 0.75], [1, 0.93]]}} },
   fuwari: { label: 'ふんわり輪郭', target: 54, thr: 60, diff: 70, diffR: 9, glow: 15, glowR: 10, hal: 0, comp: 25, mist: 10, lift: 8, roll: 8, con: -6, sat: -6, shb: 6, hiw: 8, grain: 10,
             on: { bright: 1, diff: 1, glow: 1, hal: 0, comp: 1, mist: 1, tone: 1, split: 1, grain: 1 } },
   waao:   { label: '和青ソフト', target: 54, thr: 66, diff: 40, diffR: 6, glow: 28, glowR: 12, hal: 6, comp: 30, mist: 6, lift: 6, roll: 10, con: -4, sat: -10, shb: 14, hiw: 4, grain: 10,
@@ -1761,8 +1786,8 @@ function tkOldLens(img, w, h, P){
       hint: '写真の上の枠をドラッグで移動、四隅で大きさを変えます。Instagramは 4:5・3:4・1:1 がそのまま載る比率です。' },
     { key: 'mix', title: 'カラーミキサー', sub: '8色それぞれの色相・彩度・輝度',
       modes: [['h','色相'],['s','彩度'],['l','輝度']],
-      sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l']],
-      hint: '色相は ±30度まで。グレーや白には効きません。' },
+      sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l'],['mxSep','色分け（暖色→橙／寒色→青緑）',0,100,0]],
+      hint: '色相は ±30度まで。グレーや白には効きません。「色分け」は暖色と寒色を押し分けて、肌は橙・影や緑は青緑に（色が混ざらない）。' },
     { key: 'cg', title: 'カラーグレーディング', sub: 'シャドウ・中間調・ハイライト・全体に色と明るさ', sliders: [], custom: buildGradeExtra,
       hint: 'ホイールをなぞると、向きで色、中心からの距離で強さが決まります。ダブルタップで中心へ。「調整」でブレンド（境目のなめらかさ）とバランス（影とハイライトの境の位置）。' },
     { key: 'crv', title: 'トーンカーブ', sub: '点を動かして明るさと色を細かく', sliders: [], custom: buildCurveExtra,
@@ -1862,7 +1887,8 @@ function tkOldLens(img, w, h, P){
   P.lm = []; P.on.lm = 1;
   P.geo = { rot: 0, flip: 0, ang: 0, x: 0, y: 0, w: 1, h: 1, asp: 'orig' };
   ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0;
-  function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; }
+  function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; P.cgSkin = 0; }
+  P.cgSkin = 0;
   P.dmode = 'B';
   P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null; P.mMode = 'part';
   var PICK = null, FEED = [], FEEDPOS = 0, XE = {};
@@ -1954,7 +1980,7 @@ function tkOldLens(img, w, h, P){
   var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1, lm: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
   function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg' || k === 'fx' || k === 'det'; }
-  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
+  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|mxSep|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
   // 一式プリセット（深い青など）：基本補正・ミキサー・カーブ・グレーディングまで入れる
   var FULL_ON = ['basic', 'wb', 'mix', 'crv', 'cg', 'fx', 'det'];
   function fullInto(q, f, live){
@@ -1963,7 +1989,7 @@ function tkOldLens(img, w, h, P){
     if (f && f.crv) Object.keys(f.crv).forEach(function(ch){ c[ch] = JSON.parse(JSON.stringify(f.crv[ch])); });
     q.crv = c;
     ['s','m','h','g'].forEach(function(r){ ['H','S','L'].forEach(function(t){ var k = 'cg' + r + t; q[k] = (f && k in f) ? f[k] : 0; }); });
-    q.cgBlend = (f && 'cgBlend' in f) ? f.cgBlend : 50; q.cgBal = (f && 'cgBal' in f) ? f.cgBal : 0;
+    q.cgBlend = (f && 'cgBlend' in f) ? f.cgBlend : 50; q.cgBal = (f && 'cgBal' in f) ? f.cgBal : 0; q.cgSkin = (f && 'cgSkin' in f) ? f.cgSkin : 0;
     if (f){ FULL_ON.forEach(function(k){ q.on[k] = 1; }); q.on.grain = 1; }
   }
   var LAST_FULL = false;
@@ -2942,7 +2968,7 @@ function tkOldLens(img, w, h, P){
       row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
     });
     // ブレンド・バランス
-    [['Blend', 'ブレンド', 0, 100], ['Bal', 'バランス', -100, 100]].forEach(function(d){
+    [['Blend', 'ブレンド', 0, 100], ['Bal', 'バランス', -100, 100], ['Skin', '肌色を避ける', 0, 100]].forEach(function(d){
       var row = xel('div', 'cgrow cgx-row'); var top = xel('div', 'cgtop'); var lb = xel('span', '', d[1]); var vv = xel('span', 'num', '0'); top.appendChild(lb); top.appendChild(vv);
       var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3];
       r.addEventListener('input', function(){ P['cg' + d[0]] = +r.value; vv.textContent = r.value; afterGrade(false); });
@@ -2996,7 +3022,7 @@ function tkOldLens(img, w, h, P){
     var sel = XE.cgSel, nm = cgRanges().filter(function(m){ return m[0] === sel; })[0][1];
     XE.cgBtns.forEach(function(b){
       var m = b.dataset.m; b.classList.toggle('on', m === sel);
-      var used = m === 'x' ? ((P.cgBlend != null && P.cgBlend !== 50) || !!P.cgBal) : !!(P['cg' + m + 'S'] || P['cg' + m + 'L']);
+      var used = m === 'x' ? ((P.cgBlend != null && P.cgBlend !== 50) || !!P.cgBal || !!P.cgSkin) : !!(P['cg' + m + 'S'] || P['cg' + m + 'L']);
       b.classList.toggle('used', used);
       if (m !== 'x'){ var dot = b.querySelector('.cgdot'); dot.style.boxShadow = P['cg' + m + 'S'] ? 'inset 0 0 0 3px hsl(' + (P['cg' + m + 'H'] || 0) + ',70%,60%)' : ''; }
     });
@@ -3004,7 +3030,7 @@ function tkOldLens(img, w, h, P){
     var isX = sel === 'x';
     XE.cgWheel.style.display = isX ? 'none' : '';
     ['H', 'S', 'L'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? 'none' : ''; if (!isX){ var v = P['cg' + sel + k] || 0; o.r.value = v; o.v.textContent = v; } });
-    ['Blend', 'Bal'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? '' : 'none'; var v = P['cg' + k]; if (v == null) v = k === 'Blend' ? 50 : 0; o.r.value = v; o.v.textContent = v; });
+    ['Blend', 'Bal', 'Skin'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? '' : 'none'; var v = P['cg' + k]; if (v == null) v = k === 'Blend' ? 50 : 0; o.r.value = v; o.v.textContent = v; });
     if (!isX){
       drawWheel();
       var h = P['cg' + sel + 'H'] || 0, s = (P['cg' + sel + 'S'] || 0) / 100, a = h * Math.PI / 180;
