@@ -419,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v41</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v42</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4488,11 +4488,13 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   // ---------- 好みのルック：6案から一番いいものを選ぶ → 選んだ方向へ中心を寄せ、探す幅を少しずつ狭める（好みを学ぶ） ----------
   // 動かす要素（デザインの軸）：色数を絞る・影の色・影の色の強さ・濃さ・黒の浮き・白の抑え・彩度・色温度
   var PREF_K = 'retouch-pref';
-  var PREF_DEF = { sep: [50, 35, 0, 100], sh: [195, 30, 140, 240], ss: [16, 12, 0, 45], dens: [15, 18, 0, 60], lift: [0.07, 0.05, 0, 0.18], white: [0.94, 0.045, 0.8, 1], sat: [-6, 12, -35, 25], temp: [-5, 9, -28, 18] };
-  var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度' };
+  var PREF_DEF = { sep: [50, 35, 0, 100], sh: [195, 30, 140, 240], ss: [16, 12, 0, 45], dens: [15, 18, 0, 60], lift: [0.07, 0.05, 0, 0.18], white: [0.94, 0.045, 0.8, 1], sat: [-6, 12, -35, 25], temp: [-5, 9, -28, 18], mc: [0.7, 0.35, -0.3, 1.3], roll: [0.4, 0.3, 0, 1] };
+  var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度', mc: '中間のコントラスト', roll: 'ハイライトの丸み' };
   function prefLoad(){
     var o = null; try{ o = JSON.parse(localStorage.getItem(PREF_K)); }catch(e){}
-    if (!o || !o.mu){ o = { mu: {}, sig: {}, n: 0 }; Object.keys(PREF_DEF).forEach(function(k){ o.mu[k] = PREF_DEF[k][0]; o.sig[k] = PREF_DEF[k][1]; }); }
+    if (!o || !o.mu) o = { mu: {}, sig: {}, n: 0 };
+    // 新しく増えた要素は初期値から（学習済みの値はそのまま）
+    Object.keys(PREF_DEF).forEach(function(k){ if (o.mu[k] == null){ o.mu[k] = PREF_DEF[k][0]; o.sig[k] = PREF_DEF[k][1]; } });
     return o;
   }
   function prefSave(o){ try{ localStorage.setItem(PREF_K, JSON.stringify(o)); }catch(e){} }
@@ -4520,8 +4522,12 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   }
   function prefToP(q, v, nz, bright, live){
     fullInto(q, null, live);
-    var lift = v.lift, wh = v.white;
-    var crv = { rgb: [[0, lift], [0.25, 0.25 + lift * 0.45], [0.5, 0.5], [0.75, 0.75 - (1 - wh) * 0.35], [1, wh]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] };
+    // トーンカーブ：黒の浮き・白の抑えに加えて、中間のコントラスト（中央を立てる＝くすまない芯）とハイライトの丸み（白へ向かう肩をやわらかく）
+    var lift = v.lift, wh = v.white, mc = v.mc == null ? 0.5 : v.mc, ro = v.roll == null ? 0.4 : v.roll;
+    var y = [lift, 0.25 + lift * 0.45 - mc * 0.07, 0.5, 0.75 - (1 - wh) * 0.3 + mc * 0.07, 0, wh];
+    var b90 = 0.9 + (wh - 1) * 0.75; y[4] = b90 + ro * (wh - b90) * 0.6;
+    for (var yi = 1; yi < 6; yi++) if (y[yi] < y[yi - 1] + 0.015) y[yi] = y[yi - 1] + 0.015;
+    var crv = { rgb: [[0, y[0]], [0.25, y[1]], [0.5, y[2]], [0.75, y[3]], [0.9, Math.min(1, y[4])], [1, Math.min(1, y[5])]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] };
     var kv = { mxSep: Math.round(v.sep), bSat: Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
     Object.keys(kv).forEach(function(k){ if (live) setVal(k, kv[k]); else q[k] = kv[k]; });
     q.crv = crv;
@@ -4648,7 +4654,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       XE.autoHead.textContent = '好みのルック' + (po.n ? '（' + po.n + '回選んで学習済み）' : '（まだ学習前）');
       ['bright', 'light', 'air', 'blue', 'str', 'amt'].forEach(function(k){ var r = XE.autoR[k]; r.row.style.display = k === 'bright' ? '' : 'none'; if (k === 'bright'){ r.i.value = AUTO.macro.bright; r.v.textContent = AUTO.macro.bright; } });
       XE.autoAi.hidden = true;
-      XE.prefInfo.innerHTML = Object.keys(PREF_DEF).map(function(k){ var v = AUTO.v[k]; return '<span>' + PREF_NAME[k] + ' <b>' + (k === 'lift' || k === 'white' ? Math.round(v * 100) : Math.round(v)) + '</b></span>'; }).join('');
+      XE.prefInfo.innerHTML = Object.keys(PREF_DEF).map(function(k){ var v = AUTO.v[k]; return '<span>' + PREF_NAME[k] + ' <b>' + (k === 'lift' || k === 'white' || k === 'mc' || k === 'roll' ? Math.round(v * 100) : Math.round(v)) + '</b></span>'; }).join('');
       XE.autoSt.textContent = '光・ぼかし・粒子は今の設定のまま。「6案から選ぶ」を続けるほど好みに近づきます';
       return;
     }
