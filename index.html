@@ -419,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v42</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v43</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -867,7 +867,7 @@ function tkBasicActive(P){
 }
 function tkMixActive(P){
   if (!P.on || !P.on.mix) return false;
-  if (P.mxSep) return true;
+  if (P.mxSep || P.cSep) return true;
   for (var i = 0; i < 8; i++) if (P['mh' + i] || P['ms' + i] || P['ml' + i]) return true;
   return false;
 }
@@ -1009,7 +1009,7 @@ function tkBasic(img, w, h, P){
     }
   }
   if (doM){
-    var mkey = 'm' + (P.mxSep || 0); for (var mk = 0; mk < 8; mk++) mkey += ',' + (P['mh' + mk] || 0) + ',' + (P['ms' + mk] || 0) + ',' + (P['ml' + mk] || 0);
+    var mkey = 'm' + (P.mxSep || 0) + '/' + (P.cSep || 0); for (var mk = 0; mk < 8; mk++) mkey += ',' + (P['mh' + mk] || 0) + ',' + (P['ms' + mk] || 0) + ',' + (P['ml' + mk] || 0);
     if (TK_LUTC.mixK === mkey){ tkApplyLut3(img, n, TK_LUTC.mix, 33); return; }
     // 色相ごとの表（360度）を作り、近い2色の間はなめらかにつなぐ
     var DH = new Float32Array(360), DS = new Float32Array(360), DL = new Float32Array(360), A = TK_MIX_HUES;
@@ -1022,7 +1022,7 @@ function tkBasic(img, w, h, P){
       DL[hd] = ((P['ml' + k0] || 0) * (1 - tt) + (P['ml' + k1] || 0) * tt) / 100;
     }
     // 色の変換を 33×33×33 の立体の表にしてから、各画素は表から補間で読む（速さ対策）
-    var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), px = new Float32Array(3), SEP = (P.mxSep || 0) / 100;
+    var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), px = new Float32Array(3), SEP = (P.mxSep || 0) / 100, CSEP = (P.cSep || 0) / 100;
     function mixOne(r3, g3, b3){
       var mx3 = Math.max(r3, g3, b3), mn3 = Math.min(r3, g3, b3), ch3 = mx3 - mn3;
       px[0] = r3; px[1] = g3; px[2] = b3;
@@ -1034,10 +1034,12 @@ function tkBasic(img, w, h, P){
       var wv = tkSS((ch3 / Math.max(mx3, 1e-4) - 0.04) / 0.16) * tkSS((ch3 - 0.02) / 0.06);
       var dh = DH[hix] * wv, ds = DS[hix] * wv, dl = DL[hix] * wv;
       if (SEP){ var sp = tkSepShift(hu, SEP); dh += sp[0] * wv; ds += sp[1] * wv; }
-      if (!dh && !ds && !dl) return;
+      if (!dh && !ds && !dl && !CSEP) return;
       var Y3 = 0.299 * r3 + 0.587 * g3 + 0.114 * b3, I3 = 0.596 * r3 - 0.274 * g3 - 0.322 * b3, Q3 = 0.211 * r3 - 0.523 * g3 + 0.312 * b3;
       if (dh){ var an = dh * Math.PI / 180, cs = Math.cos(an), sn = Math.sin(an), I4 = I3 * cs - Q3 * sn; Q3 = I3 * sn + Q3 * cs; I3 = I4; }
       if (ds){ var ks = 1 + ds; I3 *= ks; Q3 *= ks; }
+      // 色の分離：くすんだ半端な色は控えめに、もともと鮮やかな色（アクセント）は保つ・少し立てる＝色数が少なくまとまって見える
+      if (CSEP){ var C3 = Math.sqrt(I3 * I3 + Q3 * Q3); if (C3 > 1e-4){ var kc = 1 - CSEP * 0.45 * (1 - tkSS((C3 - 0.03) / 0.07)) + CSEP * 0.25 * tkSS((C3 - 0.08) / 0.08); I3 *= kc; Q3 *= kc; } }
       if (dl) Y3 = Y3 + dl * 0.3 * (dl > 0 ? (1 - Y3) : Y3);
       px[0] = tkClamp01(Y3 + 0.956 * I3 + 0.621 * Q3); px[1] = tkClamp01(Y3 - 0.272 * I3 - 0.647 * Q3); px[2] = tkClamp01(Y3 - 1.106 * I3 + 1.703 * Q3);
     }
@@ -2046,7 +2048,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       hint: '写真の上の枠をドラッグで移動、四隅で大きさを変えます。Instagramは 4:5・3:4・1:1 がそのまま載る比率です。' },
     { key: 'mix', title: 'カラーミキサー', sub: '8色それぞれの色相・彩度・輝度',
       modes: [['h','色相'],['s','彩度'],['l','輝度']],
-      sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l'],['mxSep','色分け（暖色→橙／寒色→青緑）',0,100,0]],
+      sliders: [['mh0','赤',-100,100,0,'h'],['mh1','橙',-100,100,0,'h'],['mh2','黄',-100,100,0,'h'],['mh3','緑',-100,100,0,'h'],['mh4','水色',-100,100,0,'h'],['mh5','青',-100,100,0,'h'],['mh6','紫',-100,100,0,'h'],['mh7','マゼンタ',-100,100,0,'h'],['ms0','赤',-100,100,0,'s'],['ms1','橙',-100,100,0,'s'],['ms2','黄',-100,100,0,'s'],['ms3','緑',-100,100,0,'s'],['ms4','水色',-100,100,0,'s'],['ms5','青',-100,100,0,'s'],['ms6','紫',-100,100,0,'s'],['ms7','マゼンタ',-100,100,0,'s'],['ml0','赤',-100,100,0,'l'],['ml1','橙',-100,100,0,'l'],['ml2','黄',-100,100,0,'l'],['ml3','緑',-100,100,0,'l'],['ml4','水色',-100,100,0,'l'],['ml5','青',-100,100,0,'l'],['ml6','紫',-100,100,0,'l'],['ml7','マゼンタ',-100,100,0,'l'],['mxSep','色分け（暖色→橙／寒色→青緑）',0,100,0],['cSep','色の分離（くすんだ色を控えめに）',0,100,0]],
       hint: '色相は ±30度まで。グレーや白には効きません。「色分け」は暖色と寒色を押し分けて、肌は橙・影や緑は青緑に（色が混ざらない）。' },
     { key: 'cg', title: 'カラーグレーディング', sub: 'シャドウ・中間調・ハイライト・全体に色と明るさ', sliders: [], custom: buildGradeExtra,
       hint: 'ホイールをなぞると、向きで色、中心からの距離で強さが決まります。ダブルタップで中心へ。「調整」でブレンド（境目のなめらかさ）とバランス（影とハイライトの境の位置）。' },
@@ -2240,7 +2242,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1, lm: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
   function isBasicGroup(k){ return k === 'basic' || k === 'wb' || k === 'mix' || k === 'crv' || k === 'cg' || k === 'fx' || k === 'det'; }
-  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|mxSep|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
+  function isBasicKey(k){ return /^(b[A-Z]|m[hsl]\d|mxSep|cSep|sh[A-Z]|nr[A-Z]|fx[A-Z]|vg[A-Z])/.test(k); }
   // 一式プリセット（深い青など）：基本補正・ミキサー・カーブ・グレーディングまで入れる
   var FULL_ON = ['basic', 'wb', 'mix', 'crv', 'cg', 'fx', 'det'];
   function fullInto(q, f, live){
@@ -4488,8 +4490,8 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
   // ---------- 好みのルック：6案から一番いいものを選ぶ → 選んだ方向へ中心を寄せ、探す幅を少しずつ狭める（好みを学ぶ） ----------
   // 動かす要素（デザインの軸）：色数を絞る・影の色・影の色の強さ・濃さ・黒の浮き・白の抑え・彩度・色温度
   var PREF_K = 'retouch-pref';
-  var PREF_DEF = { sep: [50, 35, 0, 100], sh: [195, 30, 140, 240], ss: [16, 12, 0, 45], dens: [15, 18, 0, 60], lift: [0.07, 0.05, 0, 0.18], white: [0.94, 0.045, 0.8, 1], sat: [-6, 12, -35, 25], temp: [-5, 9, -28, 18], mc: [0.7, 0.35, -0.3, 1.3], roll: [0.4, 0.3, 0, 1] };
-  var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度', mc: '中間のコントラスト', roll: 'ハイライトの丸み' };
+  var PREF_DEF = { sep: [55, 35, 0, 100], sh: [192, 30, 140, 240], ss: [18, 12, 0, 45], dens: [20, 18, 0, 60], lift: [0.05, 0.05, 0, 0.18], white: [0.92, 0.045, 0.8, 1], sat: [0, 12, -35, 25], temp: [-4, 9, -28, 18], mc: [0.7, 0.35, -0.3, 1.3], roll: [0.45, 0.3, 0, 1], mt: [16, 8, 0, 34], csep: [50, 25, 0, 95] };
+  var PREF_NAME = { sep: '色数を絞る', sh: '影の色', ss: '影の色の強さ', dens: '濃さ', lift: '黒の浮き', white: '白の抑え', sat: '彩度', temp: '色温度', mc: '中間のコントラスト', roll: 'ハイライトの丸み', mt: '全体の色調', csep: '色の分離' };
   function prefLoad(){
     var o = null; try{ o = JSON.parse(localStorage.getItem(PREF_K)); }catch(e){}
     if (!o || !o.mu) o = { mu: {}, sig: {}, n: 0 };
@@ -4528,10 +4530,12 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     var b90 = 0.9 + (wh - 1) * 0.75; y[4] = b90 + ro * (wh - b90) * 0.6;
     for (var yi = 1; yi < 6; yi++) if (y[yi] < y[yi - 1] + 0.015) y[yi] = y[yi - 1] + 0.015;
     var crv = { rgb: [[0, y[0]], [0.25, y[1]], [0.5, y[2]], [0.75, y[3]], [0.9, Math.min(1, y[4])], [1, Math.min(1, y[5])]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] };
-    var kv = { mxSep: Math.round(v.sep), bSat: Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
+    var kv = { mxSep: Math.round(v.sep), cSep: Math.round(v.csep == null ? 0 : v.csep), bSat: Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
     Object.keys(kv).forEach(function(k){ if (live) setVal(k, kv[k]); else q[k] = kv[k]; });
     q.crv = crv;
-    q.cgsH = Math.round(v.sh); q.cgsS = Math.round(v.ss); q.cgmH = Math.round(v.sh); q.cgmS = Math.round(v.ss * 0.3); q.cgBlend = 40; q.cgBal = -20; q.cgSkin = 85;
+    // 全体の色調：影だけでなく中間・明るい所にも同じ系統の色をそろえて乗せる（灰色の部分を色のある灰色に＝まとまる）。肌は避ける
+    var mt = v.mt == null ? v.ss * 0.3 : v.mt;
+    q.cgsH = Math.round(v.sh); q.cgsS = Math.round(v.ss); q.cgmH = Math.round(v.sh); q.cgmS = Math.round(mt); q.cghH = Math.round(v.sh); q.cghS = Math.round(mt * 0.4); q.cgBlend = 40; q.cgBal = -20; q.cgSkin = 85;
     if (live){ setVal('dens', Math.round(v.dens)); } else q.dens = Math.round(v.dens);
     q.dmode = 'B'; q.dskin = 70;
     ['basic', 'wb', 'mix', 'crv', 'cg'].forEach(function(k){ q.on[k] = 1; }); q.on.dens = v.dens > 0.5 ? 1 : 0;
@@ -4654,7 +4658,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       XE.autoHead.textContent = '好みのルック' + (po.n ? '（' + po.n + '回選んで学習済み）' : '（まだ学習前）');
       ['bright', 'light', 'air', 'blue', 'str', 'amt'].forEach(function(k){ var r = XE.autoR[k]; r.row.style.display = k === 'bright' ? '' : 'none'; if (k === 'bright'){ r.i.value = AUTO.macro.bright; r.v.textContent = AUTO.macro.bright; } });
       XE.autoAi.hidden = true;
-      XE.prefInfo.innerHTML = Object.keys(PREF_DEF).map(function(k){ var v = AUTO.v[k]; return '<span>' + PREF_NAME[k] + ' <b>' + (k === 'lift' || k === 'white' || k === 'mc' || k === 'roll' ? Math.round(v * 100) : Math.round(v)) + '</b></span>'; }).join('');
+      XE.prefInfo.innerHTML = Object.keys(PREF_DEF).map(function(k){ var v = AUTO.v[k]; return '<span>' + PREF_NAME[k] + ' <b>' + (k === 'lift' || k === 'white' || k === 'mc' || k === 'roll' ? Math.round(v * 100) : Math.round(v == null ? 0 : v)) + '</b></span>'; }).join('');
       XE.autoSt.textContent = '光・ぼかし・粒子は今の設定のまま。「6案から選ぶ」を続けるほど好みに近づきます';
       return;
     }
