@@ -406,7 +406,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v36</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v37</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1764,9 +1764,9 @@ function tkOldLens(img, w, h, P){
 // ---------- おまかせ（写真を測り、ルックを選んで、狙いの明るさ・色に着地させる） ----------
 // ルックごとの目標：黒（下2%）・中間（50%）・白（上2%）の明るさ。大林さんの写真の実測と深い青の調整値から
 var TK_AUTO_T = {
-  std:   { p2: 0.10, p50: 0.36, p98: 0.82 },
-  night: { p2: 0.08, p50: 0.24, p98: 0.68 },
-  pale:  { p2: 0.15, p50: 0.46, p98: 0.86 }
+  std:   { p2: 0.10, p50: 0.44, p98: 0.87 },
+  night: { p2: 0.08, p50: 0.30, p98: 0.76 },
+  pale:  { p2: 0.14, p50: 0.52, p98: 0.90 }
 };
 var TK_AUTO_LOOK = { std: 'blue_std', night: 'blue_night', pale: 'blue_pale' };
 // 色のついていない所（白・灰色）を選ぶ＝色かぶりの物差し
@@ -1802,7 +1802,7 @@ function tkAutoPickLook(s){
 function tkAutoTarget(look, s0, L){
   var t = TK_AUTO_T[look], l = L || {}, cl = function(v){ return Math.max(-0.08, Math.min(0.08, v || 0)); };
   // 元が暗い写真（ローキー）は無理に明るくしない＝主役が白飛びしない。明るい写真はルックの低めの明るさへしっかり寄せる
-  var p50 = s0.p50 < t.p50 ? s0.p50 + (t.p50 - s0.p50) * 0.3 : t.p50 * 0.7 + Math.min(t.p50 + 0.12, s0.p50) * 0.3;
+  var p50 = s0.p50 < t.p50 ? s0.p50 + (t.p50 - s0.p50) * 0.3 : t.p50 * 0.5 + Math.min(t.p50 + 0.12, s0.p50) * 0.5;
   return { p2: t.p2 + cl(l.p2), p50: p50 + cl(l.p50), p98: t.p98 + cl(l.p98), nb: (l.nb || 0), ng: (l.ng || 0) };
 }
 // ルックの「狙いの色かぶり」：灰色の帯にルックを当てた時の色
@@ -1828,19 +1828,22 @@ function tkAutoFit(src, w, h, P, T, opt){
   for (var it = 0; it < 6; it++){
     var out = tkProcess(src, w, h, Q); st = tkAutoStats(out, n, nidx);
     var e50 = Math.log(Math.max(0.02, T.p50) / Math.max(0.02, st.p50)) / Math.LN2;
-    if (e50 > 0 && st.p90 > 0.74) e50 = 0;   // 明るい所が広い写真は、中間を上げると主役が白く飛ぶので上げない
-    var e2 = T.p2 - st.p2, e98 = T.p98 - st.p98, eb = wbOk ? st.nb - tnb : 0, eg = wbOk ? st.ng - tng : 0;
+    // 明るい所が広い写真は、露光量で上げると主役が白く飛ぶ → 代わりにシャドウを持ち上げて中間を明るく
+    if (e50 > 0 && st.p90 > 0.78){ Q.bSh = Math.round(cl((Q.bSh || 0) + e50 * 40, -40, 60)); e50 = 0; }
+    var e2 = T.p2 - st.p2, e98 = T.p98 - st.p98;
+    if (e98 > 0 && st.p90 > 0.72) e98 = 0;   // 白い面が広い（白い猫・白壁）時は白をさらに持ち上げない
+    var eb = wbOk ? st.nb - tnb : 0, eg = wbOk ? st.ng - tng : 0;
     if (Math.abs(e50) < 0.04 && Math.abs(e2) < 0.008 && Math.abs(e98) < 0.012 && Math.abs(eb) < 0.004 && Math.abs(eg) < 0.004) break;
     Q.bExp = Math.round(cl((Q.bExp || 0) + e50 * 42, -90, 70));
     Q.bBl = Math.round(cl((Q.bBl || 0) + e2 / 0.16 * 85, -90, 50));
     Q.bWh = Math.round(cl((Q.bWh || 0) + e98 / 0.22 * 75, -80, 80));
     // 黒と白の幅が足りない（霞んだ写真など）／広すぎる時はコントラストで
-    var esp = (T.p98 - T.p2) - (st.p98 - st.p2);
+    var esp = (st.p98 + e98 - T.p2) - (st.p98 - st.p2);
     if (Math.abs(esp) > 0.03) Q.bCon = Math.round(cl((Q.bCon || 0) + esp * 90, -40, 60));
-    Q.bTemp = Math.round(cl((Q.bTemp || 0) + eb / 0.12 * 100 * 0.7, base.bTemp - 20, base.bTemp + 20));
+    Q.bTemp = Math.round(cl((Q.bTemp || 0) + eb / 0.12 * 100 * 0.7, base.bTemp - 8, base.bTemp + 20));   // 冷やす方向は控えめ（クリーム色の被写体まで青くしない）
     Q.bTint = Math.round(cl((Q.bTint || 0) + eg / 0.05 * 100 * 0.5, base.bTint - 6, base.bTint + 6));
   }
-  return { P: { bExp: Q.bExp, bCon: Q.bCon || 0, bBl: Q.bBl, bWh: Q.bWh, bTemp: Q.bTemp, bTint: Q.bTint }, src: s0, out: st };
+  return { P: { bExp: Q.bExp, bSh: Q.bSh || 0, bCon: Q.bCon || 0, bBl: Q.bBl, bWh: Q.bWh, bTemp: Q.bTemp, bTint: Q.bTint }, src: s0, out: st };
 }
 // 空の広さ（上半分で空らしい所の割合）
 function tkAutoSky(src, w, h){
