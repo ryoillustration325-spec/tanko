@@ -419,7 +419,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v44</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v45</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -874,8 +874,8 @@ function tkMixActive(P){
 // 色分け（キャリブレーションの「青の原色」相当）：暖色は橙へ、寒色は青緑へ押し分ける。返り値は [色相のずれ(度), 彩度の増分]
 var TK_SEP_WARM = 28, TK_SEP_COOL = 192;
 function tkHueDist(a, b){ var d = a - b; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
-function tkSepShift(hu, sep){
-  var dw = tkHueDist(TK_SEP_WARM, hu), dc = tkHueDist(TK_SEP_COOL, hu);
+function tkSepShift(hu, sep, cool){
+  var dw = tkHueDist(TK_SEP_WARM, hu), dc = tkHueDist(cool == null ? TK_SEP_COOL : cool, hu);
   // 暖色の帯（赤〜黄、おおよそ330〜80度）／寒色の帯（緑〜青、おおよそ110〜260度）。境目はなめらかに
   var ww = 1 - tkSS((Math.abs(dw) - 40) / 25), wc = 1 - tkSS((Math.abs(dc) - 55) / 30);
   var dh = 0, ds = 0;
@@ -1009,7 +1009,7 @@ function tkBasic(img, w, h, P){
     }
   }
   if (doM){
-    var mkey = 'm' + (P.mxSep || 0) + '/' + (P.cSep || 0); for (var mk = 0; mk < 8; mk++) mkey += ',' + (P['mh' + mk] || 0) + ',' + (P['ms' + mk] || 0) + ',' + (P['ml' + mk] || 0);
+    var mkey = 'm' + (P.mxSep || 0) + '/' + (P.cSep || 0) + '/' + (P.sepCool || 0) + '/' + (P.cSepT || 0); for (var mk = 0; mk < 8; mk++) mkey += ',' + (P['mh' + mk] || 0) + ',' + (P['ms' + mk] || 0) + ',' + (P['ml' + mk] || 0);
     if (TK_LUTC.mixK === mkey){ tkApplyLut3(img, n, TK_LUTC.mix, 33); return; }
     // 色相ごとの表（360度）を作り、近い2色の間はなめらかにつなぐ
     var DH = new Float32Array(360), DS = new Float32Array(360), DL = new Float32Array(360), A = TK_MIX_HUES;
@@ -1033,13 +1033,13 @@ function tkBasic(img, w, h, P){
       var hix = hu | 0; if (hix > 359) hix = 359;
       var wv = tkSS((ch3 / Math.max(mx3, 1e-4) - 0.04) / 0.16) * tkSS((ch3 - 0.02) / 0.06);
       var dh = DH[hix] * wv, ds = DS[hix] * wv, dl = DL[hix] * wv;
-      if (SEP){ var sp = tkSepShift(hu, SEP); dh += sp[0] * wv; ds += sp[1] * wv; }
+      if (SEP){ var sp = tkSepShift(hu, SEP, P.sepCool); dh += sp[0] * wv; ds += sp[1] * wv; }
       if (!dh && !ds && !dl && !CSEP) return;
       var Y3 = 0.299 * r3 + 0.587 * g3 + 0.114 * b3, I3 = 0.596 * r3 - 0.274 * g3 - 0.322 * b3, Q3 = 0.211 * r3 - 0.523 * g3 + 0.312 * b3;
       if (dh){ var an = dh * Math.PI / 180, cs = Math.cos(an), sn = Math.sin(an), I4 = I3 * cs - Q3 * sn; Q3 = I3 * sn + Q3 * cs; I3 = I4; }
       if (ds){ var ks = 1 + ds; I3 *= ks; Q3 *= ks; }
       // 色の分離：くすんだ半端な色は控えめに、もともと鮮やかな色（アクセント）は保つ・少し立てる＝色数が少なくまとまって見える
-      if (CSEP){ var C3 = Math.sqrt(I3 * I3 + Q3 * Q3); if (C3 > 1e-4){ var kc = 1 - CSEP * 0.45 * (1 - tkSS((C3 - 0.03) / 0.07)) + CSEP * 0.25 * tkSS((C3 - 0.08) / 0.08); I3 *= kc; Q3 *= kc; } }
+      if (CSEP){ var C3 = Math.sqrt(I3 * I3 + Q3 * Q3); if (C3 > 1e-4){ var cT = P.cSepT || 0.03, kc = 1 - CSEP * 0.45 * (1 - tkSS((C3 - cT) / 0.07)) + CSEP * 0.25 * tkSS((C3 - cT - 0.05) / 0.08); I3 *= kc; Q3 *= kc; } }
       if (dl) Y3 = Y3 + dl * 0.3 * (dl > 0 ? (1 - Y3) : Y3);
       px[0] = tkClamp01(Y3 + 0.956 * I3 + 0.621 * Q3); px[1] = tkClamp01(Y3 - 0.272 * I3 - 0.647 * Q3); px[2] = tkClamp01(Y3 - 1.106 * I3 + 1.703 * Q3);
     }
@@ -2005,6 +2005,63 @@ function tkNormFit(src, w, h){
 }
 // 見本ルック②：固定プリセット（見本123枚と撮って出し20枚から最適化。となりの色どうしがなめらかになるよう制約＝ムラが出ない）
 var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH": 0, "cghH": 0, "mh1": 6, "ms3": -3, "ms4": -6, "ms5": -2, "crv": {"rgb": [[0, 0.1], [0.25, 0.25], [0.5, 0.49], [0.75, 0.77], [1, 0.883]]}}, "land": {"cgsH": 0, "cgmH": 0, "cgmS": 1.5, "cghH": 0, "cghS": 6, "ms0": -3, "ms2": -3, "mh2": 3, "ms3": -1, "mh3": 6, "ms4": 3, "mh4": 12, "ms5": 2, "mh5": 12, "mh6": 3, "ms7": -2, "crv": {"rgb": [[0, 0.14], [0.25, 0.31], [0.5, 0.47], [0.75, 0.75], [1, 1]]}}, "dark": {"bSat": -20, "cgsH": 0, "cgmH": 353.3, "cgmS": 4.5, "cghH": 0, "ms0": -3, "mh0": 3, "ms1": -3, "ms2": -2, "mh2": -1, "ms4": -2, "ms5": 5, "ms6": 2, "crv": {"rgb": [[0, 0.14], [0.25, 0.293], [0.5, 0.337], [0.75, 0.577], [1, 0.983]]}}};
+
+// ---------- 好みのルック（適応型）：写真の今の色を測り、見本の目標との「差」だけを補う ----------
+// 見本の実測：灰色の色かぶり（中間・影）、青の色相と鮮やかさ、暖色（肌）の鮮やかさ
+var TK_PT = { neu: [0.0019, -0.0105], sh: [0.0045, -0.0106], coolH: 203, coolS: 0.32, warmS: 0.29 };
+function tkVecToGrade(db, dr){
+  var m = Math.sqrt(db * db + dr * dr); if (m < 1e-4) return [0, 0];
+  var best = 0, bd = -2;
+  for (var h = 0; h < 360; h += 2){ var d = tkHueDir(h), dot = (d[0] * db + d[1] * dr) / m; if (dot > bd){ bd = dot; best = h; } }
+  return [best, Math.max(0, Math.min(45, m / 0.12 * 100))];
+}
+function tkGradeToVec(h, s){ var d = tkHueDir(h || 0), k = (s || 0) / 100 * 0.12; return [d[0] * k, d[1] * k]; }
+function tkRot(v, deg){ var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; }
+// 測る：灰色の中間・影の色かぶり（Cb,Cr）、青と暖色の鮮やかさ（HSVのS）と量
+function tkPaletteStats(px, n){
+  var nm = [0, 0, 0], ns = [0, 0, 0], cS = 0, cN = 0, wS = 0, wN = 0, Cs = [];
+  for (var i = 0; i < n; i += 2){
+    var r = px[i * 4] / 255, g = px[i * 4 + 1] / 255, b = px[i * 4 + 2] / 255, Y = 0.299 * r + 0.587 * g + 0.114 * b, cb = (b - Y) * 0.564, cr = (r - Y) * 0.713, C = Math.sqrt(cb * cb + cr * cr);
+    var I = 0.596 * r - 0.274 * g - 0.322 * b, Q = 0.211 * r - 0.523 * g + 0.312 * b; Cs.push(Math.sqrt(I * I + Q * Q));
+    // 本当に色の薄い所だけを「灰色」とみなす（淡い空や葉を灰色扱いして打ち消さない）
+    if (C < 0.028 && Y > 0.3 && Y < 0.88){ nm[0] += cb; nm[1] += cr; nm[2]++; }
+    if (C < 0.035 && Y < 0.25){ ns[0] += cb; ns[1] += cr; ns[2]++; }
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), ch = mx - mn; if (ch < 0.01 || mx <= 0) continue;
+    var S = ch / mx, H = mx === r ? 60 * (((g - b) / ch) % 6) : (mx === g ? 60 * ((b - r) / ch + 2) : 60 * ((r - g) / ch + 4)); if (H < 0) H += 360;
+    if (S > 0.18 && H > 150 && H < 260 && Y > 0.05){ cS += S; cN++; }
+    if (S > 0.15 && (H < 50 || H > 340) && Y > 0.15){ wS += S; wN++; }
+  }
+  Cs.sort(function(a, b){ return a - b; });
+  var m = Math.ceil(n / 2);
+  return { neu: nm[2] > m * 0.04 ? [nm[0] / nm[2], nm[1] / nm[2]] : null, sh: ns[2] > m * 0.04 ? [ns[0] / ns[2], ns[1] / ns[2]] : null,
+    coolS: cN > m * 0.02 ? cS / cN : null, warmS: wN > m * 0.02 ? wS / wN : null, c55: Cs.length ? Cs[Math.floor(Cs.length * 0.55)] : 0.03 };
+}
+// 目標（好みで強さ・向きを変える）へ、灰色の色かぶり・青と暖色の鮮やかさを数回で合わせる
+function tkPrefFit(src, w, h, P, opt){
+  var n = w * h, Q = JSON.parse(JSON.stringify(P)); Q.lm = []; if (Q.on){ Q.on.reg = 0; Q.on.match = 0; ['glow', 'grain', 'skin', 'det', 'fx', 'diff', 'hal', 'mist', 'comp', 'ray', 'lens'].forEach(function(k){ Q.on[k] = 0; }); }
+  var rot = opt.rot || 0, Tn = tkRot(TK_PT.neu, rot), Ts = tkRot(TK_PT.sh, rot);
+  Tn = [Tn[0] * opt.mt, Tn[1] * opt.mt]; Ts = [Ts[0] * opt.st, Ts[1] * opt.st];
+  var Tc = TK_PT.coolS * opt.sat, Tw = TK_PT.warmS * opt.sat;
+  var Vm = [0, 0], Vs = [0, 0], cl = function(v, a, b){ return Math.max(a, Math.min(b, v)); };
+  Q.cSepT = cl(tkPaletteStats(src, n).c55, 0.02, 0.07);
+  Q.ms1 = 0; Q.ms4 = 0; Q.ms5 = 0;
+  for (var it = 0; it < 4; it++){
+    var gm = tkVecToGrade(Vm[0], Vm[1]), gs = tkVecToGrade(Vs[0], Vs[1]);
+    Q.cgmH = gm[0]; Q.cgmS = gm[1]; Q.cghH = gm[0]; Q.cghS = gm[1] * 0.5; Q.cgsH = gs[0]; Q.cgsS = gs[1];
+    var st = tkPaletteStats(tkProcess(src, w, h, Q), n);
+    // 灰色が十分ある写真だけ色かぶりを合わせる。無い写真（空・葉ばかり）は目標の色調をそのまま薄く乗せる
+    if (st.neu){ Vm[0] += (Tn[0] - st.neu[0]) * 0.85; Vm[1] += (Tn[1] - st.neu[1]) * 0.85; } else if (it === 0){ Vm = [Tn[0] * 0.6, Tn[1] * 0.6]; }
+    if (st.sh){ Vs[0] += (Ts[0] - st.sh[0]) * 0.85; Vs[1] += (Ts[1] - st.sh[1]) * 0.85; } else if (it === 0){ Vs = [Ts[0] * 0.6, Ts[1] * 0.6]; }
+    // 補正しすぎない（最大でグレーディングの強さ 17 前後）
+    var lim = function(V){ var m = Math.sqrt(V[0] * V[0] + V[1] * V[1]); return m > 0.02 ? [V[0] * 0.02 / m, V[1] * 0.02 / m] : V; };
+    Vm = lim(Vm); Vs = lim(Vs);
+    // 鮮やかさ：足りない時は足し、もともと鮮やかな時は少しだけ下げる（鮮やかな青や肌を殺さない）
+    if (st.coolS != null){ var dc = (Tc - st.coolS) / 0.3 * 50 * 0.6; if (dc < 0) dc *= 0.35; Q.ms4 = Math.round(cl(Q.ms4 + dc, -10, 22)); Q.ms5 = Math.round(cl(Q.ms5 + dc, -10, 22)); }
+    if (st.warmS != null){ var dw = (Tw - st.warmS) / 0.3 * 40 * 0.6; if (dw < 0) dw *= 0.35; Q.ms1 = Math.round(cl(Q.ms1 + dw, -8, 18)); }
+  }
+  var g1 = tkVecToGrade(Vm[0], Vm[1]), g2 = tkVecToGrade(Vs[0], Vs[1]);
+  return { cgmH: g1[0], cgmS: Math.round(g1[1]), cghH: g1[0], cghS: Math.round(g1[1] * 0.5), cgsH: g2[0], cgsS: Math.round(g2[1]), ms1: Q.ms1, ms4: Q.ms4, ms5: Q.ms5, cSepT: Q.cSepT };
+}
 // CORE-END
 
 </script>
@@ -4522,7 +4579,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     for (var i = out.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)), t = out[i]; out[i] = out[j]; out[j] = t; }
     return out;
   }
-  function prefToP(q, v, nz, bright, live){
+  function prefToP(q, v, nz, bright, live, sm){
     fullInto(q, null, live);
     // トーンカーブ：黒の浮き・白の抑えに加えて、中間のコントラスト（中央を立てる＝くすまない芯）とハイライトの丸み（白へ向かう肩をやわらかく）
     var lift = v.lift, wh = v.white, mc = v.mc == null ? 0.5 : v.mc, ro = v.roll == null ? 0.4 : v.roll;
@@ -4530,7 +4587,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     var b90 = 0.9 + (wh - 1) * 0.75; y[4] = b90 + ro * (wh - b90) * 0.6;
     for (var yi = 1; yi < 6; yi++) if (y[yi] < y[yi - 1] + 0.015) y[yi] = y[yi - 1] + 0.015;
     var crv = { rgb: [[0, y[0]], [0.25, y[1]], [0.5, y[2]], [0.75, y[3]], [0.9, Math.min(1, y[4])], [1, Math.min(1, y[5])]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] };
-    var kv = { mxSep: Math.round(v.sep), cSep: Math.round(v.csep == null ? 0 : v.csep), bSat: Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
+    var kv = { mxSep: Math.round(v.sep), cSep: Math.round(v.csep == null ? 0 : v.csep), bSat: sm ? 0 : Math.round(v.sat), bTemp: Math.round(nz.bTemp + v.temp), bTint: nz.bTint, bExp: Math.round(nz.bExp + (bright || 0) * 0.6) };
     Object.keys(kv).forEach(function(k){ if (live) setVal(k, kv[k]); else q[k] = kv[k]; });
     q.crv = crv;
     // 全体の色調：影だけでなく中間・明るい所にも同じ系統の色をそろえて乗せる（灰色の部分を色のある灰色に＝まとまる）。肌は避ける
@@ -4539,6 +4596,13 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     if (live){ setVal('dens', Math.round(v.dens)); } else q.dens = Math.round(v.dens);
     q.dmode = 'B'; q.dskin = 70;
     ['basic', 'wb', 'mix', 'crv', 'cg'].forEach(function(k){ q.on[k] = 1; }); q.on.dens = v.dens > 0.5 ? 1 : 0;
+    // 適応型：写真の今の色を測り、見本の目標（灰色の色かぶり・青と暖色の鮮やかさ）との差だけを補う
+    //   元が青い写真に青を重ねない／元が地味な写真には色を足す。影の色・全体の色調・彩度の好みは目標の向きと強さとして使う
+    q.sepCool = Math.round(TK_PT.coolH + (v.sh - 192) * 0.5);
+    if (sm){
+      var f = tkPrefFit(sm.px, sm.w, sm.h, q, { rot: v.sh - 192, mt: Math.max(0.2, mt / 16), st: Math.max(0.2, v.ss / 18), sat: 1 + v.sat / 100 });
+      Object.keys(f).forEach(function(k){ if (live && /^ms\d$/.test(k)) setVal(k, f[k]); else q[k] = f[k]; });
+    }
     if (q.mref && (q.mref.ref2 || q.mMode === 'safe')){ q.on.match = 0; q.mref = null; }
   }
   function applyPref(v){
@@ -4546,7 +4610,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     var o = prefLoad(), sm = autoSmall(), nz = tkNormFit(sm.px, sm.w, sm.h);
     AUTO_APPLYING = true; autoOff(); AUTO_APPLYING = false;
     v = v || o.mu;
-    prefToP(P, v, nz, 0, true); LAST_FULL = true;
+    prefToP(P, v, nz, 0, true, sm); LAST_FULL = true;
     ['basic', 'wb', 'mix', 'crv', 'cg', 'dens', 'match'].forEach(syncGroup);
     try{ setMode('B'); }catch(e){}
     AUTO = { kind: 'pref', look: 'pref', nz: nz, sm: sm, v: JSON.parse(JSON.stringify(v)), macro: { bright: 0 }, notes: [] };
@@ -4571,7 +4635,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     PM.el.hidden = false; prefRound();
   }
   function prefRound(){
-    var o = prefLoad(), sz = sizeFor(320), px = readPixels(sz[0], sz[1]), nz = AUTO && AUTO.nz ? AUTO.nz : tkNormFit(autoSmall().px, autoSmall().w, autoSmall().h);
+    var o = prefLoad(), sz = sizeFor(320), px = readPixels(sz[0], sz[1]), smf = AUTO && AUTO.sm ? AUTO.sm : autoSmall(), nz = AUTO && AUTO.nz ? AUTO.nz : tkNormFit(smf.px, smf.w, smf.h);
     PM.cands = prefCandidates(o);
     PM.head.textContent = '一番いいものを選んでください（' + (o.n + 1) + '回目）';
     PM.grid.innerHTML = '';
@@ -4579,7 +4643,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
       var b = xel('button', 'prefcell'); b.type = 'button'; var cv = document.createElement('canvas'); cv.width = sz[0]; cv.height = sz[1]; b.appendChild(cv); PM.grid.appendChild(b);
       b.addEventListener('click', function(){ prefPick(i); });
       setTimeout(function(){
-        var q = JSON.parse(JSON.stringify(P)); q.mix = 100; q.on.reg = 0; prefToP(q, v, nz, AUTO && AUTO.kind === 'pref' ? AUTO.macro.bright : 0, false);
+        var q = JSON.parse(JSON.stringify(P)); q.mix = 100; q.on.reg = 0; prefToP(q, v, nz, AUTO && AUTO.kind === 'pref' ? AUTO.macro.bright : 0, false, smf);
         try{ var out = tkProcess(px, sz[0], sz[1], q); var x = cv.getContext('2d', { colorSpace: CS }); x.putImageData(mkImageData(out, sz[0], sz[1]), 0, 0); }catch(e){}
       }, 30 + i * 10);
     });
@@ -4868,7 +4932,7 @@ var TK_LOOK2 = {"person": {"bSat": -35, "bVib": -18, "cgsH": 0, "cgsS": 8, "cgmH
     }
     var p = TK_PRESETS[key] || {};
     if (p.pref){
-      var smp = autoSmall(), qp = JSON.parse(JSON.stringify(P)); qp.mix = 100; qp.on.reg = 0; prefToP(qp, prefLoad().mu, tkNormFit(smp.px, smp.w, smp.h), 0, false); return qp;
+      var smp = autoSmall(), qp = JSON.parse(JSON.stringify(P)); qp.mix = 100; qp.on.reg = 0; prefToP(qp, prefLoad().mu, tkNormFit(smp.px, smp.w, smp.h), 0, false, smp); return qp;
     }
     if (p.ref){
       var sm2 = autoSmall(), n2 = sm2.w * sm2.h, s2 = tkAutoStats(sm2.px, n2, null), sc2 = tkRefScene(s2, aiPersonHint()), q2 = JSON.parse(JSON.stringify(P)); q2.mix = 100; q2.on.reg = 0;
