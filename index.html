@@ -81,7 +81,7 @@
     margin:0 8px; border-radius:16px 16px 0 0; background:rgba(16,18,21,.72); -webkit-backdrop-filter:blur(16px) saturate(1.1); backdrop-filter:blur(16px) saturate(1.1);
     border:1px solid rgba(255,255,255,.06); border-bottom:0; transition:transform .22s ease, opacity .22s ease, height .22s ease, background-color .22s ease}
   .app.expanded .sheet{height:100%; background:rgba(16,18,21,.9)}
-  .app.collapsed .sheet{transform:translateY(calc(100% - 30px)); opacity:.94}
+  .app.collapsed .sheet{transform:translateY(calc(100% - 40px)); opacity:.94}
   .sheet.dragging{transition:none}
   .grab{flex:none; height:30px; display:flex; align-items:center; justify-content:center; cursor:grab; border:0; background:transparent; width:100%; padding:0; touch-action:none}
   .grab::before{content:""; width:44px; height:5px; border-radius:3px; background:rgba(255,255,255,.32)}
@@ -101,7 +101,7 @@
   .stab.on{background:var(--surface2); color:var(--ink); border-color:var(--accent)}
   .stab i,.tab i{width:6px; height:6px; border-radius:50%; background:var(--warm); display:none}
   .stab.act i,.tab.act i{display:block}
-  .panel{flex:1; min-height:0; min-width:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:2px 12px 14px}
+  .panel{flex:1; min-height:0; min-width:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:2px 12px 30px}
   .tabbar{grid-area:tabs; min-width:0; position:relative; z-index:7; display:grid; grid-template-columns:repeat(6,1fr); border-top:1px solid var(--line-soft); background:var(--bg);
     padding-bottom:env(safe-area-inset-bottom,0px)}
   .tab{position:relative; height:var(--tabh); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:0; background:transparent;
@@ -422,7 +422,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v54</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v55</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2526,6 +2526,7 @@ function tkLook2(img, n, P, w, h){
     if (p.ref){ applyRef(); return; }
     if (p.pref){ applyPref(); return; }
     if (p.lk){ applyLook2(key); return; }
+    if (AUTO && AUTO.kind === 'lk') ['mix', 'mixL', 'mixC'].forEach(function(k){ P[k] = 100; if ($('s-' + k)){ $('s-' + k).value = 100; $('v-' + k).textContent = 100; } });   // 青の光系の強さは他の仕上げに持ち越さない
     if (!AUTO_APPLYING){ autoOff(); P.lm = (P.lm || []).filter(function(m){ return !m.auto; }); }
     if (p.full || LAST_FULL){
       fullInto(P, p.full || null, true);
@@ -4840,6 +4841,8 @@ function tkLook2(img, n, P, w, h){
     if (P.mref && (P.mref.ref2 || P.mMode === 'safe')){ P.on.match = 0; P.mref = null; }
     ['basic', 'wb', 'mix', 'crv', 'cg', 'match'].forEach(syncGroup);
     lkInto(P, L); P.lkSkinOff = 0;
+    // 青の光系の初期の強さ（全体31・光31・色74）
+    [['mix', 31], ['mixL', 31], ['mixC', 74]].forEach(function(d){ P[d[0]] = d[1]; if ($('s-' + d[0])){ $('s-' + d[0]).value = d[1]; $('v-' + d[0]).textContent = d[1]; } });
     // 肌のなめらかさ（質感は残す）。既存の「肌」をこの値で軽く
     P.on.skin = 1; setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', L.smooth); setVal('skTx', 65); syncGroup('skin');
     AUTO = { kind: 'lk', look: 'lk', key: key, label: TK_PRESETS[key].label, learned: false, macro: { bright: 0, lkAmt: P.lkAmt, lkHue: P.lkHue, lkSkin: P.lkSkin, lkBlend: P.lkBlend, lkCon: P.lkCon, lkWarm: P.lkWarm, lkTint: P.lkTint, lkProt: P.lkProt, lkSmooth: L.smooth }, notes: [] };
@@ -4988,8 +4991,8 @@ function tkLook2(img, n, P, w, h){
   function syncAutoUI(){
     var box = XE.autoBox; if (!box) return;
     box.hidden = !AUTO;
-    var c = alCount(), pn = prefLoad().n; XE.autoLearn.textContent = AUTO && AUTO.kind === 'pref' ? '選んだ回数：' + pn : (c ? '好みの学習：' + c + '枚分' : '書き出すたびに、好みを学習します');
-    XE.autoForget.hidden = !(c || pn);
+    var c = alCount(), pn = prefLoad().n; XE.autoLearn.textContent = AUTO && AUTO.kind === 'lk' ? '学習はしません（いつも同じ初期値から）' : AUTO && AUTO.kind === 'pref' ? '選んだ回数：' + pn : (c ? '好みの学習：' + c + '枚分' : '書き出すたびに、好みを学習します');
+    XE.autoForget.hidden = !(c || pn) || (AUTO && AUTO.kind === 'lk');
     if (!AUTO) return;
     var isRef = AUTO.kind === 'ref', isPref = AUTO.kind === 'pref', isLk = AUTO.kind === 'lk';
     if (isLk){
@@ -5224,7 +5227,7 @@ function tkLook2(img, n, P, w, h){
     var p = TK_PRESETS[key] || {};
     if (p.lk){
       var ql = JSON.parse(JSON.stringify(P)); ql.mix = 100; ql.on.reg = 0; fullInto(ql, null, false); var Lq = lkVals(p.lk);
-      lkInto(ql, Lq); ql.on.skin = 1; ql.skAmt = 30; ql.skSm = Lq.smooth; ql.skTx = 65; return ql;
+      lkInto(ql, Lq); ql.on.skin = 1; ql.mix = 31; ql.mixL = 31; ql.mixC = 74; ql.skAmt = 30; ql.skSm = Lq.smooth; ql.skTx = 65; return ql;
     }
     if (p.pref){
       var smp = autoSmall(), qp = JSON.parse(JSON.stringify(P)); qp.mix = 100; qp.on.reg = 0; prefToP(qp, prefLoad().mu, tkNormFit(smp.px, smp.w, smp.h), 0, false, smp); return qp;
