@@ -420,7 +420,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v49</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v50</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2104,7 +2104,7 @@ function tkLook2(img, n, P){
         // 全体の青さ：もともと色の薄い所（白・灰色・くすんだ色）に乗った青だけを、元の色へ戻す（空や海など本当に青い所はそのまま）
         if (tn < 1){
           var k0 = [0, 0, 0]; tkToOk(r, g, b, k0); var C0 = Math.sqrt(k0[1] * k0[1] + k0[2] * k0[2]);
-          var wn = (1 - tkSS((C0 - 0.02) / 0.05)) * (1 - tn);
+          var wn = (1 - tkSS((C0 - 0.04) / 0.08)) * (1 - tn);
           if (wn > 0){ k[1] += (k0[1] - k[1]) * wn * 0.85; k[2] += (k0[2] - k[2]) * wn * 0.85; }
         }
         var Lk = k[0], A = k[1], Bk = k[2], C = Math.sqrt(A * A + Bk * Bk), h = Math.atan2(Bk, A) * 180 / Math.PI; if (h < 0) h += 360;
@@ -4699,7 +4699,7 @@ function tkLook2(img, n, P){
     if (q.mref && (q.mref.ref2 || q.mMode === 'safe')){ q.on.match = 0; q.mref = null; }
   }
   // 青の光：学習した変換を当てる。今の基本補正はまっさらに戻し、光・粒子などは今の設定のまま
-  var TK_LK_DEF = { amt: 100, hue: 10, blend: 40, con: 45, warm: 40, skin: 25, tint: 45 };   // 青の光の初期値（少し紺寄り・なめらかなコントラスト・影と肌にオレンジ）
+  var TK_LK_DEF = { amt: 85, hue: 0, blend: 55, con: 45, warm: 45, skin: 25, tint: 25 };   // 青の光の初期値（少し紺寄り・なめらかなコントラスト・影と肌にオレンジ）
   function applyLook2(){
     if (!img){ toast('先に写真を選んでください'); return; }
     var L = TK_LK_DEF;   // 学習はせず、最初から寄せた初期値で
