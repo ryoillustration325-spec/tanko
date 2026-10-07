@@ -422,7 +422,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v55</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v56</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -837,7 +837,8 @@ function tkProcess(src, w, h, P){
   }
 
   // 9) 強さ：元の写真と仕上がりを混ぜる（仕上げ全体の効き具合）
-  if (P.mix != null && P.mix < 100){
+  // 光の仕上げ（lkSplit）は強さを青の光の中で「色の量」だけに効かせるので、ここでは混ぜない（明るさの作りと肌は常に効く）
+  if (P.mix != null && P.mix < 100 && !(P.on && P.on.look2 && P.lkSplit)){
     var mx = Math.max(0, P.mix) / 100;
     for (i = 0; i < n; i++){
       img[i * 3] = src[i * 4] / 255 + (img[i * 3] - src[i * 4] / 255) * mx;
@@ -2226,7 +2227,10 @@ function tkLook2(img, n, P, w, h){
     TK_LUTC.lkP = LP; TK_LUTC.lkS = LS; TK_LUTC.lkCW = CW;
   }
   var prot = (P.lkProt == null ? 80 : P.lkProt) / 100;
-  if (prot <= 0 && !sk){ tkApplyLut3(img, n, TK_LUTC.lk, 33); return; }
+  // 強さ（lkSplit時）：色の変化だけを薄める。明るさ（トーン）と肌の補正は100%
+  var cm = (P.lkSplit && P.mix != null) ? Math.max(0, Math.min(100, P.mix)) / 100 : 1;
+  var I1 = cm < 1 ? new Float32Array(img) : null;
+  if (prot <= 0 && !sk && !I1){ tkApplyLut3(img, n, TK_LUTC.lk, 33); return; }
   // 人物（AIで見分けた主役）の範囲：あれば使う。無ければ色だけで守る
   var SW = null;
   if (P.lkAi && w && h && typeof TK_REG !== 'undefined' && TK_REG && TK_REG.data){ try{ SW = tkLmWeight({ type: 'ai', role: 0, strokes: [], feather: 35, inv: 0 }, w, h); }catch(e){ SW = null; } }
@@ -2244,6 +2248,11 @@ function tkLook2(img, n, P, w, h){
     var ir = (img[j] * 32 + 0.5) | 0, ig = (img[j + 1] * 32 + 0.5) | 0, ib = (img[j + 2] * 32 + 0.5) | 0;
     var cw = CWt[(ib * 33 + ig) * 33 + ir], sw = SW ? SW[i] : 0, wt = Math.max(cw * 0.85, sw) * prot;
     img[j] = A[j] + (B[j] - A[j]) * wt; img[j + 1] = A[j + 1] + (B[j + 1] - A[j + 1]) * wt; img[j + 2] = A[j + 2] + (B[j + 2] - A[j + 2]) * wt;
+    if (I1){
+      tkToOk(I1[j], I1[j + 1], I1[j + 2], ko2); var a0 = ko2[1], b0 = ko2[2];
+      tkToOk(img[j], img[j + 1], img[j + 2], ko2);
+      tkFromOk(ko2[0], a0 + (ko2[1] - a0) * cm, b0 + (ko2[2] - b0) * cm, ko2); img[j] = tkClamp01(ko2[0]); img[j + 1] = tkClamp01(ko2[1]); img[j + 2] = tkClamp01(ko2[2]);
+    }
     if (D){ img[j] = tkClamp01(img[j] + (D[j] - 0.5)); img[j + 1] = tkClamp01(img[j + 1] + (D[j + 1] - 0.5)); img[j + 2] = tkClamp01(img[j + 2] + (D[j + 2] - 0.5)); }
     if (SK && sw > 0.15){
       tkToOk(I0[j], I0[j + 1], I0[j + 2], ko2);
@@ -4818,7 +4827,7 @@ function tkLook2(img, n, P, w, h){
     if (q.mref && (q.mref.ref2 || q.mMode === 'safe')){ q.on.match = 0; q.mref = null; }
   }
   // 青の光：学習した変換を当てる。今の基本補正はまっさらに戻し、光・粒子などは今の設定のまま
-  var TK_LK_DEF = { amt: 85, hue: 0, blend: 55, con: 45, warm: 45, skin: 55, tint: 25, prot: 80, smooth: 25 };
+  var TK_LK_DEF = { amt: 85, hue: 0, blend: 55, con: 45, warm: 45, skin: 55, tint: 25, prot: 80, smooth: 25, lift: 30, cap: 40 };   // 黒を少し浮かせ白を抑える（強さに関係なく常に効く）
   // 仕上げごとの違い（色の方向だけ。AIの人物保護と肌の処理は共通）
   var TK_LK_VAR = {
     blue:  {},
@@ -4827,10 +4836,10 @@ function tkLook2(img, n, P, w, h){
     night: { con: 62, sH: 255, sS: 32, hH: 60, hS: 20, tint: 50, warm: 60, lift: -35, cap: 25 },
     warm:  { amt: 40, tint: 5, hH: 65, hS: 28, sH: 40, sS: 12, warm: 85, con: 35, lift: 15 }
   };
-  function lkVals(v){ var o = {}, d = { sH: 0, sS: 0, hH: 0, hS: 0, lift: 0, cap: 0 }, x = TK_LK_VAR[v] || {}; [TK_LK_DEF, d, x].forEach(function(s){ for (var k in s) o[k] = s[k]; }); return o; }
+  function lkVals(v){ var o = {}, d = { sH: 0, sS: 0, hH: 0, hS: 0, lift: 0, cap: 0 }, x = TK_LK_VAR[v] || {}; [d, TK_LK_DEF, x].forEach(function(s){ for (var k in s) o[k] = s[k]; }); return o; }
   function lkInto(q, L){
     q.on.look2 = 1; q.lkAmt = L.amt; q.lkHue = L.hue; q.lkSkin = L.skin; q.lkBlend = L.blend; q.lkCon = L.con; q.lkWarm = L.warm; q.lkTint = L.tint; q.lkProt = L.prot; q.lkAi = 1;
-    q.lkSH = L.sH; q.lkSS = L.sS; q.lkHH = L.hH; q.lkHS = L.hS; q.lkLift = L.lift; q.lkCap = L.cap;
+    q.lkSH = L.sH; q.lkSS = L.sS; q.lkHH = L.hH; q.lkHS = L.hS; q.lkLift = L.lift; q.lkCap = L.cap; q.lkSplit = 1;
   }   // 青の光の初期値（少し紺寄り・なめらかなコントラスト・影と肌にオレンジ）
   function applyLook2(key){
     if (!img){ toast('先に写真を選んでください'); return; }
