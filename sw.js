@@ -1,5 +1,5 @@
 // 淡光：オフラインで動かすための保存係。アプリ本体は毎回新しい版を確かめ、AIなどの大きなファイルは一度取れば端末から読む
-const VER = 'tanko-v47';
+const VER = 'tanko-v48';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
