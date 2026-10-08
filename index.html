@@ -138,6 +138,8 @@
   .autoseg[hidden]{display:none}
   .l5seg{flex-wrap:wrap}
   .l5seg[hidden]{display:none}
+  .l5oldh{font-size:11px; color:var(--muted); margin:8px 2px 0}
+  .l5oldh[hidden]{display:none}
   .seg.l5seg button{flex:1 0 auto; white-space:nowrap; font-size:12px; padding:7px 10px}
   .autobox .rbtn{width:100%; margin-top:4px}
   .autolearn{display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--faint); border-top:1px solid var(--line-soft); padding-top:6px; margin-top:2px}
@@ -425,7 +427,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v64</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v65</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2321,7 +2323,10 @@ function tkL5Smooth(img, I0, w, h){
   for (var k = 0; k < n * 3; k += 3){ img[k] = tkClamp01(img[k] - D[k] + B[k]); img[k + 1] = tkClamp01(img[k + 1] - D[k + 1] + B[k + 1]); img[k + 2] = tkClamp01(img[k + 2] - D[k + 2] + B[k + 2]); }
 }
 function tkLook5(img, n, P, w, h){
-  var base = TK_L5.base[P.l5Base] || TK_L5.base.person, MO = P.l5Pat && TK_L5_PAT[P.l5Pat] ? TK_L5_PAT[P.l5Pat] : (P.l5Base !== 'person' ? TK_L5_MOOD[P.l5Dir] : null), dir = MO ? MO.band : (TK_L5.dir[P.l5Dir] || TK_L5.dir.neutral);
+  var base = TK_L5.base[P.l5Base] || TK_L5.base.person, pk = P.l5Pat || P.l5Dir || '',
+      // 以前の組み方も使える：m_〜＝景色用の4方向、d_〜＝人物用の9方向（どの被写体でも選べる）
+      MO = TK_L5_PAT[pk] ? TK_L5_PAT[pk] : (pk.indexOf('m_') === 0 ? TK_L5_MOOD[pk.slice(2)] : (pk.indexOf('d_') === 0 ? null : (P.l5Base !== 'person' ? TK_L5_MOOD[P.l5Dir] : null))),
+      dir = MO ? MO.band : (TK_L5.dir[pk.replace(/^d_/, '')] || TK_L5.dir.neutral);
   var kc = (P.l5Amt == null ? 80 : P.l5Amt) / 100, ks = (P.l5Sat == null ? 50 : P.l5Sat) / 100;
   var tk = (P.l4Tone == null ? 70 : P.l4Tone) / 100, dk = ((P.l4Dark == null ? 50 : P.l4Dark) - 50) / 50 * 0.06;
   var hsh = (P.l4Hue || 0) * 0.2, skn = (P.l3Skin == null ? 50 : P.l3Skin) / 100 * 0.7;
@@ -5259,6 +5264,7 @@ function tkLook2(img, n, P, w, h){
   var L5_BASE = [['person', '人物'], ['plant', '植物・花'], ['sea', '海・空・水'], ['forest', '霧・山・森'], ['object', '物・室内']];
   var L5_DIR = [['shadowblue', '影に青'], ['shadoworange', '光に青・影に橙'], ['allblue', '全体に青'], ['teal', '青緑（霧）'], ['green', '緑み'], ['yellow', '黄み'], ['warm', '暖かい光'], ['neutral', '中立'], ['film', '自然なフィルム']];
   var L5_PAT = [['blue_d', '深い青'], ['blue', '青'], ['blue_b', '明るい青'], ['teal', '青緑（霧）'], ['teal_b', '明るい青緑'], ['green_d', '深い緑'], ['green', '緑'], ['green_b', '明るい緑'], ['warm_d', '暗い暖色'], ['warm', '暖かい'], ['warm_b', '明るい暖色'], ['neutral', '中立'], ['neutral_b', '明るい中立（白）']];
+  var L5_OLD = [['d_shadowblue', '影に青'], ['d_shadoworange', '光に青・影に橙'], ['d_allblue', '全体に青'], ['d_teal', '青緑の空気'], ['d_green', '緑み'], ['d_yellow', '黄み'], ['d_warm', '暖かい光'], ['d_neutral', '中立（人物）'], ['d_film', '自然なフィルム（人物）'], ['m_blue', '青（景色）'], ['m_green', '緑（景色）'], ['m_warm', 'オレンジ（景色）'], ['m_film', '自然なフィルム（景色）']];   // 以前の組み方（v62まで）
   var L5_DIR_NP = [['blue', '青'], ['green', '緑'], ['warm', 'オレンジ（暖かい）'], ['film', '自然なフィルム']];   // 人物以外
   var L5_DEFDIR = { plant: 'green', sea: 'blue', forest: 'blue', object: 'warm' };
   function l5Measure(){
@@ -5443,7 +5449,7 @@ function tkLook2(img, n, P, w, h){
     XE.autoForget.hidden = !(c || pn) || (AUTO && AUTO.kind === 'lk');
     if (!AUTO) return;
     var isRef = AUTO.kind === 'ref', isPref = AUTO.kind === 'pref', isLk = AUTO.kind === 'lk';
-    XE.l5Base.hidden = !(isLk && AUTO.l5); XE.l5Dir.hidden = !(isLk && AUTO.l5); XE.l5Split.hidden = !(isLk && AUTO.l5); if (isLk && AUTO.l5) Array.prototype.forEach.call(XE.l5Split.children, function(b){ b.classList.toggle('on', +b.dataset.s === (P.l5Split | 0)); });
+    XE.l5Base.hidden = !(isLk && AUTO.l5); XE.l5Dir.hidden = !(isLk && AUTO.l5); XE.l5Split.hidden = !(isLk && AUTO.l5); XE.l5Old.hidden = XE.l5OldH.hidden = !(isLk && AUTO.l5); if (isLk && AUTO.l5) Array.prototype.forEach.call(XE.l5Old.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.dir); }); if (isLk && AUTO.l5) Array.prototype.forEach.call(XE.l5Split.children, function(b){ b.classList.toggle('on', +b.dataset.s === (P.l5Split | 0)); });
     if (isLk && AUTO.l5){ XE.l5DirFill(L5_PAT); Array.prototype.forEach.call(XE.l5Base.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.base); }); Array.prototype.forEach.call(XE.l5Dir.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.dir); }); }
     if (isLk){
       XE.prefBtn.hidden = true; XE.prefInfo.hidden = true; XE.autoSeg.hidden = true; XE.autoAi.hidden = !!(AUTO.ai || AUTO.busy);
@@ -5490,6 +5496,10 @@ function tkLook2(img, n, P, w, h){
     XE.l5DirFill = function(list){ if (dseg._list === list) return; dseg._list = list; dseg.innerHTML = ''; list.forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.s = d[0]; b.addEventListener('click', function(){ if (!AUTO || !AUTO.l5) return; AUTO.dir = d[0]; AUTO.patManual = true; P.l5Dir = d[0]; P.l5Pat = d[0]; syncAutoUI(); schedule(); }); dseg.appendChild(b); }); };
     XE.l5DirFill(L5_DIR);
     box.appendChild(dseg);
+    var oh = xel('div', 'l5oldh', '以前の組み方'); XE.l5OldH = oh; box.appendChild(oh);
+    var oseg = xel('div', 'seg l5seg'); XE.l5Old = oseg;
+    L5_OLD.forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.s = d[0]; b.addEventListener('click', function(){ if (!AUTO || !AUTO.l5) return; AUTO.dir = d[0]; AUTO.patManual = true; P.l5Dir = d[0]; P.l5Pat = d[0]; syncAutoUI(); schedule(); }); oseg.appendChild(b); });
+    box.appendChild(oseg);
     var sseg = xel('div', 'seg l5seg'); XE.l5Split = sseg;
     [[0, '影と光：色分けなし'], [1, '影に青・光にオレンジ'], [2, '影にオレンジ・光に青']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.s = d[0]; b.addEventListener('click', function(){ if (!AUTO || !AUTO.l5) return; P.l5Split = d[0]; syncAutoUI(); schedule(); }); sseg.appendChild(b); });
     box.appendChild(sseg);
