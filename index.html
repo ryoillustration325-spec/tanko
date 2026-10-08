@@ -429,7 +429,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v66</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v67</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3070,8 +3070,9 @@ function tkLook2(img, n, P, w, h){
     var ch = st.clientHeight || window.innerHeight; dispW = Math.min(cw, ch * aspect);
     var long = dispW * dpr * Math.max(nw, nh) / nw;   // 実際に表示される大きさの実ピクセル
     if (P.geo && !CROPMODE){ var cf = Math.max(P.geo.w, P.geo.h); if (cf < 0.98) long /= Math.max(0.35, cf); }   // トリミングで拡大して見る分
-    if (typeof VZ !== 'undefined' && VZ.s > 1) long *= VZ.s;   // 写真を拡大して見ている分
-    return Math.max(800, Math.min(VZ && VZ.s > 1 ? 4000 : 2400, Math.round(long)));
+    var zd = VZHI && typeof VZ !== 'undefined' && VZ && VZ.s > 1;
+    if (zd) long *= VZ.s;   // 拡大して手を止めた時だけ、その分細かく
+    return Math.max(800, Math.min(zd ? 3000 : 2400, Math.round(long)));
   }
   function setupPreview(){
     var hl = hiLongSide();
@@ -3094,8 +3095,16 @@ function tkLook2(img, n, P, w, h){
   }
 
   var busy = false, wantLo = false, wantHi = false, hiTimer = null, gen = 0, showOrig = false, last = null;
+  // 拡大中の細かい計算：編集している間は普段の解像度で軽く、手を止めて1秒たったら1回だけ細かく
+  var VZHI = false, vzIdleT = null, vzInRef = false;
+  function vzWantDetail(){
+    clearTimeout(vzIdleT);
+    if (typeof VZ === 'undefined' || !VZ || VZ.s <= 1.5) return;
+    vzIdleT = setTimeout(function(){ if (VZ.s > 1.5 && !VZHI){ VZHI = true; vzInRef = true; refreshHiRes(); vzInRef = false; } }, 1000);
+  }
   function schedule(){
     if (!hi) return;
+    if (!vzInRef){ if (VZHI){ VZHI = false; vzInRef = true; refreshHiRes(); vzInRef = false; } vzWantDetail(); }
     gen++; wantLo = true; wantHi = false;
     clearTimeout(hiTimer);
     hiTimer = setTimeout(function(){ wantHi = true; pump(); }, 250);
@@ -4025,17 +4034,20 @@ function tkLook2(img, n, P, w, h){
     var mx = Math.max(0, (w * VZ.s - w) / 2), my = Math.max(0, (h * VZ.s - h) / 2);
     VZ.x = Math.max(-mx, Math.min(mx, VZ.x)); VZ.y = Math.max(-my, Math.min(my, VZ.y));
   }
-  function resetVZ(){ if (VZ.s === 1 && !VZ.x && !VZ.y) return; VZ.s = 1; VZ.x = 0; VZ.y = 0; applyVZ(); refreshHiRes(); }
+  function resetVZ(){ if (VZ.s === 1 && !VZ.x && !VZ.y) return; VZ.s = 1; VZ.x = 0; VZ.y = 0; applyVZ(); clearTimeout(vzIdleT); if (VZHI){ VZHI = false; vzInRef = true; refreshHiRes(); vzInRef = false; } }
   function vzBlocked(){ return CROPMODE || document.body.classList.contains('brushing') || document.body.classList.contains('picking') || SPLIT; }
   (function(){
-    var st = $('stage'), pts = {}, g0 = null, lastTap = 0, hrT = null;
+    var st = $('stage'), pts = {}, g0 = null, lastTap = 0, lastXY = { x: 0, y: 0 }, hrT = null;
     function k(){ return Object.keys(pts); }
     function two(){ var a = pts[k()[0]], b = pts[k()[1]]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
     function start(){ var n = k().length, rr = st.getBoundingClientRect(); g0 = { s: VZ.s, x: VZ.x, y: VZ.y, cx: rr.left + rr.width / 2, cy: rr.top + rr.height / 2 }; if (n >= 2){ var t = two(); g0.d = t.d; g0.mx = t.x; g0.my = t.y; } else { var p = pts[k()[0]]; g0.mx = p.x; g0.my = p.y; } }
     st.addEventListener('pointerdown', function(e){
       if (!hi || vzBlocked() || e.target !== view && e.target !== st && e.target.id !== 'ovl') return;
+      // 新しい操作の最初の指：前の操作で残った指の記録を消す（取り残しで固まらないように）
+      if (e.isPrimary) pts = {};
+      try{ st.setPointerCapture(e.pointerId); }catch(er){}
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (k().length === 1){ var now = Date.now(); if (now - lastTap < 300){ resetVZ(); lastTap = 0; pts = {}; return; } lastTap = now; }
+      if (k().length === 1){ var now = Date.now(); if (now - lastTap < 300 && Math.hypot(e.clientX - lastXY.x, e.clientY - lastXY.y) < 40){ resetVZ(); lastTap = 0; } else lastTap = now; lastXY = { x: e.clientX, y: e.clientY }; }
       start();
     });
     st.addEventListener('pointermove', function(e){
@@ -4053,8 +4065,9 @@ function tkLook2(img, n, P, w, h){
       } else return;
       clampVZ(); applyVZ();
     }, { passive: false });
-    function end(e){ if (!pts[e.pointerId]) return; delete pts[e.pointerId]; if (k().length) start(); else { g0 = null; if (VZ.s <= 1.02) resetVZ(); clearTimeout(hrT); hrT = setTimeout(refreshHiRes, 350); } }
-    st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+    function end(e){ if (!pts[e.pointerId]) return; delete pts[e.pointerId]; if (k().length) start(); else { g0 = null; if (VZ.s <= 1.02) resetVZ(); vzWantDetail(); } }
+    st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end); st.addEventListener('lostpointercapture', end);
+    window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
     // ブラウザのページ全体の拡大を止める（iPhoneのつまむ操作）
     ['gesturestart', 'gesturechange'].forEach(function(t){ document.addEventListener(t, function(e){ e.preventDefault(); }, { passive: false }); });
     st.addEventListener('touchmove', function(e){ if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
@@ -5068,7 +5081,7 @@ function tkLook2(img, n, P, w, h){
   };
   var TABS = [
     { key: 'look', label: '仕上げ' },
-    { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['basic','ライト',['basic']],['wb','カラー',['wb']],['fx','効果',['fx']],['det','ディテール',['det']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['cg','グレーディング',['cg']]] },
+    { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['basic','ライト',['basic']],['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['fx','効果',['fx']],['det','ディテール',['det']]] },
     { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
     { key: 'part', label: '部分', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
