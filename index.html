@@ -429,7 +429,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v68</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v69</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2402,18 +2402,20 @@ function tkLook5(img, n, P, w, h){
   var sc = P.l5Auto ? 1 : Math.max(0.8, Math.min(1.35, 1 + (base.C / Math.max(0.005, M.C) - 1) * ks));
   var key = ['l5', P.l5Base, P.l5Dir, P.l5Split | 0, P.l5SplitAmt, kc, ks, tk, dk, hsh, skn, Math.round(t2 * 200), Math.round(t50 * 200), Math.round(t98 * 200), Math.round(sc * 100), P2 ? xs.map(function(v){ return Math.round(v * 200); }).join('_') + ys.map(function(v){ return Math.round(v * 200); }).join('_') : '', bf.map(function(v){ return Math.round(v * 100); }).join('_')].concat(dB.map(function(d){ return Math.round(d[0] * 2000) + ':' + Math.round(d[1] * 2000); }), dS.map(function(d){ return Math.round(d[0]) + ':' + Math.round(d[1]) + ':' + Math.round(d[2] * 100) + ':' + Math.round(d[3] * 300); })).join(',');
   if (TK_LUTC.l5K !== key){
-    var N3 = 33, NN = N3 * N3 * N3, LF = new Float32Array(NN * 3), LP = new Float32Array(NN * 3), k = [0, 0, 0], o = [0, 0, 0], p = 0;
+    var N3 = 33, NN = N3 * N3 * N3, LF = new Float32Array(NN * 3), LP = new Float32Array(NN * 3), LFn = new Float32Array(NN * 3), LPn = new Float32Array(NN * 3), LK = new Float32Array(NN * 3), k = [0, 0, 0], o = [0, 0, 0], p = 0;
+    // 2通り作る：sm=1 色で肌を見分けて守る（AIが無い時）／sm=0 色では守らない（AIで肌の場所が分かる時。橙の服や花も普通に寄せる）
+    for (var sm = 1; sm >= 0; sm--){ p = 0; var OF = sm ? LF : LFn, OP = sm ? LP : LPn;
     for (var bj = 0; bj < N3; bj++) for (var gj = 0; gj < N3; gj++) for (var rj = 0; rj < N3; rj++){
       tkToOk(rj / 32, gj / 32, bj / 32, k);
       var L = k[0], A = k[1], B = k[2], C = Math.sqrt(A * A + B * B), H = Math.atan2(B, A) * 180 / Math.PI; if (H < 0) H += 360;
       var L2 = CV[Math.max(0, Math.min(1023, Math.round(Math.max(0, Math.min(1, L)) * 1023)))];
-      var ws = (1 - tkSS((Math.abs(tkHueDist(H, 55)) - 30) / 20)) * tkSS((C - 0.015) / 0.03) * tkSS((L - 0.3) / 0.15);
+      var ws = sm ? (1 - tkSS((Math.abs(tkHueDist(H, 55)) - 30) / 20)) * tkSS((C - 0.015) / 0.03) * tkSS((L - 0.3) / 0.15) : 0;
       // 色相ごと：近い色相の差をなだらかに
       var wch = tkSS((C - 0.02) / 0.03), hs = 0, cfs = 0, wsum = 0, hsW = 0, cfW = 0, dlW = 0;
       for (var di = 0; di < dS.length; di++){ var wgt = Math.exp(-Math.pow(tkHueDist(H, dS[di][0]) / 40, 2)) * wch; if (wgt > 0.001){ hsW += dS[di][1] * wgt; cfW += (dS[di][2] - 1) * wgt; dlW += dS[di][3] * wgt; wsum += wgt; } }
       if (wsum > 1){ hsW /= wsum; cfW /= wsum; dlW /= wsum; }
       // 肌に近い色（明るめの橙〜赤み）は、色ごとの寄せをほとんどかけない＝肌の中で赤みが濃く沈んでまだらにならない
-      var skK = Math.max(ws, (1 - tkSS((Math.abs(tkHueDist(H, 50)) - 30) / 25)) * tkSS((L - 0.35) / 0.15));
+      var skK = sm ? Math.max(ws, (1 - tkSS((Math.abs(tkHueDist(H, 50)) - 30) / 25)) * tkSS((L - 0.35) / 0.15)) : 0;
       hsW *= 1 - 0.85 * skK; dlW *= 1 - 0.9 * skK; if (cfW > 0) cfW *= 1 - 0.8 * skK;
       // 色だけ沈める量は、鮮やかな色ほど強く（灰色は動かさない）
       L2 += dlW * tkSS((C - 0.025) / 0.03);
@@ -2434,22 +2436,39 @@ function tkLook5(img, n, P, w, h){
       }
       wt = Math.max(wt, 1e-6); ca /= wt; cb /= wt; wa /= wt; wb /= wt;
       // 肌色寄りの色（暖色の色相）は、濃さに関係なくなだらかに守る＝肌の中で青が乗る所と乗らない所がまだらにならない
-      var whue = (1 - tkSS((Math.abs(tkHueDist(H, 55)) - 40) / 45)) * tkSS((C - 0.006) / 0.02);
+      var whue = sm ? (1 - tkSS((Math.abs(tkHueDist(H, 55)) - 40) / 45)) * tkSS((C - 0.006) / 0.02) : 0;
       var coolW = wn * (1 - 0.9 * Math.max(ws, whue));
       var A0 = A2 + wa * wn, B0 = B2 + wb * wn, A1 = A0 + ca * coolW, B1 = B0 + cb * coolW;
-      tkFromOk(L2, A1, B1, o); LF[p] = tkClamp01(o[0]); LF[p + 1] = tkClamp01(o[1]); LF[p + 2] = tkClamp01(o[2]);
-      tkFromOk(L2, A0, B0, o); LP[p] = tkClamp01(o[0]); LP[p + 1] = tkClamp01(o[1]); LP[p + 2] = tkClamp01(o[2]);
+      tkFromOk(L2, A1, B1, o); OF[p] = tkClamp01(o[0]); OF[p + 1] = tkClamp01(o[1]); OF[p + 2] = tkClamp01(o[2]);
+      tkFromOk(L2, A0, B0, o); OP[p] = tkClamp01(o[0]); OP[p + 1] = tkClamp01(o[1]); OP[p + 2] = tkClamp01(o[2]);
+      if (!sm){
+        // 肌の表：明るさの作りだけ合わせ、色は元の肌のまま優しいオレンジへ少し（色ごとの寄せ・空気の色はかけない）
+        var Lk = CV[Math.max(0, Math.min(1023, Math.round(Math.max(0, Math.min(1, L)) * 1023)))] + 0.012 * skn;
+        var hk = H + tkHueDist(64, H) * skn * 0.6, ck = C * (1 + 0.05 * skn);
+        tkFromOk(Lk, Math.cos(hk * Math.PI / 180) * ck, Math.sin(hk * Math.PI / 180) * ck, o); LK[p] = tkClamp01(o[0]); LK[p + 1] = tkClamp01(o[1]); LK[p + 2] = tkClamp01(o[2]);
+      }
       p += 3;
     }
-    TK_LUTC.l5K = key; TK_LUTC.l5 = LF; TK_LUTC.l5P = LP;
+    }
+    TK_LUTC.l5K = key; TK_LUTC.l5 = LF; TK_LUTC.l5P = LP; TK_LUTC.l5n = LFn; TK_LUTC.l5Pn = LPn; TK_LUTC.l5S = LK;
   }
   var I0 = new Float32Array(img);
   if (!SW){ tkApplyLut3(img, n, TK_LUTC.l5, 33); tkL5Smooth(img, I0, w, h); tkL5Master(img, I0, P); return; }
-  var Bq = new Float32Array(img); tkApplyLut3(img, n, TK_LUTC.l5, 33); tkApplyLut3(Bq, n, TK_LUTC.l5P, 33);
+  // AIで人物が分かる時：人物の中で肌の色を測り、肌は「肌の表」、それ以外は色で守らない表で（橙の服や花は普通に寄せる）
+  var SKf = null; try{ SKf = tkSkinFind(img, n, SW, false); if (SKf && SKf.frac < TK_SKIN_MIN) SKf = null; if (P.lkSkinOff) SKf = null; }catch(e){ SKf = null; }
+  var Bq = new Float32Array(img), Sq = SKf ? new Float32Array(img) : null;
+  tkApplyLut3(img, n, SKf ? TK_LUTC.l5n : TK_LUTC.l5, 33); tkApplyLut3(Bq, n, SKf ? TK_LUTC.l5Pn : TK_LUTC.l5P, 33); if (Sq) tkApplyLut3(Sq, n, TK_LUTC.l5S, 33);
+  var ko5 = [0, 0, 0];
   // 自動：主役（AI）の外＝背景を少し沈めて、色を少し落とす（主役が浮かび、奥行きが出る）
   var bgk = P.l5Auto ? (P.l5Bg == null ? 50 : P.l5Bg) / 100 * 0.12 : 0;
   for (var i2 = 0, j2 = 0; i2 < n; i2++, j2 += 3){
     var t = SW[i2] * prot; if (t > 0){ img[j2] += (Bq[j2] - img[j2]) * t; img[j2 + 1] += (Bq[j2 + 1] - img[j2 + 1]) * t; img[j2 + 2] += (Bq[j2 + 2] - img[j2 + 2]) * t; }
+    if (Sq && SW[i2] > 0.1){
+      tkToOk(I0[j2], I0[j2 + 1], I0[j2 + 2], ko5);
+      var da5 = ko5[1] - SKf.a, db5 = ko5[2] - SKf.b, cq5 = Math.sqrt(ko5[1] * ko5[1] + ko5[2] * ko5[2]);
+      var wk = SW[i2] * Math.exp(-(da5 * da5 + db5 * db5) / (2 * 0.022 * 0.022)) * tkSS((cq5 - 0.004) / 0.008) * tkSS((ko5[0] - 0.25) / 0.12) * (1 - tkSS((ko5[0] - 0.9) / 0.06));
+      if (wk > 0.005){ img[j2] += (Sq[j2] - img[j2]) * wk; img[j2 + 1] += (Sq[j2 + 1] - img[j2 + 1]) * wk; img[j2 + 2] += (Sq[j2 + 2] - img[j2 + 2]) * wk; }
+    }
     if (bgk > 0){
       var bw = (1 - SW[i2]) * bgk, r0 = img[j2], g0 = img[j2 + 1], b0 = img[j2 + 2], yy = 0.3 * r0 + 0.59 * g0 + 0.11 * b0;
       var dm = 1 - bw * (0.5 + 0.5 * yy);   // 明るい背景ほど少し多めに（白い背景が主役より目立たない）
