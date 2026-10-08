@@ -150,6 +150,8 @@
   .l6slv{font-variant-numeric:tabular-nums; color:var(--ink)}
   .l6sl input[type=range]{width:100%; margin:6px 0 2px; touch-action:pan-y}
   .l6sle{display:flex; justify-content:space-between; font-size:10px; color:var(--faint)}
+  .l6skin{margin:4px 0 6px}
+  .l6skin .hint{margin:4px 2px}
   .l6sw{display:inline-block; width:20px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
   .seg.l5seg button.l6chip{display:inline-flex; align-items:center; justify-content:center}
   .seg.l6list{align-content:flex-start; overflow:hidden; touch-action:pan-y}
@@ -443,7 +445,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v77</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v78</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1248,6 +1250,30 @@ function tkLmWeight(m, w, h){
       Sk = tkGuided(Ys, Sk, sw, sh2, 4, 2e-3);
       for (y = 0; y < h; y++){ var gy = Math.min(sh2 - 1, (y * sh2 / h) | 0); for (x = 0; x < w; x++) W[y * w + x] = tkClamp01(Sk[gy * sw + Math.min(sw - 1, (x * sw / w) | 0)] * 1.15); }
     }
+  } else if (m.type === 'skin'){
+    // 肌（濃い青・肌用）：肌の色の所 ×（AIがあれば人物・主役の所）。写真の明るさの輪郭に沿わせる。ブラシで足す・消すで直せる
+    if (m.img){
+      var im5 = m.img, iw5 = m.iw, ih5 = m.ih, SK5 = null, AI5 = null;
+      // AIがある時：人物の中で実際に測った肌の色を基準にする（帽子・服・木など、肌に近いが違う色を外す）
+      if (typeof TK_REG !== 'undefined' && TK_REG && TK_REG.data){ try{ AI5 = tkLmWeight({ type: 'ai', role: 0, strokes: [], feather: 30, inv: 0 }, iw5, ih5); SK5 = tkSkinFind(im5, iw5 * ih5, AI5, false); if (SK5 && SK5.frac < 0.003) SK5 = null;
+        // 肌の明るさの中心も測る（同じ色みの髪・帽子は明るさで外す）
+        if (SK5){ var o6 = [0, 0, 0], sl6 = 0, sn6 = 0, ss6 = 0; for (var q6 = 0; q6 < iw5 * ih5; q6 += 2){ if (AI5[q6] < 0.5) continue; tkToOk(im5[q6 * 3], im5[q6 * 3 + 1], im5[q6 * 3 + 2], o6); var d6a = o6[1] - SK5.a, d6b = o6[2] - SK5.b; if (d6a * d6a + d6b * d6b < 0.01 * 0.01 && o6[0] > 0.3){ sl6 += o6[0]; ss6 += o6[0] * o6[0]; sn6++; } }
+          if (sn6 > 20){ SK5.L = sl6 / sn6; SK5.Ls = Math.max(0.05, Math.sqrt(Math.max(0, ss6 / sn6 - SK5.L * SK5.L))); } else SK5.L = null; }
+      }catch(e5){ SK5 = null; } }
+      var sc5 = Math.min(1, 360 / Math.max(w, h)), sw5 = Math.max(1, Math.round(w * sc5)), sh5 = Math.max(1, Math.round(h * sc5)), Y5 = new Float32Array(sw5 * sh5), K5 = new Float32Array(sw5 * sh5), o5 = [0, 0, 0];
+      for (y = 0; y < sh5; y++) for (x = 0; x < sw5; x++){
+        var sx5 = Math.min(iw5 - 1, (x * iw5 / sw5) | 0), sy5 = Math.min(ih5 - 1, (y * ih5 / sh5) | 0), q5 = (sy5 * iw5 + sx5) * 3;
+        tkToOk(im5[q5], im5[q5 + 1], im5[q5 + 2], o5);
+        var C5 = Math.sqrt(o5[1] * o5[1] + o5[2] * o5[2]), H5 = (Math.atan2(o5[2], o5[1]) * 180 / Math.PI + 360) % 360;
+        Y5[y * sw5 + x] = o5[0];
+        if (SK5){ var da5 = o5[1] - SK5.a, db5 = o5[2] - SK5.b, lw5 = SK5.L != null ? Math.exp(-Math.pow(Math.max(0, SK5.L - o5[0] - SK5.Ls) / 0.08, 2)) : tkSS((o5[0] - 0.3) / 0.1); K5[y * sw5 + x] = Math.exp(-(da5 * da5 + db5 * db5) / (2 * 0.010 * 0.010)) * tkSS((C5 - 0.006) / 0.012) * lw5 * (1 - tkSS((o5[0] - 0.97) / 0.025)); continue; }
+        K5[y * sw5 + x] = Math.exp(-Math.pow(tkHd(H5, 45) / 38, 2)) * tkSS((C5 - 0.012) / 0.02) * (1 - tkSS((C5 - 0.14) / 0.04)) * tkSS((o5[0] - 0.32) / 0.1) * (1 - tkSS((o5[0] - 0.96) / 0.03));
+      }
+      K5 = tkBlur1(K5, sw5, sh5, 1.5); for (i = 0; i < K5.length; i++) K5[i] = tkClamp01(K5[i] * 1.6);
+      if (typeof TK_REG !== 'undefined' && TK_REG && TK_REG.data){ var A5 = tkLmWeight({ type: 'ai', role: 0, strokes: [], feather: 30, inv: 0 }, sw5, sh5); for (i = 0; i < K5.length; i++) K5[i] *= A5[i]; }
+      K5 = tkBlur1(K5, sw5, sh5, 1.2);   // 境目だけ少しなめらかに（輪郭合わせのぼかしは髪の筋をひろうので使わない）
+      for (y = 0; y < h; y++){ var gy5 = Math.min(sh5 - 1, (y * sh5 / h) | 0); for (x = 0; x < w; x++) W[y * w + x] = tkClamp01(K5[gy5 * sw5 + Math.min(sw5 - 1, (x * sw5 / w) | 0)]); }
+    }
   } else if (m.type === 'brush'){
     // ブラシは縮小した下書きに丸を打ってから、ぼかして写真の大きさへ
     var Ls = Math.max(w, h), sc = Math.min(1, 512 / Ls), bw = Math.max(1, Math.round(w * sc)), bh = Math.max(1, Math.round(h * sc)), B = new Float32Array(bw * bh);
@@ -1266,7 +1292,7 @@ function tkLmWeight(m, w, h){
         W[y * w + x] = tkClamp01(a0 + (a1 - a0) * ty); } }
   }
   // AI・空の範囲は、ブラシで足したり消したりして直せる
-  if ((m.type === 'ai' || m.type === 'sky') && m.strokes && m.strokes.length){
+  if ((m.type === 'ai' || m.type === 'sky' || m.type === 'skin') && m.strokes && m.strokes.length){
     var Ls2 = Math.max(w, h);
     m.strokes.forEach(function(st){
       var px = st[0] * w, py = st[1] * h, r = Math.max(1, st[2] * Ls2), er = st[3];
@@ -2683,8 +2709,14 @@ function tkLook6(img, n, P, w, h){
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100;
   if (dBg > 0 || dSk > 0){
     var key = 'deep' + dBg + ',' + dSk + ',' + (P.l6SkH == null ? '' : P.l6SkH);
-    if (TK_LUTC.l6dK !== key){ TK_LUTC.l6dK = key; TK_LUTC.l6d = tkL6DeepLut(dBg, dSk, P.l6SkH); }
-    tkApplyLut3(img, n, TK_LUTC.l6d, 33);
+    if (TK_LUTC.l6dK !== key){ TK_LUTC.l6dK = key; TK_LUTC.l6d = tkL6DeepLut(dBg, dSk, P.l6SkH); TK_LUTC.l6d0 = dSk > 0 ? tkL6DeepLut(dBg, 0, P.l6SkH) : null; }
+    if (dSk > 0 && w && h){
+      // 肌の量は「肌の範囲」（色＋AI＋手で直した所）の中だけ。範囲の外は背景の量
+      var sm = null; (P.lm || []).forEach(function(x){ if (x.l6skin) sm = x; });
+      var Wsk = tkLmWeight(Object.assign({ type: 'skin', strokes: [], feather: 30, inv: 0 }, sm || {}, { img: img, iw: w, ih: h }), w, h);
+      var Ain = new Float32Array(img); tkApplyLut3(Ain, n, TK_LUTC.l6d, 33); tkApplyLut3(img, n, TK_LUTC.l6d0, 33);
+      for (var j = 0; j < n; j++){ var wv = Wsk[j]; if (wv > 0.001){ var j3 = j * 3; img[j3] += (Ain[j3] - img[j3]) * wv; img[j3 + 1] += (Ain[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Ain[j3 + 2] - img[j3 + 2]) * wv; } }
+    } else tkApplyLut3(img, n, TK_LUTC.l6d, 33);
   }
 }
 function tkLook6Core(img, n, P, w, h, mode){
@@ -4645,8 +4677,8 @@ function tkLook2(img, n, P, w, h){
   // ---- 自由な部分補正（円形・線形・ブラシ） ----
   var LMEDIT = false, lmui = null, lmov = null;
   function lmAdjKeys(){ return [['ev', '露光量'], ['con', 'コントラスト'], ['hi', 'ハイライト'], ['sh', 'シャドウ'], ['temp', '色温度'], ['tint', '色かぶり'], ['sat', '彩度']]; }
-  function lmName(m, i){ return (i + 1) + ' ' + (m.type === 'radial' ? '円形' : m.type === 'linear' ? '線形' : m.type === 'sky' ? '空' : m.type === 'ai' ? (m.role === 0 ? '主役' : '背景') : 'ブラシ'); }
-  function lmPaintable(m){ return m && (m.type === 'brush' || m.type === 'ai' || m.type === 'sky'); }
+  function lmName(m, i){ return (i + 1) + ' ' + (m.type === 'radial' ? '円形' : m.type === 'linear' ? '線形' : m.type === 'sky' ? '空' : m.type === 'skin' ? '肌（濃い青）' : m.type === 'ai' ? (m.role === 0 ? '主役' : '背景') : 'ブラシ'); }
+  function lmPaintable(m){ return m && (m.type === 'brush' || m.type === 'ai' || m.type === 'sky' || m.type === 'skin'); }
   function lmNew(type){
     if (!img){ toast('先に写真を選んでください'); return; }
     if ((type === 'ai-subj' || type === 'ai-bg') && !REG.ready){ toast('AIで写真を見分けています…'); runSegmentation().then(function(){ if (REG.ready) lmNew(type); else toast('AIで見分けられませんでした'); }); return; }
@@ -4744,7 +4776,7 @@ function tkLook2(img, n, P, w, h){
       }
       lmDraw(true); schedule();
     });
-    function up(){ if (!drag) return; drag = null; lmDraw(); clearPresetMark(); schedule(); }
+    function up(){ if (!drag) return; drag = null; lmDraw(); var mu = P.lm[LM.sel]; if (!(mu && mu.l6skin)) clearPresetMark(); schedule(); }
     lmui.addEventListener('pointerup', up); lmui.addEventListener('pointercancel', up);
   }
   function lmPaint(m, q){
@@ -4781,8 +4813,8 @@ function tkLook2(img, n, P, w, h){
     lmov.style.display = showOv ? 'block' : 'none';
     if (showOv){
       var sc = Math.min(1, 320 / Math.max(hi.w, hi.h)), w = Math.max(1, Math.round(hi.w * sc)), h = Math.max(1, Math.round(hi.h * sc)), mm = m;
-      if (m.type === 'sky'){
-        // 空の判定には写真の色が要るので、表示用に小さく読み出して渡す
+      if (m.type === 'sky' || m.type === 'skin'){
+        // 空・肌の判定には写真の色が要るので、表示用に小さく読み出して渡す
         var sp = readPixels(w, h), fl = new Float32Array(w * h * 3); for (var qi = 0; qi < w * h; qi++){ fl[qi * 3] = sp[qi * 4] / 255; fl[qi * 3 + 1] = sp[qi * 4 + 1] / 255; fl[qi * 3 + 2] = sp[qi * 4 + 2] / 255; }
         mm = Object.assign({}, m, { img: fl, iw: w, ih: h });
       }
@@ -5930,6 +5962,19 @@ function tkLook2(img, n, P, w, h){
     XE.autoAi.hidden = !needAi || AUTO.busy;
     if (!AUTO.busy) XE.autoSt.textContent = needAi ? '人物・主役の補正はAIの準備が必要です（初回は約55MBの読み込み）' : '色の細かい調整は「調整」タブでそのまま上書きできます';
   }
+  // 濃い青・肌の範囲（マスク）を、見本1枚に寄せるのパネルの中で直す
+  var L6EDIT = false;
+  function l6SkinMask(){
+    var m = null, idx = -1; (P.lm || []).forEach(function(x, i){ if (x.l6skin){ m = x; idx = i; } });
+    if (!m){ m = { type: 'skin', l6skin: 1, strokes: [], feather: 30, inv: 0, adj: {} }; P.lm = P.lm || []; P.lm.push(m); idx = P.lm.length - 1; P.on.lm = 1; }
+    m._i = idx; return m;
+  }
+  function l6SkinEdit(on){
+    L6EDIT = !!on;
+    if (L6EDIT){ var m = l6SkinMask(); LM.sel = m._i; delete m._i; if (!LM.bmode) LM.bmode = 'add'; LMEDIT = false; setLmEdit(true); if ((P.l6DeepSk || 0) === 0) toast('「濃い青・肌」を上げると、この範囲に効きます'); }
+    else setLmEdit(false);
+    l6Render();
+  }
   function l6Render(){
     var bx = XE.l6Box, A6 = AUTO; bx.innerHTML = '';
     // 被写体ごとの通し番号（一覧は被写体 → 雰囲気 → 明るい順に並んでいる）
@@ -5956,6 +6001,27 @@ function tkLook2(img, n, P, w, h){
     bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
     bx.appendChild(l6Slider('濃い青・背景（影・青い物を藍へ）', 'l6DeepBg', 30, '', ''));
     bx.appendChild(l6Slider('濃い青・肌（肌の影に藍）', 'l6DeepSk', 0, '', ''));
+    // 肌の範囲：色＋AIで自動、間違えた所はここで塗る・消すで直す（マスクと同じ仕組み。マスクの一覧にも「肌（濃い青）」として出る）
+    var sk = xel('div', 'l6skin');
+    var skTop = xel('div', 'rrow');
+    skTop.appendChild(xbtn(L6EDIT ? '肌の範囲を直す：終了' : '肌の範囲を表示・直す', L6EDIT ? 'pri' : 'ghost', function(){ l6SkinEdit(!L6EDIT); }));
+    if (!REG.ready) skTop.appendChild(xbtn(REG.busy ? 'AIで判定中…' : 'AIで人物を判定（精度↑）', 'ghost', function(){ if (REG.busy) return; runSegmentation().then(function(){ l6Render(); schedule(); if (L6EDIT) lmDraw(); }); l6Render(); }));
+    sk.appendChild(skTop);
+    sk.appendChild(xel('div', 'hint', REG.ready ? '肌の範囲：肌の色 × AIの人物（服・髪・木などは入りにくい）' : '肌の範囲：肌の色だけで判定中（肌に近い色の木・帽子も入ることがあります）'));
+    if (L6EDIT){
+      var seg = xel('div', 'seg');
+      [['add', '塗る（肌にする）'], ['erase', '消す（肌から外す）']].forEach(function(d){ var b = xel('button', LM.bmode === d[0] ? 'on' : '', d[1]); b.type = 'button'; b.addEventListener('click', function(){ LM.bmode = d[0]; l6Render(); }); seg.appendChild(b); });
+      sk.appendChild(seg);
+      var br = xel('div', 'row'); br.innerHTML = '<label>ブラシの大きさ</label><input type="range" min="1" max="25"><span class="val num"></span>';
+      var bi = br.querySelector('input'), bv = br.querySelector('.val'); bi.value = LM.bsize; bv.textContent = LM.bsize;
+      bi.addEventListener('input', function(){ LM.bsize = +bi.value; bv.textContent = bi.value; });
+      sk.appendChild(br);
+      var rr = xel('div', 'rrow');
+      rr.appendChild(xbtn('手直しを消す（自動に戻す）', 'ghost', function(){ var m = l6SkinMask(); m.strokes = []; lmDraw(); schedule(); }));
+      sk.appendChild(rr);
+      sk.appendChild(xel('div', 'hint', '写真の上をなぞって直します。赤い所が「肌」として扱われる範囲です。'));
+    }
+    bx.appendChild(sk);
     var h1 = xel('div', 'l5oldh', 'おすすめ（写真に近い見本・全' + TK_L6.length + '枚から）'); bx.appendChild(h1);
     var s1 = xel('div', 'seg l5seg'); A6.rank.forEach(function(i){ s1.appendChild(chip(i, nm(i), !A6.custom && A6.idx === i, true)); }); bx.appendChild(s1);
     var h2 = xel('div', 'l5oldh', '被写体から選ぶ'); bx.appendChild(h2);
@@ -6137,6 +6203,7 @@ function tkLook2(img, n, P, w, h){
     Array.prototype.forEach.call(tabbar.children, function(b){ b.classList.toggle('on', b.dataset.t === key); });
     setTimeout(function(){ try{ drawCurve(); }catch(e){} try{ syncGrade(); }catch(e){} }, 0);
     if (t.chips){ var cc = CUR.chip[key] || t.chips[0][0]; setCropMode(key === 'adj' && cc === 'geo' && !document.getElementById('app').classList.contains('expanded')); } else setCropMode(false);
+    L6EDIT = false;
     setLmEdit(!!t.chips && key === 'part' && (CUR.chip[key] || t.chips[0][0]) === 'lm');
     updateIndicators();
     if (typeof drawOverlay === 'function') drawOverlay();
