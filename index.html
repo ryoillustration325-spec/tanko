@@ -429,7 +429,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v67</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v68</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2412,6 +2412,9 @@ function tkLook5(img, n, P, w, h){
       var wch = tkSS((C - 0.02) / 0.03), hs = 0, cfs = 0, wsum = 0, hsW = 0, cfW = 0, dlW = 0;
       for (var di = 0; di < dS.length; di++){ var wgt = Math.exp(-Math.pow(tkHueDist(H, dS[di][0]) / 40, 2)) * wch; if (wgt > 0.001){ hsW += dS[di][1] * wgt; cfW += (dS[di][2] - 1) * wgt; dlW += dS[di][3] * wgt; wsum += wgt; } }
       if (wsum > 1){ hsW /= wsum; cfW /= wsum; dlW /= wsum; }
+      // 肌に近い色（明るめの橙〜赤み）は、色ごとの寄せをほとんどかけない＝肌の中で赤みが濃く沈んでまだらにならない
+      var skK = Math.max(ws, (1 - tkSS((Math.abs(tkHueDist(H, 50)) - 30) / 25)) * tkSS((L - 0.35) / 0.15));
+      hsW *= 1 - 0.85 * skK; dlW *= 1 - 0.9 * skK; if (cfW > 0) cfW *= 1 - 0.8 * skK;
       // 色だけ沈める量は、鮮やかな色ほど強く（灰色は動かさない）
       L2 += dlW * tkSS((C - 0.025) / 0.03);
       var bfx = 1;
@@ -2419,7 +2422,8 @@ function tkLook5(img, n, P, w, h){
       // 色を濃くするのは、はっきり色のある所だけ（灰色のざらつき＝ノイズの色を増やさない）
       var gC = tkSS((C - 0.012) / 0.03), H2 = H + hsW * gC, C2 = C * (1 + (sc * bfx * (1 + cfW) - 1) * gC);
       // 肌はピーチへ
-      if (ws > 0.01 && skn > 0){ H2 += tkHueDist(57, H2) * skn * ws; C2 *= 1 + 0.2 * skn * ws; }
+      // 肌は優しいオレンジへ（赤みを足さず、色の濃さもほぼそのまま、ほんの少し明るく）
+      if (ws > 0.01 && skn > 0){ H2 += tkHueDist(64, H2) * skn * ws * 0.8; C2 *= 1 + 0.06 * skn * ws; L2 += 0.012 * skn * ws; }
       var A2 = Math.cos(H2 * Math.PI / 180) * C2, B2 = Math.sin(H2 * Math.PI / 180) * C2;
       // 帯ごと：色の薄い所に差の分だけ
       var wn = 1 - tkSS((C - 0.03) / 0.06), ca = 0, cb = 0, wa = 0, wb = 0, wt = 0;
