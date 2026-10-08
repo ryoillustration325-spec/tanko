@@ -443,7 +443,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v76</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v77</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2654,19 +2654,20 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn){
 }
 // 濃い青：写真全体に同じ規則でかける（割れない）。見本の実測＝暗い所は藍寄り（色相約247°）、中間は約230°で濃さ0.03〜0.045、明るい所はごく薄い藍
 //   ①もともと青い物（水・空・服・影）を藍の方へ回して濃く・少し沈める ②影に藍を差す ③明るい所にごく薄く藍。肌・暖かい色には入れない
-function tkL6DeepLut(d, skH){
+function tkL6DeepLut(dBg, dSk, skH){
   var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = 252 * Math.PI / 180;
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
     var L = o[0], A = o[1], B = o[2], C = Math.sqrt(A * A + B * B), H = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
-    var warm = Math.exp(-Math.pow(tkHd(H, skH != null ? skH : 40) / 62, 2)) * tkSS((C - 0.004) / 0.01);
+    var warm = Math.exp(-Math.pow(tkHd(H, skH != null ? skH : 40) / 62, 2)) * tkSS((C - 0.004) / 0.01), d = dBg * (1 - warm) + dSk * warm;   // 肌の色の所は「肌」の量、それ以外は「背景」の量
     var wb = Math.exp(-Math.pow(tkHd(H, 228) / 52, 2)) * tkSS((C - 0.006) / 0.014);
     var ws = (1 - tkSS((L - 0.22) / 0.3)) * tkSS((L - 0.03) / 0.1), wh = tkSS((L - 0.68) / 0.16) * (1 - tkSS((L - 0.97) / 0.03));
     // ① 青い物
     var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 1.3 * d * wb) + 0.012 * d * wb, L1 = L - 0.09 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - 0.6 * wh);
     var A1 = Math.cos(H1 * Math.PI / 180) * C1, B1 = Math.sin(H1 * Math.PI / 180) * C1;
     // ② 影に藍 ③ 明るい所にごく薄く
-    var add = (0.045 * ws + 0.012 * wh) * d * (1 - warm) * (1 - 0.5 * wb);
+    var add = (0.045 * ws + 0.012 * wh) * (dBg * (1 - warm) + dSk * warm * 0.6) * (1 - 0.5 * wb)   // 肌は影に藍を差す量を控えめに（くすませない）
+            + 0.016 * dSk * warm * tkSS((L - 0.25) / 0.15) * (1 - tkSS((L - 0.95) / 0.04));   // 肌の中間〜明るい所にも薄く青み（透明感）
     A1 += Math.cos(ih) * add; B1 += Math.sin(ih) * add;
     var C2 = Math.sqrt(A1 * A1 + B1 * B1); if (C2 > 0.13){ A1 *= 0.13 / C2; B1 *= 0.13 / C2; }
     tkFromOk(L1, A1, B1, o); LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
@@ -2675,14 +2676,14 @@ function tkL6DeepLut(d, skH){
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
 function tkLook6(img, n, P, w, h){
-  var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6Mode === 's' ? 0 : 1);
+  var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6V === 2 ? 0 : 1);   // 番号の古い設定（以前の版で保存）だけ強め
   if (mix <= 0) tkLook6Core(img, n, P, w, h, 's');
   else if (mix >= 1) tkLook6Core(img, n, P, w, h, 'x');
   else { var A0 = new Float32Array(img); tkLook6Core(A0, n, P, w, h, 's'); tkLook6Core(img, n, P, w, h, 'x'); for (var i = 0; i < img.length; i++) img[i] = A0[i] + (img[i] - A0[i]) * mix; }
-  var dp = (P.l6Deep || 0) / 100;
-  if (dp > 0){
-    var key = 'deep' + dp + ',' + (P.l6SkH == null ? '' : P.l6SkH);
-    if (TK_LUTC.l6dK !== key){ TK_LUTC.l6dK = key; TK_LUTC.l6d = tkL6DeepLut(dp, P.l6SkH); }
+  var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100;
+  if (dBg > 0 || dSk > 0){
+    var key = 'deep' + dBg + ',' + dSk + ',' + (P.l6SkH == null ? '' : P.l6SkH);
+    if (TK_LUTC.l6dK !== key){ TK_LUTC.l6dK = key; TK_LUTC.l6d = tkL6DeepLut(dBg, dSk, P.l6SkH); }
     tkApplyLut3(img, n, TK_LUTC.l6d, 33);
   }
 }
@@ -5703,7 +5704,7 @@ function tkLook2(img, n, P, w, h){
     if (REG.ready && REG.data){ try{ var mw = REG.mw, mh = REG.mh, nn = mw * mh, rp = readPixels(mw, mh), SWm = new Float32Array(nn); for (var i = 0; i < nn; i++) SWm[i] = REG.data[i * RN] / 255; var est = tkSkinFind(rp, nn, SWm, true); return !!(est && est.frac >= 0.01); }catch(e){} }
     var M = l5Measure(); return M.skin > 0.03;
   }
-  function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = q.l6Mode === 'x' ? 100 : 0; if (q.l6Deep == null) q.l6Deep = 30; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
+  function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
   function applyLook6(idx, keep){
     if (!img){ toast('先に写真を選んでください'); return; }
     var person = l6Person(), T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null);
@@ -5713,6 +5714,7 @@ function tkLook2(img, n, P, w, h){
     fullInto(P, null, true); LAST_FULL = true;
     if (P.mref && (P.mref.ref2 || P.mMode === 'safe')){ P.on.match = 0; P.mref = null; }
     ['basic', 'wb', 'mix', 'crv', 'cg', 'match'].forEach(syncGroup);
+    if (!(old && keep)){ P.l6Mix = 0; P.l6DeepBg = 30; P.l6DeepSk = 0; }   // 新しくかける時は いつも なめらか0・濃い青は背景30／肌0 から
     l6Into(P, idx, L); P.lkSkinOff = 0; P.l6Person = person ? 1 : 0; P.l6Custom = null;
     var mac = { bright: 0, l5Master: L.master, l6L: L.L, l6C: L.C, l6Dark: L.dark, l3Skin: L.skin, lkProt: L.prot, lkSmooth: L.smooth };
     if (old && keep){ ['l5Master', 'l6L', 'l6C', 'l6Dark', 'l3Skin', 'lkProt', 'lkSmooth'].forEach(function(k){ mac[k] = old.macro[k]; P[k === 'lkSmooth' ? '_x' : k] = old.macro[k]; }); if (old.custom){ P.l6Custom = old.custom; } }
@@ -5952,7 +5954,8 @@ function tkLook2(img, n, P, w, h){
       return row;
     }
     bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
-    bx.appendChild(l6Slider('濃い青（影・青い物を藍へ）', 'l6Deep', 30, '', ''));
+    bx.appendChild(l6Slider('濃い青・背景（影・青い物を藍へ）', 'l6DeepBg', 30, '', ''));
+    bx.appendChild(l6Slider('濃い青・肌（肌の影に藍）', 'l6DeepSk', 0, '', ''));
     var h1 = xel('div', 'l5oldh', 'おすすめ（写真に近い見本・全' + TK_L6.length + '枚から）'); bx.appendChild(h1);
     var s1 = xel('div', 'seg l5seg'); A6.rank.forEach(function(i){ s1.appendChild(chip(i, nm(i), !A6.custom && A6.idx === i, true)); }); bx.appendChild(s1);
     var h2 = xel('div', 'l5oldh', '被写体から選ぶ'); bx.appendChild(h2);
