@@ -438,7 +438,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v72</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v73</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2605,7 +2605,7 @@ function tkLook6(img, n, P, w, h){
     var g = 1 - 0.5 * Math.max(0, tm.f - rm.f);   // 見本より面積が大きい役割は控えめに（構図の違い）
     return { tq: tm.q, rq: rm.q, g: g, rx: rm.b.map(function(b){ return b[0]; }), ra: rm.b.map(function(b){ return b[1]; }), rb: rm.b.map(function(b){ return b[2]; }), tx: tm.b.map(function(b){ return b[0]; }), ta: tm.b.map(function(b){ return b[1]; }), tb: tm.b.map(function(b){ return b[2]; }) };
   });
-  var D = new Float32Array(n * 3);
+  var D = new Float32Array(n * 3), SKM = null, SKL = null;
   for (var p = 0; p < n; p++){
     var L = Lb[p], L2 = 0, dA = 0, dB = 0, ws = 0;
     for (var r2 = 0; r2 < 4; r2++){
@@ -2624,10 +2624,35 @@ function tkLook6(img, n, P, w, h){
     ws = Math.max(ws, 1e-6); D[p * 3] = L2 / ws - L; D[p * 3 + 1] = dA / ws; D[p * 3 + 2] = dB / ws;
   }
   // 役割の境目がなめらかになるよう、変化だけ少しぼかす（細部の明暗は元のまま）
-  if (w && h){ var rr = Math.max(1, Math.round(Math.max(w, h) / 700)); D = tkBoxBlur3(D, w, h, rr); }
+  if (w && h){
+    var rr = Math.max(1, Math.round(Math.max(w, h) / 700)); D = tkBoxBlur3(D, w, h, rr);
+    // 色の変化は明るさより広めにぼかす（色の境目＝割れが出ない。明暗の細部は元のまま）
+    var rc = Math.max(2, Math.round(Math.max(w, h) / 160)), DC = tkBoxBlur3(new Float32Array(D), w, h, rc);
+    for (var c2 = 0; c2 < n * 3; c2 += 3){ D[c2 + 1] = DC[c2 + 1]; D[c2 + 2] = DC[c2 + 2]; }
+    // 肌のまわり：頬のハイライトなど「肌と判定されなかった顔の明るい所」にも、まわりの肌と同じ色の変化をかける
+    //   （肌だけピーチに寄って、ハイライトがピンク・青のまま残る＝顔の色の割れ、を防ぐ）
+    SKM = new Float32Array(n * 3); for (var s2 = 0, s3 = 0; s2 < n; s2++, s3 += 3){ var ws2 = Wr[s2 * 4]; SKM[s3] = ws2; SKM[s3 + 1] = ws2 * D[s3 + 1]; SKM[s3 + 2] = ws2 * D[s3 + 2]; }
+    SKL = new Float32Array(n * 3); for (var s4 = 0; s4 < n; s4++) SKL[s4 * 3] = Wr[s4 * 4] * D[s4 * 3];
+    var rsk = Math.max(2, Math.round(Math.max(w, h) / 60)); SKM = tkBoxBlur3(SKM, w, h, rsk); SKL = tkBoxBlur3(SKL, w, h, rsk);
+  }
   for (var p2 = 0, j2 = 0; p2 < n; p2++, j2 += 3){
     var L0 = Lb[p2], dkk = dk + (1 - dk) * tkSS((L0 - 0.12) / 0.2);
-    tkFromOk(L0 + D[j2] * sL, Ab[p2] + D[j2 + 1] * sC * dkk, Bb[p2] + D[j2 + 2] * sC * dkk, k);
+    var da0 = D[j2 + 1], db0 = D[j2 + 2], dL0 = D[j2];
+    // 顔の色（肌〜ピンク・色の薄い所）だけに広げる。背景の窓や空・髪には広げない
+    if (SKM && SKM[j2] > 0.02){ var cq0 = Math.sqrt(Ab[p2] * Ab[p2] + Bb[p2] * Bb[p2]), hq0 = (Math.atan2(Bb[p2], Ab[p2]) * 180 / Math.PI + 360) % 360, pw = Math.min(1, SKM[j2] * 2.5) * (1 - Wr[p2 * 4]) * tkSS((L0 - 0.3) / 0.15) * (1 - tkSS((L0 - 0.9) / 0.05)) * (cq0 < 0.012 ? 1 : Math.exp(-Math.pow(tkHd(hq0, 20) / 95, 2))); if (pw > 0.01){ da0 += (SKM[j2 + 1] / SKM[j2] - da0) * pw; db0 += (SKM[j2 + 2] / SKM[j2] - db0) * pw; dL0 += (SKL[j2] / SKM[j2] - dL0) * pw; } }
+    var a0 = Ab[p2], b0 = Bb[p2], na = a0 + da0 * sC * dkk, nb = b0 + db0 * sC * dkk, c0 = Math.sqrt(a0 * a0 + b0 * b0);
+    // 肌・木・帽子などの暖かい色は、反対の色（青）へ回り込ませない：色相の回転と色の抜けに上限（頬の青いムラを防ぐ）
+    var gw = tkSS((c0 - 0.012) / 0.02);
+    if (gw > 0.001){
+      var h0 = Math.atan2(b0, a0) * 180 / Math.PI; gw *= Math.exp(-Math.pow(tkHd((h0 + 360) % 360, 55) / 45, 2));
+      if (gw > 0.001){
+        var nc = Math.sqrt(na * na + nb * nb), h1 = Math.atan2(nb, na) * 180 / Math.PI, dh = ((h1 - h0) % 360 + 540) % 360 - 180;
+        var hc = h0 + Math.max(-22, Math.min(22, dh)), cc2 = Math.max(nc, c0 * 0.65);
+        var ga = Math.cos(hc * Math.PI / 180) * cc2, gb = Math.sin(hc * Math.PI / 180) * cc2;
+        na += (ga - na) * gw; nb += (gb - nb) * gw;
+      }
+    }
+    tkFromOk(L0 + dL0 * sL, na, nb, k);
     img[j2] = tkClamp01(k[0]); img[j2 + 1] = tkClamp01(k[1]); img[j2 + 2] = tkClamp01(k[2]);
   }
   var mm = (P.l5Master == null ? 75 : P.l5Master) / 100; if (mm < 1) for (var q = 0; q < img.length; q++) img[q] = I0[q] + (img[q] - I0[q]) * mm;
