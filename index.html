@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v91</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v92</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2677,12 +2677,12 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   yq = yq.map(function(y, k){ var x = tq[k]; if (k >= 2 && y > x) return x + Math.min(y - x, 0.04 * (1 - tkSS((x - 0.55) / 0.3))); return y; });
   for (var k = 0; k < 7; k++){ if (tq[k] - xs[xs.length - 1] > 0.02 && tq[k] < 0.98){ xs.push(tq[k]); ys.push(yq[k]); } }
   // 黒の終点：見本の黒の浮きへ（黒の手前は傾きを小さく＝フィルムのような平らな黒）
-  ys.unshift(Math.max(0, Math.min(0.22, ys.length ? ys[0] - xs[1] * 0.15 : 0)));
+  ys.unshift(Math.max(0, Math.min(0.18, ys.length ? ys[0] - xs[1] * 0.45 : 0)));
   // 白の上端：写真のいちばん明るい所（上位0.3%）を、見本の白（フィルムのように白く抜ける）へ
   var tmx = (function(){ var t = 0.997 * n, s = 0; for (var b = 0; b < 256; b++){ s += hist[b]; if (s >= t) return b / 255; } return 1; })();
   if (tmx > xs[xs.length - 1] + 0.02 && tmx < 0.9){ var ymx = M.wt != null ? Math.min(0.99, M.wt) : Math.min(0.985, rq[6] + (1 - rq[6]) * 0.7); /* 見本のいちばん明るい所の実測（上位0.5%） */ ymx = ys[ys.length - 1] + (Math.max(ys[ys.length - 1] + 0.01, ymx) - ys[ys.length - 1]) * Math.min(1, sL * 1.35); xs.push(tmx); ys.push(ymx); }
   xs.push(1); ys.push(M.wt != null && M.wt > 0.97 && tmx < 0.9 ? 1 : Math.min(1, Math.max(ys[ys.length - 1] + 0.01, 1 + Math.min(0, (yq[6] - tq[6])))));   // 見本の白が抜けている時は、白の終点を1に
-  for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * (a <= 2 ? 0.2 : 0.4), hi = ys[a - 1] + dx * (a >= xs.length - 2 ? 3.0 : 2.0); ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
+  for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * 0.45, hi = ys[a - 1] + dx * 1.7;   /* 傾きの幅を狭く＝中間の階調が詰まらない・急に立ち上がらない */ ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
   // 明るい所は元より明るくしない（白飛びを作らない）。上位の点だけ、元の明るさ＋少しまでに抑える
   for (var hc2 = 0; hc2 < xs.length; hc2++){ if (xs[hc2] > 0.7) ys[hc2] = Math.min(ys[hc2], xs[hc2] + 0.03 * (1 - xs[hc2]) / 0.3); }
   for (var hc3 = 1; hc3 < ys.length; hc3++) if (ys[hc3] < ys[hc3 - 1] + 0.002) ys[hc3] = ys[hc3 - 1] + 0.002;
@@ -2782,7 +2782,7 @@ function tkL6Soft(img, n, w, h, target, amt){
 // 雰囲気の目標：見本（淡い藍の写真群）の実測の中央値
 var TK_L6_AIM = { mc: 0.022, dc: 0.012, p2: 0.21, p98: 0.9, lc: 0.05 };
 function tkL6Score(src, out, w, h, person){
-  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hiO = 0, hiS = 0, sumL0 = 0, sumL1 = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, dcs = 0, dcn = 0, skn = 0, skBad = 0;
+  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hiO = 0, hiS = 0, sumL0 = 0, sumL1 = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, L0a = new Float32Array(n), dcs = 0, dcn = 0, skn = 0, skBad = 0;
   for (var i = 0; i < n; i++){
     var q = i * 4; tkToOk(src[q] / 255, src[q + 1] / 255, src[q + 2] / 255, k); tkToOk(out[q] / 255, out[q + 1] / 255, out[q + 2] / 255, k2);
     L[i] = k2[0]; dA[i] = k2[1] - k[1]; dB[i] = k2[2] - k[2];
@@ -2790,6 +2790,7 @@ function tkL6Score(src, out, w, h, person){
     hist[Math.max(0, Math.min(255, (k2[0] * 255) | 0))]++; if (k2[0] > 0.93) hiO++; if (k[0] > 0.93) hiS++; sumL0 += k[0]; sumL1 += k2[0]; if (k2[0] > 0.985 && k[0] <= 0.985) clipN++; if (k2[0] < 0.03 && k[0] >= 0.03) clipN++;
     var C2 = Math.sqrt(k2[1] * k2[1] + k2[2] * k2[2]); ch[Math.min(199, (C2 * 1000) | 0)]++; ch0[Math.min(199, (Math.sqrt(k[1] * k[1] + k[2] * k[2]) * 1000) | 0)]++;
     if (k2[0] < 0.25){ dcs += C2; dcn++; }
+    L0a[i] = k[0];
     var C0h = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C0h > 0.03 && C2 > 0.015){ hsW += C0h; hsS += C0h * tkHd((Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360, (Math.atan2(k2[2], k2[1]) * 180 / Math.PI + 360) % 360); }
     if (person){ var C1 = Math.sqrt(k[1] * k[1] + k[2] * k[2]), H1 = (Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360;
       if (C1 > 0.02 && C1 < 0.09 && k[0] > 0.45 && k[0] < 0.93 && tkHd(H1, 50) < 30){ skn++; var H2 = (Math.atan2(k2[2], k2[1]) * 180 / Math.PI + 360) % 360; if (tkHd(H2, 50) > 40 || C2 < C1 * 0.45) skBad++; } }
@@ -2801,10 +2802,13 @@ function tkL6Score(src, out, w, h, person){
   var g = new Float32Array(n), gi = 0;
   for (var y = 1; y < h - 1; y++) for (var x = 1; x < w - 1; x++){ var j = y * w + x; var ga = (dA[j + 1] - dA[j - 1]) * 0.5, gb = (dB[j + 1] - dB[j - 1]) * 0.5, gc = (dA[j + w] - dA[j - w]) * 0.5, gd = (dB[j + w] - dB[j - w]) * 0.5; g[gi++] = Math.sqrt(ga * ga + gb * gb + gc * gc + gd * gd); }
   var gs = Array.prototype.slice.call(g, 0, gi).sort(function(a, b){ return a - b; }), rough = gs.length ? gs[Math.floor(gs.length * 0.99)] * 1000 : 0;
+  // 細部の残り方：細かい明暗の揺れ（3×3）が元の何割残っているか。平たく潰れる（のっぺり）のを減点
+  var fd0 = 0, fd1 = 0; for (var yy = 1; yy < h - 1; yy++) for (var xx = 1; xx < w - 1; xx++){ var jj = yy * w + xx; var m0 = (L0a[jj - 1] + L0a[jj + 1] + L0a[jj - w] + L0a[jj + w]) / 4, m1 = (L[jj - 1] + L[jj + 1] + L[jj - w] + L[jj + w]) / 4; fd0 += Math.abs(L0a[jj] - m0); fd1 += Math.abs(L[jj] - m1); }
+  var detail = fd0 > 0 ? fd1 / fd0 : 1;
   var lc = tkL6LC(out, w, h, true)[0], dc = dcn > n * 0.02 ? dcs / dcn : TK_L6_AIM.dc, A = TK_L6_AIM;
   var style = Math.abs(mc - A.mc) / 0.015 + Math.abs(dc - A.dc) / 0.015 + Math.abs(q2(0.02) - A.p2) / 0.12 + Math.abs(q2(0.98) - A.p98) / 0.1 + Math.abs(lc - A.lc) / 0.035;
   // 強すぎ・白飛び黒つぶれの増加・肌の転び・弱すぎ（割れは候補どうしで比べて後で足す）
-  var pen = 4 * Math.max(0, dE - 0.09) / 0.03 + 40 * Math.max(0, (hiO - hiS) / n - 0.005) + 6 * Math.max(0, (sumL1 - sumL0) / n - 0.03) / 0.03 +   /* 強すぎ・白く霞む・明るくしすぎ */ 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - mc / mc0) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - 14) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
+  var pen = 8 * Math.max(0, 0.85 - detail) / 0.1 + 4 * Math.max(0, detail - 1.3) / 0.1 + 4 * Math.max(0, dE - 0.09) / 0.03 + 40 * Math.max(0, (hiO - hiS) / n - 0.005) + 6 * Math.max(0, (sumL1 - sumL0) / n - 0.03) / 0.03 +   /* 強すぎ・白く霞む・明るくしすぎ */ 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - mc / mc0) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - 14) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
   return { score: style + pen, pen: pen, style: style, rough: rough, dE: dE, skin: skn > 0 ? skBad / skn : 0, mc: mc };
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
@@ -2817,7 +2821,7 @@ function tkLook6(img, n, P, w, h){
   else if (mix >= 1) tkLook6Core(img, n, P, w, h, 'x');
   else { var A0 = new Float32Array(img); tkLook6Core(A0, n, P, w, h, 's'); tkLook6Core(img, n, P, w, h, 'x'); for (var i = 0; i < img.length; i++) img[i] = A0[i] + (img[i] - A0[i]) * mix; }
   // 淡さ・質感（近くの明暗の揺れ）を見本へ
-  var sf = (P.l6Soft == null ? 100 : P.l6Soft) / 100;
+  var sf = (P.l6Soft == null ? 0 : P.l6Soft) / 100;
   if (sf > 0 && w && h){ var liS = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liS] != null) liS = TK_L6_OLD[liS]; var eS = P.l6Custom ? null : TK_L6[liS]; var tgt = P.l6Custom ? P.l6CustomLC : (eS && eS.lc ? eS.lc[0] : 0); if (tgt) tkL6Soft(img, n, w, h, tgt, sf); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
@@ -5866,7 +5870,7 @@ function tkLook2(img, n, P, w, h){
       if (tkHd(H, 50) < 30 && k[0] > 0.45 && k[0] < 0.93){ if (C < 0.085) sk++; else vivid++; } else if (tkHd(H, 30) < 35 && C > 0.09) vivid++; }
     var M = l5Measure(); return M.skin > 0.03 && sk / nn > 0.04 && vivid < sk * 0.6;
   }
-  function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Soft == null) q.l6Soft = 100; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
+  function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Soft == null) q.l6Soft = 0; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
   function applyLook6(idx, keep){
     if (!img){ toast('先に写真を選んでください'); return; }
     var person = l6Person(), T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null, person ? null : l6Desc());
@@ -5877,12 +5881,12 @@ function tkLook2(img, n, P, w, h){
     fullInto(P, null, true); LAST_FULL = true;
     if (P.mref && (P.mref.ref2 || P.mMode === 'safe')){ P.on.match = 0; P.mref = null; }
     ['basic', 'wb', 'mix', 'crv', 'cg', 'match'].forEach(syncGroup);
-    if (!(old && keep)){ P.l6Mix = 0; P.l6DeepBg = 30; P.l6DeepSk = 0; P.l6Teal = 40; P.l6Calm = 50; P.l6Soft = 100; }   // 新しくかける時は いつも なめらか0・濃い青は背景30／肌0 から
+    if (!(old && keep)){ P.l6Mix = 0; P.l6DeepBg = 30; P.l6DeepSk = 0; P.l6Teal = 40; P.l6Calm = 50; P.l6Soft = 0; }   // 新しくかける時は いつも なめらか0・濃い青は背景30／肌0 から
     l6Into(P, idx, L); P.lkSkinOff = 0; P.l6Person = person ? 1 : 0; P.l6Custom = null;
     var mac = { bright: 0, l5Master: L.master, l6L: L.L, l6C: L.C, l6Dark: L.dark, l3Skin: L.skin, lkProt: L.prot, lkSmooth: L.smooth };
     if (old && keep){ ['l5Master', 'l6L', 'l6C', 'l6Dark', 'l3Skin', 'lkProt', 'lkSmooth'].forEach(function(k){ mac[k] = old.macro[k]; P[k === 'lkSmooth' ? '_x' : k] = old.macro[k]; }); if (old.custom){ P.l6Custom = old.custom; } }
     ['mix', 'mixL', 'mixC'].forEach(function(k){ P[k] = 100; if ($('s-' + k)){ $('s-' + k).value = 100; $('v-' + k).textContent = 100; } });
-    P.on.skin = person ? 1 : 0; setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', mac.lkSmooth); setVal('skTx', 65); syncGroup('skin');
+    P.on.skin = 0;   /* 見本に寄せる時は肌のなめらか処理をかけない（のっぺりの原因） */ setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', mac.lkSmooth); setVal('skTx', 65); syncGroup('skin');
     AUTO = { kind: 'lk', l3: true, l6: true, rank: tkL6Top(rank, 3), idx: idx, group: TK_L6[idx].g, custom: (old && keep) ? old.custom : null, person: person, look: 'lk', key: 'l6', label: '見本1枚に寄せる', learned: false, macro: mac, notes: [] };
     AUTO.fullRank = rank; AUTO.picked = !!(old && keep && old.picked); if (old && keep && old.cands){ AUTO.cands = old.cands; } setTimeout(function(){ l6Judge(); }, 60);
     try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
@@ -6175,7 +6179,7 @@ function tkLook2(img, n, P, w, h){
     bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
     try{ var trM = A6.custom || (TK_L6[A6.idx] || TK_L6[0]).m, tr0 = tkL6Traits(trM), lv = function(v){ return v < 0.15 ? 'なし' : v < 0.5 ? '弱' : v < 0.9 ? '中' : '強'; };
       bx.appendChild(xel('div', 'hint', 'この見本の特徴：藍 ' + lv(tr0.deep) + '・青緑 ' + lv(tr0.teal) + '・落ち着き ' + lv(tr0.calm) + '（下の3つは、この強さに合わせてかかります）')); }catch(e){}
-    bx.appendChild(l6Slider('淡さ・質感を見本に合わせる', 'l6Soft', 100, '', ''));
+    bx.appendChild(l6Slider('質感を柔らかく（上げすぎるとのっぺり）', 'l6Soft', 0, '', ''));
     bx.appendChild(l6Slider('濃い青・背景（肌の範囲の外）', 'l6DeepBg', 30, '', ''));
     bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
     bx.appendChild(l6Slider('緑を青緑へ（草木を沈める）', 'l6Teal', 40, '', ''));
