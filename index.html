@@ -445,7 +445,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v80</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v81</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2709,6 +2709,17 @@ function tkL6DeepLut2(d, kind, teal, calm){
   }
   return LUT;
 }
+// 見本の特徴の強さ（0〜1.3）：選んだ見本が持っている分だけ、濃い青・青緑・落ち着きをかける（夕焼けの見本に藍を足さない、等）
+function tkL6Traits(M){
+  function cast(L){ var c = tkL6Cast(M, L), C = Math.sqrt(c[0] * c[0] + c[1] * c[1]); return { h: (Math.atan2(c[1], c[0]) * 180 / Math.PI + 360) % 360, c: C }; }
+  var lo = cast(0.25), mid = cast(0.5), hi = cast(0.8);
+  function blue(x){ return Math.exp(-Math.pow(tkHd(x.h, 240) / 50, 2)) * tkSS((x.c - 0.003) / 0.012); }
+  function teal(x){ return Math.exp(-Math.pow(tkHd(x.h, 190) / 40, 2)) * tkSS((x.c - 0.003) / 0.01); }
+  var deep = Math.min(1.3, Math.max(blue(lo), 0.8 * blue(mid), 0.6 * blue(hi)) * 1.3);
+  var tl = Math.min(1.3, Math.max(teal(mid) * 1.2, teal(lo), 0.6 * deep));
+  var cs = tkL6Chroma(M), calm = Math.max(0, Math.min(1.2, (0.05 - cs) / 0.025));
+  return { deep: deep, teal: tl, calm: calm };
+}
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
 function tkLook6(img, n, P, w, h){
   var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6V === 2 ? 0 : 1);   // 番号の古い設定（以前の版で保存）だけ強め
@@ -2717,6 +2728,10 @@ function tkLook6(img, n, P, w, h){
   else { var A0 = new Float32Array(img); tkLook6Core(A0, n, P, w, h, 's'); tkLook6Core(img, n, P, w, h, 'x'); for (var i = 0; i < img.length; i++) img[i] = A0[i] + (img[i] - A0[i]) * mix; }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
+  // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
+  if (P.l6Follow !== 0){ var li6 = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li6] != null) li6 = TK_L6_OLD[li6]; var M6 = P.l6Custom || (TK_L6[li6] || TK_L6[0]).m, tr = tkL6Traits(M6);
+    dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; }
+  dBg = Math.round(dBg * 100) / 100; dSk = Math.round(dSk * 100) / 100; tl = Math.round(tl * 100) / 100; cm = Math.round(cm * 100) / 100;
   if (dBg <= 0 && dSk <= 0 && tl <= 0 && cm <= 0) return;
   var kB = 'b' + dBg + ',' + tl + ',' + cm, kS = 's' + dSk;
   if (TK_LUTC.l6bK !== kB){ TK_LUTC.l6bK = kB; TK_LUTC.l6b = (dBg > 0 || tl > 0 || cm > 0) ? tkL6DeepLut2(dBg, 'bg', tl, cm) : null; }
@@ -6010,6 +6025,8 @@ function tkLook2(img, n, P, w, h){
       return row;
     }
     bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
+    try{ var trM = A6.custom || (TK_L6[A6.idx] || TK_L6[0]).m, tr0 = tkL6Traits(trM), lv = function(v){ return v < 0.15 ? 'なし' : v < 0.5 ? '弱' : v < 0.9 ? '中' : '強'; };
+      bx.appendChild(xel('div', 'hint', 'この見本の特徴：藍 ' + lv(tr0.deep) + '・青緑 ' + lv(tr0.teal) + '・落ち着き ' + lv(tr0.calm) + '（下の3つは、この強さに合わせてかかります）')); }catch(e){}
     bx.appendChild(l6Slider('濃い青・背景（肌の範囲の外）', 'l6DeepBg', 30, '', ''));
     bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
     bx.appendChild(l6Slider('緑を青緑へ（草木を沈める）', 'l6Teal', 40, '', ''));
