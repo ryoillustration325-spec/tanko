@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v94</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v95</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2685,6 +2685,8 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * 0.45, hi = ys[a - 1] + dx * 1.7;   /* 傾きの幅を狭く＝中間の階調が詰まらない・急に立ち上がらない */ ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
   // 明るい所は元より明るくしない（白飛びを作らない）。上位の点だけ、元の明るさ＋少しまでに抑える
   for (var hc2 = 0; hc2 < xs.length; hc2++){ if (xs[hc2] > 0.7) ys[hc2] = Math.min(ys[hc2], xs[hc2] + 0.03 * (1 - xs[hc2]) / 0.3); }
+  // ツヤを守る：肌〜明るい所（0.45〜0.95）は元より階調を詰めない（傾き1以上）。上を上げられない分は、下（中間）を持ち上げすぎない
+  for (var hg = xs.length - 1; hg >= 1; hg--){ if (xs[hg] > 0.45 && xs[hg] <= 0.96){ var dxg = xs[hg] - xs[hg - 1], mg2 = xs[hg - 1] >= 0.4 ? 1 : 0.85; if (ys[hg - 1] > ys[hg] - dxg * mg2) ys[hg - 1] = ys[hg] - dxg * mg2; } }
   for (var hc3 = 1; hc3 < ys.length; hc3++) if (ys[hc3] < ys[hc3 - 1] + 0.002) ys[hc3] = ys[hc3 - 1] + 0.002;
   var curve = tkL6MonoFn(xs, ys);
   // 2. カラーグレーディング：明るさごとの灰色の色かぶりを、写真→見本の差だけ（明るさに沿ってなめらかに・量に上限）
@@ -2813,7 +2815,7 @@ function tkL6Score(src, out, w, h, person){
 }
 // やわらかさ（明瞭度）：中くらいの大きさの明暗の段差（パキッとした感じ）を、見本の量まで下げる。
 //   輪郭を残す方式ではなく、明暗の帯域そのものを弱める＝フィルムのような柔らかさ（のっぺりしない・細部は残る）
-function tkL6Clarity(img, n, w, h, target, amt){
+function tkL6Clarity(img, n, w, h, target, amt, WS){
   var s = Math.max(w, h) / 300, Y = new Float32Array(n);
   for (var i = 0, j = 0; i < n; i++, j += 3) Y[i] = 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2];
   var B1 = tkBlur1(Y, w, h, 2 * s), B2 = tkBlur1(Y, w, h, 10 * s), m = 0, v = 0;
@@ -2821,14 +2823,15 @@ function tkL6Clarity(img, n, w, h, target, amt){
   m /= n; var cur = Math.sqrt(Math.max(0, v / n - m * m)) * 0.85;   // 画素の明るさ→見本の測り方（OKLab）へのおおよその換算
   if (!(cur > 0.003) || !(target > 0) || target >= cur) return;
   var k = Math.max(-0.6, target / cur - 1) * amt;   // 下げるだけ（上げてパキッとはさせない）
-  for (i = 0, j = 0; i < n; i++, j += 3){ var dl = k * (B1[i] - B2[i]), y = Y[i], f = y > 0.002 ? (y + dl) / y : 1; f = Math.max(0.6, Math.min(1.6, f));
+  for (i = 0, j = 0; i < n; i++, j += 3){ var dl = k * (B1[i] - B2[i]) * (WS ? 1 - WS[i] : 1), y = Y[i], f = y > 0.002 ? (y + dl) / y : 1; f = Math.max(0.6, Math.min(1.6, f));
     img[j] = tkClamp01(img[j] * f); img[j + 1] = tkClamp01(img[j + 1] * f); img[j + 2] = tkClamp01(img[j + 2] * f); }
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
-  var ISk = (w && h && P.l6SkinTex !== 0) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
+  var ISk = (w && h) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
+  var WSK0 = ISk ? tkL6SkinW(ISk, P, w, h) : null;   /* 肌の範囲（やわらかさは肌にかけない＝顔の丸みの陰影を残す） */
   (function(){
   var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6V === 2 ? 0 : 1);   // 番号の古い設定（以前の版で保存）だけ強め
   if (mix <= 0) tkLook6Core(img, n, P, w, h, 's');
@@ -2836,7 +2839,7 @@ function tkLook6(img, n, P, w, h){
   else { var A0 = new Float32Array(img); tkLook6Core(A0, n, P, w, h, 's'); tkLook6Core(img, n, P, w, h, 'x'); for (var i = 0; i < img.length; i++) img[i] = A0[i] + (img[i] - A0[i]) * mix; }
   // やわらかさ（明瞭度）を見本へ
   var cfA = (P.l6Clar == null ? 100 : P.l6Clar) / 100;
-  if (cfA > 0 && w && h){ var liC = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liC] != null) liC = TK_L6_OLD[liC]; var eC = P.l6Custom ? null : TK_L6[liC]; if (eC && eC.cl) tkL6Clarity(img, n, w, h, Math.min(eC.cl, 0.05), cfA); }   /* 目標＝選んだ見本と、この方の写真の中央値（0.05）の低い方 */
+  if (cfA > 0 && w && h){ var liC = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liC] != null) liC = TK_L6_OLD[liC]; var eC = P.l6Custom ? null : TK_L6[liC]; if (eC && eC.cl) tkL6Clarity(img, n, w, h, Math.min(eC.cl, 0.05), cfA, WSK0); }   /* 目標＝選んだ見本と、この方の写真の中央値（0.05）の低い方 */
   // 淡さ・質感（近くの明暗の揺れ）を見本へ
   var sf = (P.l6Soft == null ? 0 : P.l6Soft) / 100;
   if (sf > 0 && w && h){ var liS = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liS] != null) liS = TK_L6_OLD[liS]; var eS = P.l6Custom ? null : TK_L6[liS]; var tgt = P.l6Custom ? P.l6CustomLC : (eS && eS.lc ? eS.lc[0] : 0); if (tgt) tkL6Soft(img, n, w, h, tgt, sf); }
@@ -2859,18 +2862,20 @@ function tkLook6(img, n, P, w, h){
   if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33);
   for (var j = 0, j3 = 0; j < n; j++, j3 += 3){ var wv = Wsk[j]; if (wv > 0.001){ img[j3] += (Sk[j3] - img[j3]) * wv; img[j3 + 1] += (Sk[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Sk[j3 + 2] - img[j3 + 2]) * wv; } }
 })();
-  if (ISk) tkL6SkinTex(img, ISk, n, P, w, h);
+  if (ISk && WSK0 && P.l6SkinTex !== 0) tkL6SkinTex(img, ISk, n, P, w, h, WSK0);
   if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = I06[q6] + (img[q6] - I06[q6]) * mm6;
 }
 // 肌のきめ：肌の範囲では、細かい明暗と色の揺れ（毛穴・そばかす・うぶ毛の陰影・色ムラ）を元の写真の比率に戻す。
 //   トーンカーブが肌の明るさ帯で急になると、きめが持ち上がって「つるっと感」が消える＝それを防ぐ（ぼかしではなく元のきめ）
-function tkL6SkinTex(img, I0, n, P, w, h){
+function tkL6SkinW(I0, P, w, h){
   var sm = null; (P.lm || []).forEach(function(x){ if (x.l6skin) sm = x; });
-  if (!P.l6Person && !(sm && sm.strokes && sm.strokes.length)) return;
-  var W; try{ W = tkLmWeight(Object.assign({ type: 'skin', strokes: [], feather: 30, inv: 0 }, sm || {}, { img: I0, iw: w, ih: h }), w, h); }catch(e){ return; }
-  if (!W) return;
-  var any = 0; for (var i = 0; i < n; i++) if (W[i] > 0.02) any++;
-  if (any < n * 0.003) return;
+  if (!P.l6Person && !(sm && sm.strokes && sm.strokes.length)) return null;
+  var W; try{ W = tkLmWeight(Object.assign({ type: 'skin', strokes: [], feather: 30, inv: 0 }, sm || {}, { img: I0, iw: w, ih: h }), w, h); }catch(e){ return null; }
+  if (!W) return null; var any = 0, n = w * h; for (var i = 0; i < n; i++) if (W[i] > 0.02) any++;
+  return any < n * 0.003 ? null : W;
+}
+function tkL6SkinTex(img, I0, n, P, w, h, W){
+  var i;
   var sg = Math.max(1.2, Math.max(w, h) / 300), c0 = new Float32Array(n), c1 = new Float32Array(n);
   // 赤・緑・青それぞれ：明暗のきめも、色の細かいムラも、元の写真の揺れ方（今の明るさに合わせた比率）に戻す
   for (var c = 0; c < 3; c++){
