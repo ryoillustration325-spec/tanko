@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v97</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v98</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2688,6 +2688,9 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   // ツヤを守る：肌〜明るい所（0.45〜0.95）は元より階調を詰めない（傾き1以上）。上を上げられない分は、下（中間）を持ち上げすぎない
   for (var hg = xs.length - 1; hg >= 1; hg--){ var dxg = xs[hg] - xs[hg - 1], mg2 = (xs[hg] > 0.45 && xs[hg] <= 0.96) ? (xs[hg - 1] >= 0.4 ? 1 : 0.85) : 0.45; if (ys[hg - 1] > ys[hg] - dxg * mg2) ys[hg - 1] = Math.max(Math.min(ys[hg - 1], xs[hg - 1] * 0.55), ys[hg] - dxg * mg2); }   /* 下の点も順に下げる（黒を浮かせる見本で途中が平らにつぶれない） */
   for (var hc3 = 1; hc3 < ys.length; hc3++) if (ys[hc3] < ys[hc3 - 1] + 0.002) ys[hc3] = ys[hc3 - 1] + 0.002;
+  // 最後に傾きの上限（急な立ち上がり＝細かい明暗のまだら・割れを作らない）。下限の都合で上が持ち上がった所は、下を少し上げてならす
+  for (var it5 = 0; it5 < 3; it5++){ for (var hs = xs.length - 1; hs >= 1; hs--){ var dxs = xs[hs] - xs[hs - 1]; if (dxs > 0 && ys[hs] - ys[hs - 1] > dxs * 1.6) ys[hs - 1] = ys[hs] - dxs * 1.6; } }
+  for (var hc4 = 1; hc4 < ys.length; hc4++) if (ys[hc4] < ys[hc4 - 1] + 0.002) ys[hc4] = ys[hc4 - 1] + 0.002;
   var curve = tkL6MonoFn(xs, ys);
   // 2. カラーグレーディング：明るさごとの灰色の色かぶりを、写真→見本の差だけ（明るさに沿ってなめらかに・量に上限）
   var GL = [], GA = [], GB = [];
@@ -2814,7 +2817,7 @@ function tkL6Score(src, out, w, h, person){
   if (!person){ var AP = TK_L6_AIMP, rh = new Float64Array(200); for (var i3 = 0; i3 < n; i3 += 2){ var Lr = Math.max(0.15, L[i3]); rh[Math.min(199, (ch2r(i3) / Lr * 500) | 0)]++; } var rs = 0, mr = 0.4; for (var b3 = 0; b3 < 200; b3++){ rs += rh[b3]; if (rs >= n / 4){ mr = b3 / 500; break; } }
     style = Math.abs(mr - AP.mr) / 0.03 + Math.max(0, q2(0.5) - AP.p50) / 0.1 + Math.abs(q2(0.02) - AP.p2) / 0.12 + Math.abs(q2(0.98) - AP.p98) / 0.1 + Math.abs(lc - A.lc) / 0.035; }
   // 強すぎ・白飛び黒つぶれの増加・肌の転び・弱すぎ（割れは候補どうしで比べて後で足す）
-  var dEc = person ? 0.09 : 0.15, hsc = person ? 14 : 28;   /* 人物でない写真（植物など）は、葉を暗く深くする大きめの変化・緑→青緑を許す */
+  var dEc = person ? 0.09 : 0.2, hsc = person ? 14 : 28;   /* 人物でない写真（植物など）は、葉を暗く深くする大きめの変化・緑→青緑を許す */
   var pen = 8 * Math.max(0, 0.85 - detail) / 0.1 + 4 * Math.max(0, detail - 1.3) / 0.1 + 4 * Math.max(0, dE - dEc) / 0.03 + 40 * Math.max(0, (hiO - hiS) / n - 0.005) + 6 * Math.max(0, (sumL1 - sumL0) / n - 0.03) / 0.03 +   /* 強すぎ・白く霞む・明るくしすぎ */ 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - (mc / mc0) * (person ? 1 : Math.max(0.3, sumL0 / Math.max(1e-6, sumL1)))) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - hsc) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
   return { score: style + pen, pen: pen, style: style, rough: rough, dE: dE, skin: skn > 0 ? skBad / skn : 0, mc: mc };
 }
@@ -2850,6 +2853,8 @@ function tkLook6(img, n, P, w, h){
   if (sf > 0 && w && h){ var liS = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liS] != null) liS = TK_L6_OLD[liS]; var eS = P.l6Custom ? null : TK_L6[liS]; var tgt = P.l6Custom ? P.l6CustomLC : (eS && eS.lc ? eS.lc[0] : 0); if (tgt) tkL6Soft(img, n, w, h, tgt, sf); }
   // 葉の深さ（人物でない写真）：葉は見本のように暗く沈めて濃く（色を抜いて灰緑にしない）、黄緑は青緑の方へ
   var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person) tkL6Foliage(img, n, fo);
+  // 青の入れ方（人物でない写真）：1＝青影（暗い所に藍）／2＝中間（中くらいの明るさを青緑〜藍へ）／3＝青光（明るい所・光を青く）。黒は締める
+  var bmd = P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100; if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
   // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
@@ -2875,6 +2880,35 @@ function tkLook6(img, n, P, w, h){
 // 葉の深さ：見本（植物の写真）の実測＝葉の明るさ中央0.40・色相152°・鮮やかさ0.032（明るさに対して0.08）。
 //   写真の葉の明るさ（中央）が見本より明るい分だけ、緑の色の所を暗く（比で）。鮮やかさは少しだけ下げる（暗くすると色が濃く見えるため）。
 //   色ごとの規則（LUT）なので場所による割れは出ない。暗い所・空・白には入れない
+// 青の入れ方：見本（植物・森・物・街）の実測＝青は色相240〜250°（藍）、画素の鮮やかさ0.03〜0.06。黒は浮かせない
+//   暖かい色（花・木の幹・肌に近い色）は青くしない＝主役の色は残る。緑は青緑の方へ回す（灰色に寄せない）
+function tkL6BlueLut(mode, amt){
+  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = 245 * Math.PI / 180;
+  for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
+    tkToOk(ri / 32, gi / 32, bi / 32, o);
+    var L = o[0], A = o[1], B = o[2], C = Math.sqrt(A * A + B * B), H = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
+    // 明るさの帯：どこに青を入れるか
+    var wb = mode === 1 ? (1 - tkSS((L - 0.16) / 0.32)) * tkSS((L - 0.02) / 0.07)
+           : mode === 2 ? Math.exp(-Math.pow((L - 0.45) / 0.2, 2))
+           : tkSS((L - 0.4) / 0.25) * (1 - tkSS((L - 0.97) / 0.03));
+    // 暖かい色（花・幹・肌）は守る。緑・青・灰色に入れる
+    var warm = Math.max(Math.exp(-Math.pow(tkHd(H, 45) / 50, 2)), Math.exp(-Math.pow(tkHd(H, 330) / 45, 2))) * tkSS((C - 0.03) / 0.04), wc = 1 - 0.92 * warm;   /* 橙・黄・赤・ピンク・赤紫（花）は守る */
+    var wg = Math.exp(-Math.pow(tkHd(H, 145) / 45, 2)) * tkSS((C - 0.01) / 0.02);
+    var k = wb * wc * amt;
+    // 緑は青緑へ回す（帯の中ほど強く）
+    if (wg > 0.001 && k > 0.001){ var Hn = H + tkHueDist(mode === 1 ? 190 : mode === 2 ? 182 : 185, H) * 0.5 * wg * k; A = Math.cos(Hn * Math.PI / 180) * C; B = Math.sin(Hn * Math.PI / 180) * C; }
+    // 藍を足す（灰色・青・緑に）
+    var blu = Math.exp(-Math.pow(tkHd(H, 250) / 40, 2)) * tkSS((C - 0.03) / 0.04);   /* すでに青い物（シート・服・空）には足さない＝青の塊にしない */
+    var add = (mode === 1 ? 0.058 : mode === 2 ? 0.052 : 0.05) * k * (1 - 0.8 * blu);   /* 見本の実測：その明るさの帯で0.04〜0.06 */ A += Math.cos(ih) * add; B += Math.sin(ih) * add;
+    // コントラスト：黒は締め、青影・中間は中間を少し沈め、青光は光を残して影を締める
+    var Lc = L;
+    if (mode === 1) Lc = L - 0.05 * amt * wb * (1 - tkSS((L - 0.35) / 0.2));
+    else if (mode === 2) Lc = L - 0.05 * amt * Math.exp(-Math.pow((L - 0.5) / 0.22, 2)) - 0.03 * amt * (1 - tkSS(L / 0.3));
+    else Lc = L - 0.05 * amt * (1 - tkSS((L - 0.1) / 0.35)) * tkSS(L / 0.08);
+    tkFromOk(Math.max(0, Lc), A, B, o); LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
+  }
+  return LUT;
+}
 var TK_L6_FOL = { L: 0.40, H: 152 };
 function tkL6Foliage(img, n, amt){
   var o = [0, 0, 0], Ls = [], cnt = 0, tot = 0;
@@ -2888,7 +2922,8 @@ function tkL6Foliage(img, n, amt){
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
     var L = o[0], A = o[1], B = o[2], C = Math.sqrt(A * A + B * B), H = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
-    var w = Math.exp(-Math.pow(tkHd(H, 140) / 42, 2)) * tkSS((C - 0.01) / 0.02) * tkSS((L - 0.12) / 0.15) * (1 - 0.5 * tkSS((L - 0.85) / 0.1));
+    // 色の薄い所（灰色に近い葉のツヤ・葉の上の明るい所）も、葉と同じ量で一続きに暗く（色相がばらつく所で量が飛ばない＝まだらにしない）。白・明るい空は外す
+    var gC = tkSS((C - 0.008) / 0.025), w = (gC * Math.exp(-Math.pow(tkHd(H, 140) / 45, 2)) + (1 - gC) * 0.85) * tkSS((L - 0.12) / 0.15) * (1 - tkSS((L - 0.8) / 0.12));
     if (w > 0.001){
       var Ln = L * (1 + (rr - 1) * w), Cn = C * (1 + (Math.pow(rr, 0.5) - 1) * w), Hn = H < TK_L6_FOL.H ? H + Math.min(18, (TK_L6_FOL.H - H) * 0.4) * w * amt : H;
       L = Ln; A = Math.cos(Hn * Math.PI / 180) * Cn; B = Math.sin(Hn * Math.PI / 180) * Cn;
@@ -6283,6 +6318,14 @@ function tkLook2(img, n, P, w, h){
       sk.appendChild(xel('div', 'hint', '写真の上をなぞって直します。赤い所が「肌」として扱われる範囲です。'));
     }
     bx.appendChild(sk);
+    // 青の入れ方（人物でない写真）：なし／青影（暗い所に藍）／中間（葉・中くらいの明るさを青緑〜藍へ）／青光（明るい所・光を青く）
+    if (!A6.person){
+      bx.appendChild(xel('div', 'l5oldh', '青の入れ方'));
+      var brw = xel('div', 'rrow');
+      [['なし', 0], ['青影', 1], ['中間', 2], ['青光', 3]].forEach(function(b){ brw.appendChild(xbtn(b[0], (P.l6BlueMode | 0) === b[1] ? 'pri' : 'ghost', function(){ P.l6BlueMode = b[1]; if (b[1] > 0 && A6.keep && A6.idx != null) l6Pick(A6.idx); else schedule(); l6Render(); })); });
+      bx.appendChild(brw);
+      bx.appendChild(xel('div', 'hint', '青影＝暗い所に藍、中間＝葉や中くらいの明るさを青緑〜藍へ、青光＝明るい所・光を青く。どれも黒は締め、花など暖かい色は青くしません。'));
+    }
     var pr = xel('div', 'rrow'); pr.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); })); bx.appendChild(pr);
     if (A6.judging){ bx.appendChild(xel('div', 'l5oldh', 'おまかせ：候補を実際にかけて比べています…')); }
     else if (A6.cands && A6.cands.length){
