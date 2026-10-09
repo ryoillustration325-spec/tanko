@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v90</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v91</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2673,14 +2673,19 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   var rq = tkL6Q(M), keep = (tq[3] - rq[3]) * (P_L6KEEP != null ? P_L6KEEP : Math.max(0.2, 0.5 - 0.3 * (kS - 1)));
   var xs = [0], ys = [];
   var yq = tq.map(function(x, k){ var s2 = Math.min(1, sL * (k === 3 ? 1 : k === 2 ? 1.15 : k === 4 ? 1.3 : 1.35)); return x + (rq[k] + keep * (1 - Math.abs(k - 3) / 4) - x) * s2; });   // 黒・白に近い所ほど見本の形へ強く（黒の浮き・白の柔らかさ＝淡さ）
+  // 明るくする方向は控えめに：中間〜明るい所は元より +0.04 まで（暗い所の黒の浮きは見本どおり）。元が明るい写真ほど上げない
+  yq = yq.map(function(y, k){ var x = tq[k]; if (k >= 2 && y > x) return x + Math.min(y - x, 0.04 * (1 - tkSS((x - 0.55) / 0.3))); return y; });
   for (var k = 0; k < 7; k++){ if (tq[k] - xs[xs.length - 1] > 0.02 && tq[k] < 0.98){ xs.push(tq[k]); ys.push(yq[k]); } }
   // 黒の終点：見本の黒の浮きへ（黒の手前は傾きを小さく＝フィルムのような平らな黒）
   ys.unshift(Math.max(0, Math.min(0.22, ys.length ? ys[0] - xs[1] * 0.15 : 0)));
   // 白の上端：写真のいちばん明るい所（上位0.3%）を、見本の白（フィルムのように白く抜ける）へ
   var tmx = (function(){ var t = 0.997 * n, s = 0; for (var b = 0; b < 256; b++){ s += hist[b]; if (s >= t) return b / 255; } return 1; })();
-  if (tmx > xs[xs.length - 1] + 0.02 && tmx < 0.995){ var ymx = M.wt != null ? Math.min(0.99, M.wt) : Math.min(0.985, rq[6] + (1 - rq[6]) * 0.7); /* 見本のいちばん明るい所の実測（上位0.5%） */ ymx = ys[ys.length - 1] + (Math.max(ys[ys.length - 1] + 0.01, ymx) - ys[ys.length - 1]) * Math.min(1, sL * 1.35); xs.push(tmx); ys.push(ymx); }
-  xs.push(1); ys.push(M.wt != null && M.wt > 0.97 ? 1 : Math.min(1, Math.max(ys[ys.length - 1] + 0.01, 1 + Math.min(0, (yq[6] - tq[6])))));   // 見本の白が抜けている時は、白の終点を1に
+  if (tmx > xs[xs.length - 1] + 0.02 && tmx < 0.9){ var ymx = M.wt != null ? Math.min(0.99, M.wt) : Math.min(0.985, rq[6] + (1 - rq[6]) * 0.7); /* 見本のいちばん明るい所の実測（上位0.5%） */ ymx = ys[ys.length - 1] + (Math.max(ys[ys.length - 1] + 0.01, ymx) - ys[ys.length - 1]) * Math.min(1, sL * 1.35); xs.push(tmx); ys.push(ymx); }
+  xs.push(1); ys.push(M.wt != null && M.wt > 0.97 && tmx < 0.9 ? 1 : Math.min(1, Math.max(ys[ys.length - 1] + 0.01, 1 + Math.min(0, (yq[6] - tq[6])))));   // 見本の白が抜けている時は、白の終点を1に
   for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * (a <= 2 ? 0.2 : 0.4), hi = ys[a - 1] + dx * (a >= xs.length - 2 ? 3.0 : 2.0); ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
+  // 明るい所は元より明るくしない（白飛びを作らない）。上位の点だけ、元の明るさ＋少しまでに抑える
+  for (var hc2 = 0; hc2 < xs.length; hc2++){ if (xs[hc2] > 0.7) ys[hc2] = Math.min(ys[hc2], xs[hc2] + 0.03 * (1 - xs[hc2]) / 0.3); }
+  for (var hc3 = 1; hc3 < ys.length; hc3++) if (ys[hc3] < ys[hc3 - 1] + 0.002) ys[hc3] = ys[hc3 - 1] + 0.002;
   var curve = tkL6MonoFn(xs, ys);
   // 2. カラーグレーディング：明るさごとの灰色の色かぶりを、写真→見本の差だけ（明るさに沿ってなめらかに・量に上限）
   var GL = [], GA = [], GB = [];
@@ -2777,12 +2782,12 @@ function tkL6Soft(img, n, w, h, target, amt){
 // 雰囲気の目標：見本（淡い藍の写真群）の実測の中央値
 var TK_L6_AIM = { mc: 0.022, dc: 0.012, p2: 0.21, p98: 0.9, lc: 0.05 };
 function tkL6Score(src, out, w, h, person){
-  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, dcs = 0, dcn = 0, skn = 0, skBad = 0;
+  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hiO = 0, hiS = 0, sumL0 = 0, sumL1 = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, dcs = 0, dcn = 0, skn = 0, skBad = 0;
   for (var i = 0; i < n; i++){
     var q = i * 4; tkToOk(src[q] / 255, src[q + 1] / 255, src[q + 2] / 255, k); tkToOk(out[q] / 255, out[q + 1] / 255, out[q + 2] / 255, k2);
     L[i] = k2[0]; dA[i] = k2[1] - k[1]; dB[i] = k2[2] - k[2];
     dE += Math.sqrt((k2[0] - k[0]) * (k2[0] - k[0]) + dA[i] * dA[i] + dB[i] * dB[i]);
-    hist[Math.max(0, Math.min(255, (k2[0] * 255) | 0))]++; if (k2[0] > 0.985 && k[0] <= 0.985) clipN++; if (k2[0] < 0.03 && k[0] >= 0.03) clipN++;
+    hist[Math.max(0, Math.min(255, (k2[0] * 255) | 0))]++; if (k2[0] > 0.93) hiO++; if (k[0] > 0.93) hiS++; sumL0 += k[0]; sumL1 += k2[0]; if (k2[0] > 0.985 && k[0] <= 0.985) clipN++; if (k2[0] < 0.03 && k[0] >= 0.03) clipN++;
     var C2 = Math.sqrt(k2[1] * k2[1] + k2[2] * k2[2]); ch[Math.min(199, (C2 * 1000) | 0)]++; ch0[Math.min(199, (Math.sqrt(k[1] * k[1] + k[2] * k[2]) * 1000) | 0)]++;
     if (k2[0] < 0.25){ dcs += C2; dcn++; }
     var C0h = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C0h > 0.03 && C2 > 0.015){ hsW += C0h; hsS += C0h * tkHd((Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360, (Math.atan2(k2[2], k2[1]) * 180 / Math.PI + 360) % 360); }
@@ -2799,7 +2804,7 @@ function tkL6Score(src, out, w, h, person){
   var lc = tkL6LC(out, w, h, true)[0], dc = dcn > n * 0.02 ? dcs / dcn : TK_L6_AIM.dc, A = TK_L6_AIM;
   var style = Math.abs(mc - A.mc) / 0.015 + Math.abs(dc - A.dc) / 0.015 + Math.abs(q2(0.02) - A.p2) / 0.12 + Math.abs(q2(0.98) - A.p98) / 0.1 + Math.abs(lc - A.lc) / 0.035;
   // 強すぎ・白飛び黒つぶれの増加・肌の転び・弱すぎ（割れは候補どうしで比べて後で足す）
-  var pen = 3 * Math.max(0, dE - 0.15) / 0.03 + 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - mc / mc0) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - 14) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
+  var pen = 4 * Math.max(0, dE - 0.09) / 0.03 + 40 * Math.max(0, (hiO - hiS) / n - 0.005) + 6 * Math.max(0, (sumL1 - sumL0) / n - 0.03) / 0.03 +   /* 強すぎ・白く霞む・明るくしすぎ */ 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - mc / mc0) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - 14) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
   return { score: style + pen, pen: pen, style: style, rough: rough, dE: dE, skin: skn > 0 ? skBad / skn : 0, mc: mc };
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
