@@ -445,7 +445,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v85</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v86</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2605,11 +2605,14 @@ function tkL6Desc(px, n, rgba){
 }
 // 写っている物の色の構成どうしの近さ（人物以外のおすすめ用）
 function tkL6DescDist(p, s){ var d = 0; for (var i = 0; i < 12; i++) d += 2 * Math.abs(p[i] - s[i]); return d + Math.abs(p[12] - s[12]) + 1.5 * Math.abs(p[13] - s[13]) + 0.7 * Math.abs(p[14] - s[14]) + 1.5 * Math.abs(p[15] - s[15]) + 0.5 * Math.abs(p[16] - s[16]); }
+// 淡い見本を優先：色が淡く（画素の鮮やかさ）、質感が柔らかい（近くの明暗の揺れ）見本ほど上に
+var TK_L6_PALE = true; try{ TK_L6_PALE = localStorage.getItem('retouch-l6pale') !== '0'; }catch(e){}
+function tkL6PaleK(e){ if (!TK_L6_PALE) return 1; var mc = e.mc != null ? e.mc : 0.02, lc = e.lc ? e.lc[0] : 0.05; var q50 = e.m && e.m._q ? e.m._q[3] : 0.5; return 1 + 0.9 * Math.max(0, (mc - 0.016) / 0.03) + 0.5 * Math.max(0, (lc - 0.05) / 0.04) + 0.8 * Math.max(0, (0.55 - q50) / 0.2); }   // 色が淡い・柔らかい・明るい見本ほど上に
 function tkL6Rank(T, subj, desc){
   // 人物以外：今の色の近さではなく「写っている物の色の構成（緑・空と水・木の茶色…）と昼夜」が近い見本を選ぶ
-  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; return { i: i, d: d }; }).sort(function(a, b){ return a.d - b.d; });
+  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
   var tv = tkL6Vec(T);
-  return TK_L6.map(function(e, i){ var ev = tkL6Vec(e.m), d = 0; for (var j = 0; j < tv.length; j++){ var w = (j % 6) === 1 ? 2 : 1; d += w * (tv[j] - ev[j]) * (tv[j] - ev[j]); } if (subj && e.g === subj) d *= 0.6; if (subj === 'person' && e.g !== 'person') d *= 1.4; if (!subj && e.g === 'person') d *= 1.6; return { i: i, d: d }; }).sort(function(a, b){ return a.d - b.d; });
+  return TK_L6.map(function(e, i){ var ev = tkL6Vec(e.m), d = 0; for (var j = 0; j < tv.length; j++){ var w = (j % 6) === 1 ? 2 : 1; d += w * (tv[j] - ev[j]) * (tv[j] - ev[j]); } if (subj && e.g === subj) d *= 0.6; if (subj === 'person' && e.g !== 'person') d *= 1.4; if (!subj && e.g === 'person') d *= 1.6; return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
 }
 // おすすめ：近い順に、互いにほぼ同じ見本（同じ撮影の続きの写真など）は1つだけにして選ぶ
 function tkL6Top(rank, k){
@@ -2663,10 +2666,10 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   var tq = TK_L6_QS.map(function(p){ var t = p * n, s = 0; for (var b = 0; b < 256; b++){ s += hist[b]; if (s >= t) return b / 255; } return 1; });
   var rq = tkL6Q(M), keep = (tq[3] - rq[3]) * Math.max(0.2, 0.5 - 0.3 * (kS - 1));
   var xs = [0], ys = [];
-  var yq = tq.map(function(x, k){ var s2 = Math.min(1, sL * (k === 3 ? 1 : k === 2 || k === 4 ? 1.15 : 1.35)); return x + (rq[k] + keep * (1 - Math.abs(k - 3) / 4) - x) * s2; });   // 黒・白に近い所ほど見本の形へ強く（黒の浮き・白の柔らかさ＝淡さ）
+  var yq = tq.map(function(x, k){ var s2 = Math.min(1, sL * (k === 3 ? 1 : k === 2 ? 1.15 : k === 4 ? 1.3 : 1.35)); return x + (rq[k] + keep * (1 - Math.abs(k - 3) / 4) - x) * s2; });   // 黒・白に近い所ほど見本の形へ強く（黒の浮き・白の柔らかさ＝淡さ）
   for (var k = 0; k < 7; k++){ if (tq[k] - xs[xs.length - 1] > 0.02 && tq[k] < 0.98){ xs.push(tq[k]); ys.push(yq[k]); } }
-  ys.unshift(Math.max(0, Math.min(0.12, ys.length ? ys[0] - xs[1] : 0))); xs.push(1); ys.push(Math.min(1, Math.max(ys[ys.length - 1] + 0.02, 1 + Math.min(0, (yq[6] - tq[6])))));
-  for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * 0.4, hi = ys[a - 1] + dx * 2.0; ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
+  ys.unshift(Math.max(0, Math.min(0.22, ys.length ? ys[0] - xs[1] * 0.3 : 0)));   // 黒の終点：見本の黒の浮きへ（黒の手前は傾きを小さく＝フィルムのような平らな黒） xs.push(1); ys.push(Math.min(1, Math.max(ys[ys.length - 1] + 0.02, 1 + Math.min(0, (yq[6] - tq[6])))));
+  for (var a = 1; a < xs.length; a++){ var dx = xs[a] - xs[a - 1], lo = ys[a - 1] + dx * (a <= 2 ? 0.2 : 0.4), hi = ys[a - 1] + dx * 2.0; ys[a] = Math.max(lo, Math.min(hi, ys[a])); }
   var curve = tkL6MonoFn(xs, ys);
   // 2. カラーグレーディング：明るさごとの灰色の色かぶりを、写真→見本の差だけ（明るさに沿ってなめらかに・量に上限）
   var GL = [], GA = [], GB = [];
@@ -6104,6 +6107,7 @@ function tkLook2(img, n, P, w, h){
       sk.appendChild(xel('div', 'hint', '写真の上をなぞって直します。赤い所が「肌」として扱われる範囲です。'));
     }
     bx.appendChild(sk);
+    var pr = xel('div', 'rrow'); pr.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); })); bx.appendChild(pr);
     var h1 = xel('div', 'l5oldh', 'おすすめ（写真に近い見本・全' + TK_L6.length + '枚から）'); bx.appendChild(h1);
     var s1 = xel('div', 'seg l5seg'); A6.rank.forEach(function(i){ s1.appendChild(chip(i, nm(i), !A6.custom && A6.idx === i, true)); }); bx.appendChild(s1);
     var h2 = xel('div', 'l5oldh', '被写体から選ぶ'); bx.appendChild(h2);
