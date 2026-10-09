@@ -445,7 +445,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v82</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v83</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5779,7 +5779,11 @@ function tkLook2(img, n, P, w, h){
   }
   function l6Person(){
     if (REG.ready && REG.data){ try{ var mw = REG.mw, mh = REG.mh, nn = mw * mh, rp = readPixels(mw, mh), SWm = new Float32Array(nn); for (var i = 0; i < nn; i++) SWm[i] = REG.data[i * RN] / 255; var est = tkSkinFind(rp, nn, SWm, true); return !!(est && est.frac >= 0.01); }catch(e){} }
-    var M = l5Measure(); return M.skin > 0.03;
+    // AIなし：肌らしい色（橙〜黄みの、鮮やかすぎない色・中〜明るい）が十分にあり、しかも同じ色相の鮮やかな色（花・果物・紅葉）が多くない時だけ人物とみる
+    var sz = sizeFor(200), px = readPixels(sz[0], sz[1]), nn = sz[0] * sz[1], k = [0, 0, 0], sk = 0, vivid = 0;
+    for (var i = 0; i < nn; i++){ tkToOk(px[i * 4] / 255, px[i * 4 + 1] / 255, px[i * 4 + 2] / 255, k); var C = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C < 0.02) continue; var H = (Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360;
+      if (tkHd(H, 50) < 30 && k[0] > 0.45 && k[0] < 0.93){ if (C < 0.085) sk++; else vivid++; } else if (tkHd(H, 30) < 35 && C > 0.09) vivid++; }
+    var M = l5Measure(); return M.skin > 0.03 && sk / nn > 0.04 && vivid < sk * 0.6;
   }
   function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
   function applyLook6(idx, keep){
@@ -5796,7 +5800,7 @@ function tkLook2(img, n, P, w, h){
     var mac = { bright: 0, l5Master: L.master, l6L: L.L, l6C: L.C, l6Dark: L.dark, l3Skin: L.skin, lkProt: L.prot, lkSmooth: L.smooth };
     if (old && keep){ ['l5Master', 'l6L', 'l6C', 'l6Dark', 'l3Skin', 'lkProt', 'lkSmooth'].forEach(function(k){ mac[k] = old.macro[k]; P[k === 'lkSmooth' ? '_x' : k] = old.macro[k]; }); if (old.custom){ P.l6Custom = old.custom; } }
     ['mix', 'mixL', 'mixC'].forEach(function(k){ P[k] = 100; if ($('s-' + k)){ $('s-' + k).value = 100; $('v-' + k).textContent = 100; } });
-    P.on.skin = 1; setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', mac.lkSmooth); setVal('skTx', 65); syncGroup('skin');
+    P.on.skin = person ? 1 : 0; setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', mac.lkSmooth); setVal('skTx', 65); syncGroup('skin');
     AUTO = { kind: 'lk', l3: true, l6: true, rank: tkL6Top(rank, 3), idx: idx, group: TK_L6[idx].g, custom: (old && keep) ? old.custom : null, person: person, look: 'lk', key: 'l6', label: '見本1枚に寄せる', learned: false, macro: mac, notes: [] };
     try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
     markPreset('l6'); syncAutoUI(); schedule();
