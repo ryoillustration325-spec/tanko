@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v89</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v90</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2688,7 +2688,7 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   for (var it = 0; it < 2; it++) for (var g2 = 1; g2 < 16; g2++){ GA[g2] = (GA[g2 - 1] + 2 * GA[g2] + GA[g2 + 1]) / 4; GB[g2] = (GB[g2 - 1] + 2 * GB[g2] + GB[g2 + 1]) / 4; }
   for (var g3 = 0; g3 <= 16; g3++){ var mg = Math.sqrt(GA[g3] * GA[g3] + GB[g3] * GB[g3]); var cap = 0.04 * Math.min(1.5, kS); if (mg > cap){ GA[g3] *= cap / mg; GB[g3] *= cap / mg; } }
   // 3. 彩度：見本と写真の平均の鮮やかさの比（0.75〜1.3倍）
-  var ct0 = tkL6Chroma(T), cs0 = tkL6Chroma(M), ks = satR != null ? Math.max(0.5, Math.min(1.3, satR)) : (ct0 > 0.004 ? Math.max(0.45, Math.min(1 + 0.3 * Math.min(1.5, kS), cs0 / ct0)) : 1);   /* 見本が淡い時は大きく抑える（見本の実測：全体の鮮やかさは手持ちの写真の約1/3）。見本の実測値で合わせる時は全量、以前の測り方の時だけ量を掛ける */ if (satR == null) ks = 1 + (ks - 1) * sC;
+  var ct0 = tkL6Chroma(T), cs0 = tkL6Chroma(M), ks = ct0 > 0.004 ? Math.max(1 - 0.25 * Math.min(1.6, kS), Math.min(1 + 0.3 * Math.min(1.5, kS), cs0 / ct0)) : 1;   // v84と同じ（強く抜くと葉が割れ、青も消えるため）   /* 見本が淡い時は大きく抑える（見本の実測：全体の鮮やかさは手持ちの写真の約1/3）。見本の実測値で合わせる時は全量、以前の測り方の時だけ量を掛ける */ ks = 1 + (ks - 1) * sC;
   // 4. 肌（HSLのオレンジに当たる）：写真の肌の色の近くだけ、見本の肌の色へ。見本に肌が無い時は、肌の色をグレーディングから守るだけ
   var SKt = null, SKd = [0, 0];
   if (T.skin){ var mt = T.skin.b[T.skin.b.length >> 1]; SKt = { h: (Math.atan2(mt[2], mt[1]) * 180 / Math.PI + 360) % 360 };
@@ -2730,10 +2730,10 @@ function tkL6DeepLut2(d, kind, teal, calm){
     var wb = Math.exp(-Math.pow(tkHd(H, 228) / 52, 2)) * tkSS((C - 0.006) / 0.014);
     var ws = (1 - tkSS((L - 0.22) / 0.3)) * tkSS((L - 0.03) / 0.1), wh = tkSS((L - 0.68) / 0.16) * (1 - tkSS((L - 0.97) / 0.03));
     // ① 青い物を藍へ
-    var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 0.35 * d * wb), L1 = L - 0.12 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - tkSS((L - 0.55) / 0.2));   // 明るい青（空）は沈めない＝明るく抜ける
+    var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 0.8 * d * wb) + 0.008 * d * wb, L1 = L - 0.09 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - 0.6 * wh);   // 明るい青（空）は沈めない＝明るく抜ける
     var A1 = Math.cos(H1 * Math.PI / 180) * C1, B1 = Math.sin(H1 * Math.PI / 180) * C1;
     // ② 影に藍 ③ 明るい所にごく薄く（肌は影を控えめにして、中間〜明るい所に薄い青み）
-    var add = (0.024 * ws + 0.008 * wh) * d * (sk ? 0.6 : 1) * (1 - 0.5 * wb);   // 見本の影はほぼ無彩色（色の濃さ0.01〜0.02）。藍はうっすら
+    var add = (0.045 * ws + 0.012 * wh) * d * (sk ? 0.6 : 1) * (1 - 0.5 * wb);   // 見本の影はほぼ無彩色（色の濃さ0.01〜0.02）。藍はうっすら
     if (sk) add += 0.016 * d * tkSS((L - 0.25) / 0.15) * (1 - tkSS((L - 0.95) / 0.04));
     A1 += Math.cos(ih) * add; B1 += Math.sin(ih) * add;
     var C2 = Math.sqrt(A1 * A1 + B1 * B1); if (C2 > 0.13){ A1 *= 0.13 / C2; B1 *= 0.13 / C2; }
@@ -2818,7 +2818,7 @@ function tkLook6(img, n, P, w, h){
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
   // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
   if (P.l6Follow !== 0){ var li6 = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li6] != null) li6 = TK_L6_OLD[li6]; var M6 = P.l6Custom || (TK_L6[li6] || TK_L6[0]).m, tr = tkL6Traits(M6);
-    dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm * 0.5; P._l6Tr = tr; }   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
+    dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; }   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
   dBg = Math.round(dBg * 100) / 100; dSk = Math.round(dSk * 100) / 100; tl = Math.round(tl * 100) / 100; cm = Math.round(cm * 100) / 100;
   if (dBg <= 0 && dSk <= 0 && tl <= 0 && cm <= 0) return;
   var kB = 'b' + dBg + ',' + tl + ',' + cm, kS = 's' + dSk;
