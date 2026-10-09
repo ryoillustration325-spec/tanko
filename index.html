@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v93</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v94</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2828,6 +2828,7 @@ function tkL6Clarity(img, n, w, h, target, amt){
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
+  var ISk = (w && h && P.l6SkinTex !== 0) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
   (function(){
   var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6V === 2 ? 0 : 1);   // 番号の古い設定（以前の版で保存）だけ強め
   if (mix <= 0) tkLook6Core(img, n, P, w, h, 's');
@@ -2858,7 +2859,27 @@ function tkLook6(img, n, P, w, h){
   if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33);
   for (var j = 0, j3 = 0; j < n; j++, j3 += 3){ var wv = Wsk[j]; if (wv > 0.001){ img[j3] += (Sk[j3] - img[j3]) * wv; img[j3 + 1] += (Sk[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Sk[j3 + 2] - img[j3 + 2]) * wv; } }
 })();
+  if (ISk) tkL6SkinTex(img, ISk, n, P, w, h);
   if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = I06[q6] + (img[q6] - I06[q6]) * mm6;
+}
+// 肌のきめ：肌の範囲では、細かい明暗と色の揺れ（毛穴・そばかす・うぶ毛の陰影・色ムラ）を元の写真の比率に戻す。
+//   トーンカーブが肌の明るさ帯で急になると、きめが持ち上がって「つるっと感」が消える＝それを防ぐ（ぼかしではなく元のきめ）
+function tkL6SkinTex(img, I0, n, P, w, h){
+  var sm = null; (P.lm || []).forEach(function(x){ if (x.l6skin) sm = x; });
+  if (!P.l6Person && !(sm && sm.strokes && sm.strokes.length)) return;
+  var W; try{ W = tkLmWeight(Object.assign({ type: 'skin', strokes: [], feather: 30, inv: 0 }, sm || {}, { img: I0, iw: w, ih: h }), w, h); }catch(e){ return; }
+  if (!W) return;
+  var any = 0; for (var i = 0; i < n; i++) if (W[i] > 0.02) any++;
+  if (any < n * 0.003) return;
+  var sg = Math.max(1.2, Math.max(w, h) / 300), c0 = new Float32Array(n), c1 = new Float32Array(n);
+  // 赤・緑・青それぞれ：明暗のきめも、色の細かいムラも、元の写真の揺れ方（今の明るさに合わせた比率）に戻す
+  for (var c = 0; c < 3; c++){
+    for (i = 0; i < n; i++){ c0[i] = I0[i * 3 + c]; c1[i] = img[i * 3 + c]; }
+    var B0 = tkBlur1(c0, w, h, sg), B1 = tkBlur1(c1, w, h, sg);
+    for (i = 0; i < n; i++){ var wv = W[i]; if (wv < 0.02) continue;
+      var r = B0[i] > 0.004 ? Math.max(0.5, Math.min(2, B1[i] / B0[i])) : 1, t = B1[i] + (c0[i] - B0[i]) * r;
+      img[i * 3 + c] = tkClamp01(c1[i] + (t - c1[i]) * wv); }
+  }
 }
 function tkLook6Core(img, n, P, w, h, mode){
   var li = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li] != null) li = TK_L6_OLD[li];   // 以前の番号で保存された設定
