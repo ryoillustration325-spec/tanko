@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v88</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v89</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2730,7 +2730,7 @@ function tkL6DeepLut2(d, kind, teal, calm){
     var wb = Math.exp(-Math.pow(tkHd(H, 228) / 52, 2)) * tkSS((C - 0.006) / 0.014);
     var ws = (1 - tkSS((L - 0.22) / 0.3)) * tkSS((L - 0.03) / 0.1), wh = tkSS((L - 0.68) / 0.16) * (1 - tkSS((L - 0.97) / 0.03));
     // ① 青い物を藍へ
-    var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 1.3 * d * wb) + 0.012 * d * wb, L1 = L - 0.09 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - tkSS((L - 0.55) / 0.2));   // 明るい青（空）は沈めない＝明るく抜ける
+    var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 0.35 * d * wb), L1 = L - 0.12 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - tkSS((L - 0.55) / 0.2));   // 明るい青（空）は沈めない＝明るく抜ける
     var A1 = Math.cos(H1 * Math.PI / 180) * C1, B1 = Math.sin(H1 * Math.PI / 180) * C1;
     // ② 影に藍 ③ 明るい所にごく薄く（肌は影を控えめにして、中間〜明るい所に薄い青み）
     var add = (0.024 * ws + 0.008 * wh) * d * (sk ? 0.6 : 1) * (1 - 0.5 * wb);   // 見本の影はほぼ無彩色（色の濃さ0.01〜0.02）。藍はうっすら
@@ -2777,20 +2777,21 @@ function tkL6Soft(img, n, w, h, target, amt){
 // 雰囲気の目標：見本（淡い藍の写真群）の実測の中央値
 var TK_L6_AIM = { mc: 0.022, dc: 0.012, p2: 0.21, p98: 0.9, lc: 0.05 };
 function tkL6Score(src, out, w, h, person){
-  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hist = new Float64Array(256), ch = new Float64Array(200), dcs = 0, dcn = 0, skn = 0, skBad = 0;
+  var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, dcs = 0, dcn = 0, skn = 0, skBad = 0;
   for (var i = 0; i < n; i++){
     var q = i * 4; tkToOk(src[q] / 255, src[q + 1] / 255, src[q + 2] / 255, k); tkToOk(out[q] / 255, out[q + 1] / 255, out[q + 2] / 255, k2);
     L[i] = k2[0]; dA[i] = k2[1] - k[1]; dB[i] = k2[2] - k[2];
     dE += Math.sqrt((k2[0] - k[0]) * (k2[0] - k[0]) + dA[i] * dA[i] + dB[i] * dB[i]);
     hist[Math.max(0, Math.min(255, (k2[0] * 255) | 0))]++; if (k2[0] > 0.985 && k[0] <= 0.985) clipN++; if (k2[0] < 0.03 && k[0] >= 0.03) clipN++;
-    var C2 = Math.sqrt(k2[1] * k2[1] + k2[2] * k2[2]); ch[Math.min(199, (C2 * 1000) | 0)]++;
+    var C2 = Math.sqrt(k2[1] * k2[1] + k2[2] * k2[2]); ch[Math.min(199, (C2 * 1000) | 0)]++; ch0[Math.min(199, (Math.sqrt(k[1] * k[1] + k[2] * k[2]) * 1000) | 0)]++;
     if (k2[0] < 0.25){ dcs += C2; dcn++; }
+    var C0h = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C0h > 0.03 && C2 > 0.015){ hsW += C0h; hsS += C0h * tkHd((Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360, (Math.atan2(k2[2], k2[1]) * 180 / Math.PI + 360) % 360); }
     if (person){ var C1 = Math.sqrt(k[1] * k[1] + k[2] * k[2]), H1 = (Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360;
       if (C1 > 0.02 && C1 < 0.09 && k[0] > 0.45 && k[0] < 0.93 && tkHd(H1, 50) < 30){ skn++; var H2 = (Math.atan2(k2[2], k2[1]) * 180 / Math.PI + 360) % 360; if (tkHd(H2, 50) > 40 || C2 < C1 * 0.45) skBad++; } }
   }
   dE /= n;
   var q2 = function(p){ var t = p * n, s = 0; for (var b = 0; b < 256; b++){ s += hist[b]; if (s >= t) return b / 255; } return 1; };
-  var mc = (function(){ var s = 0; for (var b = 0; b < 200; b++){ s += ch[b]; if (s >= n / 2) return b / 1000; } return 0.2; })();
+  var med = function(H){ var s = 0; for (var b = 0; b < 200; b++){ s += H[b]; if (s >= n / 2) return b / 1000; } return 0.2; }, mc = med(ch), mc0 = med(ch0);
   // 割れ：色の変化の、となりとの段差（なだらかな変化は割れではない）。上位1%
   var g = new Float32Array(n), gi = 0;
   for (var y = 1; y < h - 1; y++) for (var x = 1; x < w - 1; x++){ var j = y * w + x; var ga = (dA[j + 1] - dA[j - 1]) * 0.5, gb = (dB[j + 1] - dB[j - 1]) * 0.5, gc = (dA[j + w] - dA[j - w]) * 0.5, gd = (dB[j + w] - dB[j - w]) * 0.5; g[gi++] = Math.sqrt(ga * ga + gb * gb + gc * gc + gd * gd); }
@@ -2798,11 +2799,14 @@ function tkL6Score(src, out, w, h, person){
   var lc = tkL6LC(out, w, h, true)[0], dc = dcn > n * 0.02 ? dcs / dcn : TK_L6_AIM.dc, A = TK_L6_AIM;
   var style = Math.abs(mc - A.mc) / 0.015 + Math.abs(dc - A.dc) / 0.015 + Math.abs(q2(0.02) - A.p2) / 0.12 + Math.abs(q2(0.98) - A.p98) / 0.1 + Math.abs(lc - A.lc) / 0.035;
   // 強すぎ・白飛び黒つぶれの増加・肌の転び・弱すぎ（割れは候補どうしで比べて後で足す）
-  var pen = 3 * Math.max(0, dE - 0.15) / 0.03 + 3 * Math.max(0, 0.03 - dE) / 0.03 + 60 * Math.max(0, clipN / n - 0.01) + (skn > n * 0.01 ? 6 * skBad / skn : 0);
+  var pen = 3 * Math.max(0, dE - 0.15) / 0.03 + 60 * Math.max(0, clipN / n - 0.01) + (mc0 > 0.01 ? 5 * Math.max(0, 0.55 - mc / mc0) / 0.2 : 0) + (hsW > n * 0.002 ? 5 * Math.max(0, hsS / hsW - 14) / 10 : 0) +   /* 色の付いた所の色相が大きく回る（橙がピンクになる等） */   /* 色を半分以上抜く（灰色・別の色になる）のは無理やり */ (skn > n * 0.01 ? 6 * skBad / skn : 0);
   return { score: style + pen, pen: pen, style: style, rough: rough, dE: dE, skin: skn > 0 ? skBad / skn : 0, mc: mc };
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
 function tkLook6(img, n, P, w, h){
+  // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
+  var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
+  (function(){
   var mix = P.l6Mix != null ? P.l6Mix / 100 : (P.l6V === 2 ? 0 : 1);   // 番号の古い設定（以前の版で保存）だけ強め
   if (mix <= 0) tkLook6Core(img, n, P, w, h, 's');
   else if (mix >= 1) tkLook6Core(img, n, P, w, h, 'x');
@@ -2828,6 +2832,8 @@ function tkLook6(img, n, P, w, h){
   var Sk = new Float32Array(img); if (TK_LUTC.l6s) tkApplyLut3(Sk, n, TK_LUTC.l6s, 33);
   if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33);
   for (var j = 0, j3 = 0; j < n; j++, j3 += 3){ var wv = Wsk[j]; if (wv > 0.001){ img[j3] += (Sk[j3] - img[j3]) * wv; img[j3 + 1] += (Sk[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Sk[j3 + 2] - img[j3 + 2]) * wv; } }
+})();
+  if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = I06[q6] + (img[q6] - I06[q6]) * mm6;
 }
 function tkLook6Core(img, n, P, w, h, mode){
   var li = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li] != null) li = TK_L6_OLD[li];   // 以前の番号で保存された設定
@@ -5889,6 +5895,10 @@ function tkLook2(img, n, P, w, h){
     var blue = rank.filter(function(r){ var e = TK_L6[r.i]; if (seen[r.i] || !e) return false; if (A.person && e.g !== 'person') return false; var t = tkL6Traits(e.m); return t.deep > 0.6 && (e.mc == null || e.mc < 0.035); }).map(function(r){ return r.i; });
     tkL6Top(blue.map(function(i){ return { i: i }; }), 6).forEach(function(i){ pool.push(i); });
     var base = JSON.parse(JSON.stringify(P)), res = [], k = 0;
+    // 元の写真そのものの採点：すでに雰囲気が近いほど、足す量を減らし、変えることを減点する
+    var s0 = tkL6Score(src, src, w, h, A.person), rr = rank.length > 5 ? rank[0].d / Math.max(1e-6, rank[5].d) : 1, near = Math.max(0, Math.min(1, (0.55 - rr) / 0.35));   // 1＝元の写真が見本の1枚とほぼ同じ雰囲気（いちばん近い見本だけ飛び抜けて近い）
+    var amt = Math.round(100 - 65 * near); base.l5Master = amt; A.autoAmt = amt; A.near = near;
+    { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(src), w, h), 0, 0); res.push({ i: -1, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
     A.judging = true; A.cands = null; if (XE.l6Box) l6Render();
     function step(){
       if (!AUTO || AUTO !== A || A.judgeTok !== tok) return;
@@ -5904,15 +5914,20 @@ function tkLook2(img, n, P, w, h){
       if (k < pool.length){ setTimeout(step, 0); return; }
       // 割れ：候補の中の中央値より段差が大きいものを減点（写真ごとの細かさの違いに左右されない）
       var rs = res.map(function(x){ return x.r.rough; }).sort(function(a, b){ return a - b; }), rmed = rs.length ? Math.max(1, rs[rs.length >> 1]) : 1;
-      res.forEach(function(x){ x.s = x.r.score + 4 * Math.max(0, x.r.rough / rmed - 1.15); });
+      res.forEach(function(x){ if (x.i < 0) return; x.s = x.r.score + 4 * Math.max(0, x.r.rough / rmed - 1.15) + 8 * near * x.r.dE / 0.05; });   // 元が良い写真ほど、変化の大きい候補を減点
       res.sort(function(a, b){ return a.s - b.s; });
       A.cands = res; A.judging = false;
-      if (!A.picked && !A.custom && res.length){ A.idx = res[0].i; A.group = TK_L6[res[0].i].g; P.l6Idx = res[0].i; P.l6V = 2; schedule(); }
+      if (!A.picked && !A.custom && res.length){
+        var top = res[0];
+        if (top.i < 0){ var nx = res.filter(function(x){ return x.i >= 0; })[0]; A.keep = true; P.l5Master = 0; if (nx){ A.idx = nx.i; P.l6Idx = nx.i; P.l6V = 2; A.group = TK_L6[nx.i].g; } }
+        else { A.keep = false; P.l5Master = amt; A.idx = top.i; A.group = TK_L6[top.i].g; P.l6Idx = top.i; P.l6V = 2; }
+        if (A.macro) A.macro.l5Master = P.l5Master; schedule();
+      }
       if (XE.l6Box) l6Render();
     }
     setTimeout(step, 0);
   }
-  function l6Pick(idx){ if (!AUTO || !AUTO.l6) return; AUTO.picked = true; AUTO.idx = idx; AUTO.group = TK_L6[idx].g; AUTO.custom = null; P.l6Idx = idx; P.l6V = 2; P.l6Custom = null; syncAutoUI(); schedule(); }
+  function l6Pick(idx){ if (!AUTO || !AUTO.l6) return; if (idx < 0){ AUTO.picked = true; AUTO.keep = true; P.l5Master = 0; if (AUTO.macro) AUTO.macro.l5Master = 0; syncAutoUI(); schedule(); return; } if (AUTO.keep || P.l5Master === 0){ P.l5Master = AUTO.autoAmt || 100; if (AUTO.macro) AUTO.macro.l5Master = P.l5Master; } AUTO.keep = false; AUTO.picked = true; AUTO.idx = idx; AUTO.group = TK_L6[idx].g; AUTO.custom = null; P.l6Idx = idx; P.l6V = 2; P.l6Custom = null; syncAutoUI(); schedule(); }
   function l6LoadRef(){
     var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.addEventListener('change', function(){
@@ -6184,12 +6199,12 @@ function tkLook2(img, n, P, w, h){
     var pr = xel('div', 'rrow'); pr.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); })); bx.appendChild(pr);
     if (A6.judging){ bx.appendChild(xel('div', 'l5oldh', 'おまかせ：候補を実際にかけて比べています…')); }
     else if (A6.cands && A6.cands.length){
-      bx.appendChild(xel('div', 'l5oldh', 'おまかせの候補（実際にかけて、割れ・強すぎ・雰囲気で採点。良い順）'));
+      bx.appendChild(xel('div', 'l5oldh', 'おまかせの候補（実際にかけて採点・良い順）' + (A6.near > 0.5 ? '　元の写真がすでに近いので控えめ（' + (A6.autoAmt || 100) + '%）' : '')));
       var gridC = xel('div', 'l6cands'), showN = A6.showAll ? A6.cands.length : 6;
       A6.cands.slice(0, showN).forEach(function(c, r){
-        var b = xel('button', 'l6cand' + (!A6.custom && A6.idx === c.i ? ' on' : '')); b.type = 'button'; b.title = nm(c.i);
+        var isOn = c.i < 0 ? !!A6.keep : (!A6.custom && !A6.keep && A6.idx === c.i); var b = xel('button', 'l6cand' + (isOn ? ' on' : '')); b.type = 'button'; b.title = c.i < 0 ? '元のまま' : nm(c.i);
         var im = document.createElement('img'); im.src = c.url; im.alt = ''; b.appendChild(im);
-        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + nm(c.i)));
+        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + (c.i < 0 ? '元のまま（足さない）' : nm(c.i))));
         b.addEventListener('click', function(){ l6Pick(c.i); }); gridC.appendChild(b);
       });
       bx.appendChild(gridC);
