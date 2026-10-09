@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v98</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v99</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2899,7 +2899,8 @@ function tkL6BlueLut(mode, amt){
     if (wg > 0.001 && k > 0.001){ var Hn = H + tkHueDist(mode === 1 ? 190 : mode === 2 ? 182 : 185, H) * 0.5 * wg * k; A = Math.cos(Hn * Math.PI / 180) * C; B = Math.sin(Hn * Math.PI / 180) * C; }
     // 藍を足す（灰色・青・緑に）
     var blu = Math.exp(-Math.pow(tkHd(H, 250) / 40, 2)) * tkSS((C - 0.03) / 0.04);   /* すでに青い物（シート・服・空）には足さない＝青の塊にしない */
-    var add = (mode === 1 ? 0.058 : mode === 2 ? 0.052 : 0.05) * k * (1 - 0.8 * blu);   /* 見本の実測：その明るさの帯で0.04〜0.06 */ A += Math.cos(ih) * add; B += Math.sin(ih) * add;
+    var tgt = (mode === 1 ? 0.058 : mode === 2 ? 0.052 : 0.05) * k, prj = A * Math.cos(ih) + B * Math.sin(ih);   /* 見本の量（その明るさの帯の青み）まで。すでに青い分は差し引く＝重ねて濃くしない */
+    var add = Math.max(0, tgt - Math.max(0, prj) * 0.8) * (1 - 0.8 * blu);   /* 見本の実測：その明るさの帯で0.04〜0.06 */ A += Math.cos(ih) * add; B += Math.sin(ih) * add;
     // コントラスト：黒は締め、青影・中間は中間を少し沈め、青光は光を残して影を締める
     var Lc = L;
     if (mode === 1) Lc = L - 0.05 * amt * wb * (1 - tkSS((L - 0.35) / 0.2));
@@ -3564,7 +3565,7 @@ function tkLook2(img, n, P, w, h){
     im.onload = function(){
       var fresh = !opt.restore && newPhotoMode() === 'fresh' && PREVSET;
       var reAuto = !!AUTO && !opt.restore && newPhotoMode() === 'keep'; autoOff();
-      img = im; if (fresh){ restoring = true; fullReset(); restoring = false; } setupPreview(); URL.revokeObjectURL(url);
+      img = im; if (fresh){ L6_PFORCE = null; restoring = true; fullReset(); restoring = false; } setupPreview(); URL.revokeObjectURL(url);
       if (fresh){ HIST = [snapState()]; REDO = []; updateHistBtns(); }
       if (opt.restore){
         try{
@@ -5971,6 +5972,7 @@ function tkLook2(img, n, P, w, h){
     var sz = sizeFor(240), px = readPixels(sz[0], sz[1]);
     return tkL6Model(px, sz[0] * sz[1], person);
   }
+  var L6_PFORCE = null;   // 人物かどうかを手で決めた時（null＝自動）。写真を変えると自動に戻る
   function l6Person(){
     if (REG.ready && REG.data){ try{ var mw = REG.mw, mh = REG.mh, nn = mw * mh, rp = readPixels(mw, mh), SWm = new Float32Array(nn); for (var i = 0; i < nn; i++) SWm[i] = REG.data[i * RN] / 255; var est = tkSkinFind(rp, nn, SWm, true); return !!(est && est.frac >= 0.01); }catch(e){} }
     // AIなし：肌らしい色（橙〜黄みの、鮮やかすぎない色・中〜明るい）が十分にあり、しかも同じ色相の鮮やかな色（花・果物・紅葉）が多くない時だけ人物とみる
@@ -5982,7 +5984,7 @@ function tkLook2(img, n, P, w, h){
   function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Soft == null) q.l6Soft = 0; if (q.l6Clar == null) q.l6Clar = 0; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
   function applyLook6(idx, keep){
     if (!img){ toast('先に写真を選んでください'); return; }
-    var person = l6Person(), T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null, person ? null : l6Desc());
+    var person = L6_PFORCE != null ? !!L6_PFORCE : l6Person(), T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null, person ? null : l6Desc());
     var L = TK_L6_DEF, old = (AUTO && AUTO.l6) ? AUTO : null;
     if (idx == null && old && keep && old.picked) idx = old.idx;
     if (idx == null) idx = rank[0].i;
@@ -6318,6 +6320,11 @@ function tkLook2(img, n, P, w, h){
       sk.appendChild(xel('div', 'hint', '写真の上をなぞって直します。赤い所が「肌」として扱われる範囲です。'));
     }
     bx.appendChild(sk);
+    // 写真の種類：色だけの判定は、オレンジの猫・薄ピンクの花などを人物と間違えることがある → 手で直せる
+    bx.appendChild(xel('div', 'l5oldh', '写真の種類' + (L6_PFORCE == null ? '（自動で判定）' : '')));
+    var pfr = xel('div', 'rrow');
+    [['人物', 1], ['人物でない', 0]].forEach(function(b){ pfr.appendChild(xbtn(b[0], (A6.person ? 1 : 0) === b[1] ? 'pri' : 'ghost', function(){ L6_PFORCE = b[1]; applyLook6(null, false); })); });
+    bx.appendChild(pfr);
     // 青の入れ方（人物でない写真）：なし／青影（暗い所に藍）／中間（葉・中くらいの明るさを青緑〜藍へ）／青光（明るい所・光を青く）
     if (!A6.person){
       bx.appendChild(xel('div', 'l5oldh', '青の入れ方'));
