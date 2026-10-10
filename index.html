@@ -450,7 +450,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v99</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v100</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2786,6 +2786,7 @@ function tkL6Soft(img, n, w, h, target, amt){
 // ---------- おまかせの判断：候補を実際にかけて採点する（割れ・強すぎ・雰囲気の近さ・肌） ----------
 // 雰囲気の目標：見本（淡い藍の写真群）の実測の中央値
 var TK_L6_AIM = { mc: 0.022, dc: 0.012, p2: 0.21, p98: 0.9, lc: 0.05 };
+var TK_L6_BLUEPREF = 1.0;   // 人物でない写真：青を入れた候補を少し優先（見本の平均はほぼ青なしだが、青の入った見本の雰囲気に寄せたい）
 var TK_L6_AIMP = { mr: 0.053, p50: 0.42, p2: 0.2, p98: 0.83 };   // 人物でない写真の目標（植物・森の見本の実測）
 function tkL6Score(src, out, w, h, person){
   var n = w * h, k = [0, 0, 0], k2 = [0, 0, 0], L = new Float32Array(n), CC = new Float32Array(n), ch2r = function(i){ return CC[i]; }, dA = new Float32Array(n), dB = new Float32Array(n), dE = 0, clipN = 0, hiO = 0, hiS = 0, sumL0 = 0, sumL1 = 0, hist = new Float64Array(256), ch = new Float64Array(200), ch0 = new Float64Array(200), hsW = 0, hsS = 0, L0a = new Float32Array(n), dcs = 0, dcn = 0, skn = 0, skBad = 0;
@@ -6023,11 +6024,12 @@ function tkLook2(img, n, P, w, h){
     var amt = Math.round(100 - 65 * near); base.l5Master = amt; A.autoAmt = amt; A.near = near;
     { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(src), w, h), 0, 0); res.push({ i: -1, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
     A.judging = true; A.cands = null; if (XE.l6Box) l6Render();
+    var bq = null, bk = 0, rmed0 = null;
     function step(){
       if (!AUTO || AUTO !== A || A.judgeTok !== tok) return;
       var t0 = Date.now();
       while (k < pool.length && Date.now() - t0 < 60){
-        var c = pool[k++], q = JSON.parse(JSON.stringify(base)); q.l6Idx = c; q.l6V = 2; q.l6Custom = null;
+        var c = pool[k++], q = JSON.parse(JSON.stringify(base)); q.l6Idx = c; q.l6V = 2; q.l6Custom = null; q.l6BlueMode = 0;
         try{
           var out = tkProcess(src, w, h, q), sc = tkL6Score(src, out, w, h, A.person);
           var cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out), w, h), 0, 0);
@@ -6036,21 +6038,32 @@ function tkLook2(img, n, P, w, h){
       }
       if (k < pool.length){ setTimeout(step, 0); return; }
       // 割れ：候補の中の中央値より段差が大きいものを減点（写真ごとの細かさの違いに左右されない）
-      var rs = res.map(function(x){ return x.r.rough; }).sort(function(a, b){ return a - b; }), rmed = rs.length ? Math.max(1, rs[rs.length >> 1]) : 1;
-      res.forEach(function(x){ if (x.i < 0) return; x.s = x.r.score + 4 * Math.max(0, x.r.rough / rmed - 1.15) + 8 * near * x.r.dE / 0.05; });   // 元が良い写真ほど、変化の大きい候補を減点
+      if (rmed0 == null){ var rs = res.map(function(x){ return x.r.rough; }).sort(function(a, b){ return a - b; }); rmed0 = rs.length ? Math.max(1, rs[rs.length >> 1]) : 1; } var rmed = rmed0;   /* 青の候補を足す前の見本どうしで決める */
+      var adj = function(x){ return x.r.score + 4 * Math.max(0, x.r.rough / rmed - 1.15) + 8 * near * x.r.dE / 0.05; };   // 元が良い写真ほど、変化の大きい候補を減点
+      res.forEach(function(x){ if (x.i < 0 || x.bm) return; x.s = adj(x); });
+      res.sort(function(a, b){ return a.s - b.s; });
+      // 人物でない写真：上位2つの見本に、青影・中間・青光をそれぞれ実際にかけて採点（崩れていなければ青ありを少し優先）
+      if (!A.person && !bq){ bq = []; res.filter(function(x){ return x.i >= 0; }).slice(0, 2).forEach(function(x){ [1, 2, 3].forEach(function(m){ bq.push({ i: x.i, bm: m }); }); }); }
+      while (bq && bk < bq.length && Date.now() - t0 < 60){
+        var bc = bq[bk++], qb = JSON.parse(JSON.stringify(base)); qb.l6Idx = bc.i; qb.l6V = 2; qb.l6Custom = null; qb.l6BlueMode = bc.bm;
+        try{ var ob = tkProcess(src, w, h, qb), sb = tkL6Score(src, ob, w, h, A.person); var cvb = document.createElement('canvas'); cvb.width = w; cvb.height = h; cvb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(ob), w, h), 0, 0);
+          var xb = { i: bc.i, bm: bc.bm, s: 0, r: sb, url: cvb.toDataURL('image/jpeg', 0.75) }; xb.s = adj(xb) - TK_L6_BLUEPREF; res.push(xb); }catch(e){}
+      }
+      if (bq && bk < bq.length){ setTimeout(step, 0); return; }
       res.sort(function(a, b){ return a.s - b.s; });
       A.cands = res; A.judging = false;
       if (!A.picked && !A.custom && res.length){
         var top = res[0];
         if (top.i < 0){ var nx = res.filter(function(x){ return x.i >= 0; })[0]; A.keep = true; P.l5Master = 0; if (nx){ A.idx = nx.i; P.l6Idx = nx.i; P.l6V = 2; A.group = TK_L6[nx.i].g; } }
         else { A.keep = false; P.l5Master = amt; A.idx = top.i; A.group = TK_L6[top.i].g; P.l6Idx = top.i; P.l6V = 2; }
+        P.l6BlueMode = top.i >= 0 ? (top.bm | 0) : 0;
         if (A.macro) A.macro.l5Master = P.l5Master; schedule();
       }
       if (XE.l6Box) l6Render();
     }
     setTimeout(step, 0);
   }
-  function l6Pick(idx){ if (!AUTO || !AUTO.l6) return; if (idx < 0){ AUTO.picked = true; AUTO.keep = true; P.l5Master = 0; if (AUTO.macro) AUTO.macro.l5Master = 0; syncAutoUI(); schedule(); return; } if (AUTO.keep || P.l5Master === 0){ P.l5Master = AUTO.autoAmt || 100; if (AUTO.macro) AUTO.macro.l5Master = P.l5Master; } AUTO.keep = false; AUTO.picked = true; AUTO.idx = idx; AUTO.group = TK_L6[idx].g; AUTO.custom = null; P.l6Idx = idx; P.l6V = 2; P.l6Custom = null; syncAutoUI(); schedule(); }
+  function l6Pick(idx, bm){ if (!AUTO || !AUTO.l6) return; if (bm != null) P.l6BlueMode = bm; if (idx < 0){ AUTO.picked = true; AUTO.keep = true; P.l5Master = 0; if (AUTO.macro) AUTO.macro.l5Master = 0; syncAutoUI(); schedule(); return; } if (AUTO.keep || P.l5Master === 0){ P.l5Master = AUTO.autoAmt || 100; if (AUTO.macro) AUTO.macro.l5Master = P.l5Master; } AUTO.keep = false; AUTO.picked = true; AUTO.idx = idx; AUTO.group = TK_L6[idx].g; AUTO.custom = null; P.l6Idx = idx; P.l6V = 2; P.l6Custom = null; syncAutoUI(); schedule(); }
   function l6LoadRef(){
     var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
     inp.addEventListener('change', function(){
@@ -6290,20 +6303,66 @@ function tkLook2(img, n, P, w, h){
       if (left){ var ends = xel('div', 'l6sle'); ends.appendChild(xel('span', '', left)); ends.appendChild(xel('span', '', right)); row.appendChild(ends); }
       return row;
     }
+    var BMN = ['', '＋青影', '＋中間', '＋青光'];
+    function cn(i, bm){ var e = TK_L6[i], g = TK_L6_GN[e.g].split('・').pop(); return (bm ? ['', '青影', '中間', '青光'][bm] + '・' : '') + g + pos[i] + ' ' + e.d; }   // 候補の短い名前（青の入れ方を先に）
+    // 写真の種類：色だけの判定は、オレンジの猫・薄ピンクの花などを人物と間違えることがある → 手で直せる
+    bx.appendChild(xel('div', 'l5oldh', '1. 写真の種類' + (L6_PFORCE == null ? '（自動で判定・違う時は押して直す）' : '')));
+    var pfr = xel('div', 'rrow');
+    [['人物', 1], ['人物でない', 0]].forEach(function(b){ pfr.appendChild(xbtn(b[0], (A6.person ? 1 : 0) === b[1] ? 'pri' : 'ghost', function(){ L6_PFORCE = b[1]; applyLook6(null, false); })); });
+    bx.appendChild(pfr);
+    if (!REG.ready){ var air = xel('div', 'rrow'); air.appendChild(xbtn(REG.busy ? 'AIで判定中…' : 'AIで人物を判定（精度↑）', 'ghost', function(){ if (REG.busy) return; runSegmentation().then(function(){ L6_PFORCE = null; applyLook6(null, false); if (L6EDIT) lmDraw(); }); l6Render(); })); bx.appendChild(air); }
+    if (A6.judging){ bx.appendChild(xel('div', 'l5oldh', '2. 候補を選ぶ')); bx.appendChild(xel('div', 'hint', '候補を実際にかけて比べています…')); }
+    else if (A6.cands && A6.cands.length){
+      bx.appendChild(xel('div', 'l5oldh', '2. 候補を選ぶ（実際にかけて採点・良い順）' + (A6.near > 0.5 ? '　元の写真がすでに近いので控えめ（' + (A6.autoAmt || 100) + '%）' : '')));
+      var gridC = xel('div', 'l6cands'), showN = A6.showAll ? A6.cands.length : 6;
+      A6.cands.slice(0, showN).forEach(function(c, r){
+        var isOn = c.i < 0 ? !!A6.keep : (!A6.custom && !A6.keep && A6.idx === c.i && (P.l6BlueMode | 0) === (c.bm | 0)); var b = xel('button', 'l6cand' + (isOn ? ' on' : '')); b.type = 'button'; b.title = c.i < 0 ? '元のまま' : nm(c.i) + BMN[c.bm | 0];
+        var im = document.createElement('img'); im.src = c.url; im.alt = ''; b.appendChild(im);
+        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + (c.i < 0 ? '元のまま（足さない）' : cn(c.i, c.bm | 0))));
+        b.addEventListener('click', function(){ l6Pick(c.i, c.i < 0 ? null : (c.bm | 0)); }); gridC.appendChild(b);
+      });
+      bx.appendChild(gridC);
+      var cr = xel('div', 'rrow');
+      if (A6.cands.length > 6) cr.appendChild(xbtn(A6.showAll ? '候補を減らす' : 'ほかの候補（' + (A6.cands.length - 6) + '）', 'ghost', function(){ A6.showAll = !A6.showAll; l6Render(); }));
+      cr.appendChild(xbtn('選び直す', 'ghost', function(){ AUTO.picked = false; l6Judge(); }));
+      bx.appendChild(cr);
+      var cr2 = xel('div', 'rrow'); cr2.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); }));
+      bx.appendChild(cr2);
+    }
+    // 青の入れ方（人物でない写真）：なし／青影（暗い所に藍）／中間（葉・中くらいの明るさを青緑〜藍へ）／青光（明るい所・光を青く）
+    if (!A6.person){
+      bx.appendChild(xel('div', 'l5oldh', '3. 青の入れ方（候補の青を変える）'));
+      // 青影・中間・青光それぞれのいちばん良い候補（実際にかけた仕上がり）を並べる
+      var bestB = {}; (A6.cands || []).forEach(function(c){ if (c.bm && (!bestB[c.bm] || c.s < bestB[c.bm].s)) bestB[c.bm] = c; });
+      if (bestB[1] || bestB[2] || bestB[3]){
+        var gB = xel('div', 'l6cands');
+        [1, 2, 3].forEach(function(m){ var c = bestB[m]; if (!c) return; var on = !A6.custom && !A6.keep && A6.idx === c.i && (P.l6BlueMode | 0) === m;
+          var tb = xel('button', 'l6cand' + (on ? ' on' : '')); tb.type = 'button'; tb.title = nm(c.i) + BMN[m];
+          var ti = document.createElement('img'); ti.src = c.url; ti.alt = ''; tb.appendChild(ti); tb.appendChild(xel('span', 'l6cl', cn(c.i, m)));
+          tb.addEventListener('click', function(){ l6Pick(c.i, m); }); gB.appendChild(tb); });
+        bx.appendChild(gB);
+        bx.appendChild(xel('div', 'hint', '今の見本のまま青だけ変える：'));
+      }
+      var brw = xel('div', 'rrow');
+      [['なし', 0], ['青影', 1], ['中間', 2], ['青光', 3]].forEach(function(b){ brw.appendChild(xbtn(b[0], (P.l6BlueMode | 0) === b[1] ? 'pri' : 'ghost', function(){ if (b[1] > 0 && A6.keep && A6.idx != null) l6Pick(A6.idx, b[1]); else { P.l6BlueMode = b[1]; AUTO.picked = true; schedule(); } l6Render(); })); });
+      bx.appendChild(brw);
+      bx.appendChild(xel('div', 'hint', '青影＝暗い所に藍、中間＝葉や中くらいの明るさを青緑〜藍へ、青光＝明るい所・光を青く。どれも黒は締め、花など暖かい色は青くしません。'));
+    }
+    bx.appendChild(xel('div', 'l5oldh', (A6.person ? '3' : '4') + '. 調整（ダブルタップで初期値）'));
     bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
     try{ var trM = A6.custom || (TK_L6[A6.idx] || TK_L6[0]).m, tr0 = tkL6Traits(trM), lv = function(v){ return v < 0.15 ? 'なし' : v < 0.5 ? '弱' : v < 0.9 ? '中' : '強'; };
       bx.appendChild(xel('div', 'hint', 'この見本の特徴：藍 ' + lv(tr0.deep) + '・青緑 ' + lv(tr0.teal) + '・落ち着き ' + lv(tr0.calm) + '（下の3つは、この強さに合わせてかかります）')); }catch(e){}
     bx.appendChild(l6Slider('やわらかさ（パキッと感を見本へ）', 'l6Clar', 0, '', ''));
     bx.appendChild(l6Slider('質感を柔らかく（上げすぎるとのっぺり）', 'l6Soft', 0, '', ''));
-    bx.appendChild(l6Slider('濃い青・背景（肌の範囲の外）', 'l6DeepBg', 30, '', ''));
-    bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
+    bx.appendChild(l6Slider(A6.person ? '濃い青・背景（肌の範囲の外）' : '濃い青', 'l6DeepBg', 30, '', ''));
+    if (A6.person) bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
     bx.appendChild(l6Slider('緑を青緑へ（草木を沈める）', 'l6Teal', 40, '', ''));
     bx.appendChild(l6Slider('色を落ち着かせる（赤・橙・黄・緑・赤紫）', 'l6Calm', 50, '', ''));
+    if (A6.person){
     // 肌の範囲：色＋AIで自動、間違えた所はここで塗る・消すで直す（マスクと同じ仕組み。マスクの一覧にも「肌（濃い青）」として出る）
     var sk = xel('div', 'l6skin');
     var skTop = xel('div', 'rrow');
     skTop.appendChild(xbtn(L6EDIT ? '肌の範囲を直す：終了' : '肌の範囲を表示・直す', L6EDIT ? 'pri' : 'ghost', function(){ l6SkinEdit(!L6EDIT); }));
-    if (!REG.ready) skTop.appendChild(xbtn(REG.busy ? 'AIで判定中…' : 'AIで人物を判定（精度↑）', 'ghost', function(){ if (REG.busy) return; runSegmentation().then(function(){ l6Render(); schedule(); if (L6EDIT) lmDraw(); }); l6Render(); }));
     sk.appendChild(skTop);
     sk.appendChild(xel('div', 'hint', REG.ready ? '肌の範囲：肌の色 × AIの人物（服・髪・木などは入りにくい）' : '肌の範囲：肌の色だけで判定中（肌に近い色の木・帽子も入ることがあります）'));
     if (L6EDIT){
@@ -6320,37 +6379,9 @@ function tkLook2(img, n, P, w, h){
       sk.appendChild(xel('div', 'hint', '写真の上をなぞって直します。赤い所が「肌」として扱われる範囲です。'));
     }
     bx.appendChild(sk);
-    // 写真の種類：色だけの判定は、オレンジの猫・薄ピンクの花などを人物と間違えることがある → 手で直せる
-    bx.appendChild(xel('div', 'l5oldh', '写真の種類' + (L6_PFORCE == null ? '（自動で判定）' : '')));
-    var pfr = xel('div', 'rrow');
-    [['人物', 1], ['人物でない', 0]].forEach(function(b){ pfr.appendChild(xbtn(b[0], (A6.person ? 1 : 0) === b[1] ? 'pri' : 'ghost', function(){ L6_PFORCE = b[1]; applyLook6(null, false); })); });
-    bx.appendChild(pfr);
-    // 青の入れ方（人物でない写真）：なし／青影（暗い所に藍）／中間（葉・中くらいの明るさを青緑〜藍へ）／青光（明るい所・光を青く）
-    if (!A6.person){
-      bx.appendChild(xel('div', 'l5oldh', '青の入れ方'));
-      var brw = xel('div', 'rrow');
-      [['なし', 0], ['青影', 1], ['中間', 2], ['青光', 3]].forEach(function(b){ brw.appendChild(xbtn(b[0], (P.l6BlueMode | 0) === b[1] ? 'pri' : 'ghost', function(){ P.l6BlueMode = b[1]; if (b[1] > 0 && A6.keep && A6.idx != null) l6Pick(A6.idx); else schedule(); l6Render(); })); });
-      bx.appendChild(brw);
-      bx.appendChild(xel('div', 'hint', '青影＝暗い所に藍、中間＝葉や中くらいの明るさを青緑〜藍へ、青光＝明るい所・光を青く。どれも黒は締め、花など暖かい色は青くしません。'));
     }
-    var pr = xel('div', 'rrow'); pr.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); })); bx.appendChild(pr);
-    if (A6.judging){ bx.appendChild(xel('div', 'l5oldh', 'おまかせ：候補を実際にかけて比べています…')); }
-    else if (A6.cands && A6.cands.length){
-      bx.appendChild(xel('div', 'l5oldh', 'おまかせの候補（実際にかけて採点・良い順）' + (A6.near > 0.5 ? '　元の写真がすでに近いので控えめ（' + (A6.autoAmt || 100) + '%）' : '')));
-      var gridC = xel('div', 'l6cands'), showN = A6.showAll ? A6.cands.length : 6;
-      A6.cands.slice(0, showN).forEach(function(c, r){
-        var isOn = c.i < 0 ? !!A6.keep : (!A6.custom && !A6.keep && A6.idx === c.i); var b = xel('button', 'l6cand' + (isOn ? ' on' : '')); b.type = 'button'; b.title = c.i < 0 ? '元のまま' : nm(c.i);
-        var im = document.createElement('img'); im.src = c.url; im.alt = ''; b.appendChild(im);
-        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + (c.i < 0 ? '元のまま（足さない）' : nm(c.i))));
-        b.addEventListener('click', function(){ l6Pick(c.i); }); gridC.appendChild(b);
-      });
-      bx.appendChild(gridC);
-      var cr = xel('div', 'rrow');
-      if (A6.cands.length > 6) cr.appendChild(xbtn(A6.showAll ? '候補を減らす' : 'ほかの候補も見る（' + (A6.cands.length - 6) + '）', 'ghost', function(){ A6.showAll = !A6.showAll; l6Render(); }));
-      cr.appendChild(xbtn('今の設定で選び直す', 'ghost', function(){ AUTO.picked = false; l6Judge(); }));
-      bx.appendChild(cr);
-    }
-    var h1 = xel('div', 'l5oldh', 'おすすめ（写真に近い見本・全' + TK_L6.length + '枚から）'); bx.appendChild(h1);
+    bx.appendChild(xel('div', 'l5oldh', '見本から選ぶ'));
+    var h1 = xel('div', 'hint', 'おすすめ（写真に近い見本・全' + TK_L6.length + '枚から）'); bx.appendChild(h1);
     var s1 = xel('div', 'seg l5seg'); A6.rank.forEach(function(i){ s1.appendChild(chip(i, nm(i), !A6.custom && A6.idx === i, true)); }); bx.appendChild(s1);
     var h2 = xel('div', 'l5oldh', '被写体から選ぶ'); bx.appendChild(h2);
     var s2 = xel('div', 'seg l5seg'); L6_GROUPS.forEach(function(g){ var b = xel('button', '', TK_L6_GN[g] + ' ' + (cnt[g] || 0)); b.type = 'button'; if (A6.group === g) b.classList.add('on'); b.addEventListener('click', function(){ A6.group = g; l6Render(); }); s2.appendChild(b); }); bx.appendChild(s2);
