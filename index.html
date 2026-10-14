@@ -216,6 +216,12 @@
   .row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); cursor:pointer; border:3px solid var(--surface)}
   .row input[type=range]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:var(--accent); cursor:pointer; border:3px solid var(--surface)}
   .row .val{font-family:"Inter",sans-serif; font-size:12px; width:34px; text-align:right}
+  .row .val.word{width:auto; min-width:34px; font-family:inherit; white-space:nowrap}
+  .row.hasends{flex-wrap:wrap; row-gap:0}
+  .row .sle, .sle{display:flex; justify-content:space-between; gap:8px; font-size:10px; color:var(--muted); opacity:.85; line-height:1.3}
+  .row .sle{flex-basis:100%; padding:0 46px 0 96px; margin-top:-2px}
+  .panel .row .sle{padding-left:108px}
+  .cgle{margin-top:2px}
   .seg{display:flex; gap:4px; padding:4px; margin:4px 0 8px; background:var(--surface2); border:1px solid var(--line-soft); border-radius:10px}
   .seg button{flex:1; font:inherit; font-size:12px; padding:8px 4px; border:0; border-radius:7px; background:transparent; color:var(--muted); cursor:pointer}
   .seg button.on{background:var(--accent); color:#0f1418; font-weight:600}
@@ -450,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v100</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v101</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3349,8 +3355,8 @@ function tkLook2(img, n, P, w, h){
   var regEls = {};
   var RSL = [ // キー, ラベル, 最小, 最大, 種別(cfg=範囲系 / adj=色系)
     ['grow','範囲',-100,100,'cfg','狭める ← → 広げる'], ['feather','境目',0,100,'cfg','くっきり ← → なめらか'],
-    ['ev','明るさ',-100,100,'adj'], ['sat','彩度',-100,100,'adj'], ['temp','色温度',-100,100,'adj','青 ← → 黄'],
-    ['tint','色かぶり',-100,100,'adj','緑 ← → 赤紫'], ['hue','色相',-30,30,'adj']
+    ['ev','明るさ',-100,100,'adj','暗く ← → 明るく'], ['sat','彩度',-100,100,'adj','淡く ← → 鮮やかに'], ['temp','色温度',-100,100,'adj','青 ← → 黄'],
+    ['tint','色かぶり',-100,100,'adj','緑 ← → 赤紫'], ['hue','色相',-30,30,'adj','青・紫の方へ回す ← → 黄・緑の方へ回す']
   ];
   function regBlank(){ return { ev: 0, sat: 0, temp: 0, tint: 0, hue: 0 }; }
   function nulls(){ return [null, null, null, null]; }
@@ -3378,6 +3384,22 @@ function tkLook2(img, n, P, w, h){
   var PICK = null, FEED = [], FEEDPOS = 0, XE = {};
   GROUPS.forEach(function(g){ if (!g.key || g.noToggle) return; P.on[g.key] = OFF_KEYS[g.key] ? 0 : 1; g.sliders.forEach(function(s){ P[s[0]] = s[4]; DEFAULTS[s[0]] = s[4]; if (MANUAL_FX[g.key]) MANUAL_FX_KEYS[s[0]] = 1; }); });
 
+  // スライダーの左右の意味（数値だけでは分からない所に言葉を添える）と、数値の代わりに言葉で出す値
+  var SL_WORDS = {
+    bExp: ['暗く', '明るく'], bCon: ['弱く', '強く'], bHi: ['抑える', '明るく'], bSh: ['暗く', '持ち上げる'], bWh: ['下げる', '上げる'], bBl: ['締める', '浮かせる'],
+    bTemp: ['青', '黄'], bTint: ['緑', '赤紫'], bVib: ['淡く', '鮮やかに'], bSat: ['淡く', '鮮やかに'],
+    fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
+    mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
+    gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
+    rWarm: ['白い光', '暖かい光'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+  };
+  [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
+  function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
+  function slDirName(a){ var s2 = ((+a + 180) % 360 + 360) % 360, k = Math.round(s2 / 45) % 8; return ['右', '右下', '下', '左下', '左', '左上', '上', '右上'][k] + 'から'; }   // 光が進む向き → 光が来る方向
+  var SL_FMT = { rAng: slDirName, rBars: function(v){ return +v === 0 ? 'なし' : v + '本'; } };
+  function slShow(k, v){ return SL_FMT[k] ? SL_FMT[k](v) : String(v); }
+  function slEnds(k){ var w = SL_WORDS[k]; if (!w) return null; var d = document.createElement('div'); d.className = 'sle'; d.innerHTML = '<span></span><span></span>'; d.children[0].textContent = '← ' + w[0]; d.children[1].textContent = w[1] + ' →'; return d; }
+
   // グループUI生成
   var host = $('groups');
   GROUPS.forEach(function(g){
@@ -3404,8 +3426,9 @@ function tkLook2(img, n, P, w, h){
       row.innerHTML = '<label></label><input type="range"><span class="val num"></span>';
       row.querySelector('label').textContent = s[1];
       var r = row.querySelector('input'); r.min = s[2]; r.max = s[3]; r.value = s[4]; r.id = 's-' + s[0];
-      var v = row.querySelector('.val'); v.id = 'v-' + s[0]; v.textContent = s[4];
-      r.addEventListener('input', function(){ P[s[0]] = +r.value; v.textContent = r.value; clearPresetMark(); schedule(); });
+      var v = row.querySelector('.val'); v.id = 'v-' + s[0]; v.textContent = slShow(s[0], s[4]); if (SL_FMT[s[0]]) v.classList.add('word');
+      var ends = slEnds(s[0]); if (ends){ row.classList.add('hasends'); row.appendChild(ends); }
+      r.addEventListener('input', function(){ P[s[0]] = +r.value; v.textContent = slShow(s[0], r.value); clearPresetMark(); schedule(); });
       row.querySelector('label').addEventListener('dblclick', function(){ setVal(s[0], s[4]); clearPresetMark(); schedule(); });
       if (g.key === 'mix'){ var hue = [0, 30, 60, 120, 180, 230, 275, 320][+s[0].slice(2)]; row.querySelector('label').style.setProperty('--sw', 'hsl(' + hue + ',70%,58%)'); row.classList.add('mixrow'); }
       body.appendChild(row);
@@ -3440,7 +3463,7 @@ function tkLook2(img, n, P, w, h){
     tg.classList.toggle('on', !!P.on[k]);
     box.classList.toggle('off', !P.on[k]);
   }
-  function setVal(k, v){ P[k] = v; var r = $('s-' + k); if (r){ r.value = v; $('v-' + k).textContent = v; } }
+  function setVal(k, v){ P[k] = v; var r = $('s-' + k); if (r){ r.value = v; $('v-' + k).textContent = slShow(k, v); } }
 
   // プリセット
   var pbox = $('presets');
@@ -4479,7 +4502,8 @@ function tkLook2(img, n, P, w, h){
     [['H', '色相', 0, 359], ['S', '強さ', 0, 100], ['L', '明るさ', -100, 100]].forEach(function(d){
       var row = xel('div', 'cgrow'); var top = xel('div', 'cgtop'); var lb = xel('span', '', d[1]); var vv = xel('span', 'num', '0'); top.appendChild(lb); top.appendChild(vv);
       var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3]; r.value = 0; if (d[0] === 'H') r.className = 'huetrack';
-      r.addEventListener('input', function(){ var k = 'cg' + XE.cgSel + d[0]; P[k] = +r.value; vv.textContent = r.value; afterGrade(false); });
+      r.addEventListener('input', function(){ var k = 'cg' + XE.cgSel + d[0]; P[k] = +r.value; vv.textContent = d[0] === 'H' ? slHueName(r.value) : r.value; afterGrade(false); });
+      if (d[0] === 'L'){ var eL = xel('div', 'sle cgle'); eL.appendChild(xel('span', '', '← 暗く')); eL.appendChild(xel('span', '', '明るく →')); row.appendChild(top); row.appendChild(r); row.appendChild(eL); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row }; return; }
       lb.addEventListener('dblclick', function(){ var k = 'cg' + XE.cgSel + d[0]; P[k] = 0; afterGrade(true); });
       row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
     });
@@ -4488,6 +4512,7 @@ function tkLook2(img, n, P, w, h){
       var row = xel('div', 'cgrow cgx-row'); var top = xel('div', 'cgtop'); var lb = xel('span', '', d[1]); var vv = xel('span', 'num', '0'); top.appendChild(lb); top.appendChild(vv);
       var r = xel('input'); r.type = 'range'; r.min = d[2]; r.max = d[3];
       r.addEventListener('input', function(){ P['cg' + d[0]] = +r.value; vv.textContent = r.value; afterGrade(false); });
+      if (d[0] === 'Bal' || d[0] === 'Blend'){ var eB = xel('div', 'sle cgle'); eB.appendChild(xel('span', '', d[0] === 'Bal' ? '← シャドウの色を広く' : '← 境目くっきり')); eB.appendChild(xel('span', '', d[0] === 'Bal' ? 'ハイライトの色を広く →' : 'なめらかに混ぜる →')); row.appendChild(top); row.appendChild(r); row.appendChild(eB); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row }; return; }
       lb.addEventListener('dblclick', function(){ P['cg' + d[0]] = d[0] === 'Blend' ? 50 : 0; afterGrade(true); });
       row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
     });
@@ -4545,7 +4570,7 @@ function tkLook2(img, n, P, w, h){
     XE.cgName.textContent = nm;
     var isX = sel === 'x';
     XE.cgWheel.style.display = isX ? 'none' : '';
-    ['H', 'S', 'L'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? 'none' : ''; if (!isX){ var v = P['cg' + sel + k] || 0; o.r.value = v; o.v.textContent = v; } });
+    ['H', 'S', 'L'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? 'none' : ''; if (!isX){ var v = P['cg' + sel + k] || 0; o.r.value = v; o.v.textContent = k === 'H' ? slHueName(v) : v; } });
     ['Blend', 'Bal', 'Skin'].forEach(function(k){ var o = XE.cgRows[k]; o.row.style.display = isX ? '' : 'none'; var v = P['cg' + k]; if (v == null) v = k === 'Blend' ? 50 : 0; o.r.value = v; o.v.textContent = v; });
     if (!isX){
       drawWheel();
