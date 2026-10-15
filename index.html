@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v103</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v104</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2749,14 +2749,15 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
     var dkk = dk + (1 - dk) * tkSS((L0 - 0.12) / 0.2);
     // 肌の色の近く：グレーディングを弱め（青い肌にしない）、肌の色相・鮮やかさを見本へ
     var wsk = SKt ? Math.exp(-Math.pow(tkHd(H, SKt.h) / 32, 2)) * tkSS((C - 0.01) / 0.02) * tkSS((L0 - 0.3) / 0.12) * (1 - tkSS((L0 - 0.95) / 0.04)) : 0;
-    var kc = 1 + (ks - 1) * (1 - 0.6 * wsk), A1 = A * kc, B1 = B * kc;
+    var wwm = M._np ? Math.exp(-Math.pow(tkHd(H, 55) / 38, 2)) * tkSS((C - 0.01) / 0.015) * tkSS((L0 - 0.3) / 0.2) : 0;   /* 人物以外：暖かい色（毛・木・パン・花芯など主役の色）は青く・灰色にしない */
+    var kc = 1 + (ks - 1) * (1 - 0.6 * wsk) * (ks < 1 ? 1 - 0.7 * wwm : 1), A1 = A * kc, B1 = B * kc;
     var wsd = wsk, wlp = 0; if (SKt && M._aim){ var dsk = tkHueDist(H, SKt.h); if (dsk < -9){ wlp = tkSS((-dsk - 9) / 9) * Math.exp(-Math.pow(tkHd(H, 15) / 40, 2)) * tkSS((C - SKt.c * 1.05) / (SKt.c * 0.3 + 0.003)) * tkSS((L0 - 0.2) / 0.12); wsd *= 1 - tkSS((-dsk - 9) / 9) * tkSS((C - SKt.c * 0.95) / (SKt.c * 0.3 + 0.003)); } }   /* 唇・頬の赤い所（肌より赤く濃い色）は肌の色へ寄せない＝元の赤さのまま */
     if (wsd > 0.001 && (SKd[0] || SKd[1])){ var wsk0 = wsk; wsk = wsd; var hr = (H + SKd[0] * wsk) * Math.PI / 180, cr = Math.sqrt(A1 * A1 + B1 * B1) * (1 + ((SKd[1] || 1) - 1) * wsk * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn)); A1 = Math.cos(hr) * cr; B1 = Math.sin(hr) * cr; wsk = wsk0; }
     if (M._aim && wsd > 0.02){ var ce = Math.sqrt(A1 * A1 + B1 * B1), he = (Math.atan2(B1, A1) * 180 / Math.PI + 360) % 360, cm0 = SKt.c * (SKd[1] || 1), hm0 = SKt.h + SKd[0], ke = 0.4 * wsd * tkSS((L0 - 0.3) / 0.15);
       if (ce > cm0) ce = cm0 + (ce - cm0) * (1 - ke); var dhe = tkHueDist(he, hm0); if (dhe < 0) he -= dhe * ke * 0.7;
       A1 = Math.cos(he * Math.PI / 180) * ce; B1 = Math.sin(he * Math.PI / 180) * ce; }   /* 肌の赤いムラ（肌の色より赤く濃い所）をならす＝澄んだ肌。唇は外す */
     if (wlp > 0.001){ var rl = Math.min(1, Math.sqrt(1 + ((SKd[1] || 1) - 1) * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn))), Al = A * rl, Bl = B * rl; A1 += (Al - A1) * wlp * 0.85; B1 += (Bl - B1) * wlp * 0.85; }   /* 唇・赤い所：元の色相のまま、肌を落ち着かせた分の半分だけ落ち着かせる（口紅のようにも、肌から浮くようにもならない） */
-    var gw = dkk * (1 - 0.7 * wsk) * (1 - wlp * 0.6);
+    var gw = dkk * (1 - 0.7 * wsk) * (1 - wlp * 0.6) * (1 - 0.7 * wwm);
     tkFromOk(L1, A1 + gA * gw, B1 + gB * gw, o);
     LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
@@ -2924,7 +2925,7 @@ function tkLook6(img, n, P, w, h){
 // 割れ止め（人物以外）：仕上げで変わった分（明るさ・色）を、元の写真の明るさを手がかりに「同じ面の中ではそろえる」。
 //   大きな明暗の境目（猫と床、木と空）では変わり方の違いを残し、白い毛・壁・空など平らな面の中の小さなムラ（クリーム色の毛の斑・壁の目地）が
 //   色や明るさの差として引き伸ばされない＝割れない。全体の色・明るさの寄せはそのまま
-var STB = 1, STR = 0.008, STE = 0.002;
+var STB = 1, STR = 0.008, STE = 0.002, STE2 = 2e-5;
 function tkGuidedD(I, p, w, h, r, eps){
   var n = w * h, Ip = new Float32Array(n), II = new Float32Array(n), i;
   for (i = 0; i < n; i++){ Ip[i] = I[i] * p[i]; II[i] = I[i] * I[i]; }
@@ -2936,9 +2937,9 @@ function tkGuidedD(I, p, w, h, r, eps){
   return q;
 }
 function tkL6Stable(img, I0, n, w, h, k){
-  var L0 = new Float32Array(n), D = [new Float32Array(n), new Float32Array(n), new Float32Array(n)], O = new Float32Array(n * 3), a = [0, 0, 0], b = [0, 0, 0], i;
-  for (i = 0; i < n; i++){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], a); tkToOk(img[j], img[j + 1], img[j + 2], b); L0[i] = a[0]; D[0][i] = b[0] - a[0]; D[1][i] = b[1] - a[1]; D[2][i] = b[2] - a[2]; O[j] = a[0]; O[j + 1] = a[1]; O[j + 2] = a[2]; }
-  var r = Math.max(2, Math.max(w, h) * STR), Q = D.map(function(d){ return tkGuidedD(L0, d, w, h, r, STE); });
+  var L0 = new Float32Array(n), A0 = new Float32Array(n), B0 = new Float32Array(n), D = [new Float32Array(n), new Float32Array(n), new Float32Array(n)], O = new Float32Array(n * 3), a = [0, 0, 0], b = [0, 0, 0], i;
+  for (i = 0; i < n; i++){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], a); tkToOk(img[j], img[j + 1], img[j + 2], b); L0[i] = a[0]; A0[i] = a[1]; B0[i] = a[2]; D[0][i] = b[0] - a[0]; D[1][i] = b[1] - a[1]; D[2][i] = b[2] - a[2]; O[j] = a[0]; O[j + 1] = a[1]; O[j + 2] = a[2]; }
+  var r = Math.max(2, Math.max(w, h) * STR), Q = [tkGuidedD(L0, D[0], w, h, r, STE), tkGuidedD(A0, D[1], w, h, r, STE2), tkGuidedD(B0, D[2], w, h, r, STE2)];   /* 色は元の色（赤み・黄み）を手がかりに：色を何割落とす、のような変わり方はそのまま残し、明るさで変わる色かぶりのムラだけそろえる */
   for (i = 0; i < n; i++){ var j2 = i * 3, br = k * tkSS((L0[i] - 0.25) / 0.25);   /* 暗い所はそのまま（黒の締まり・影の青はいじらない） */
     var l = O[j2] + D[0][i] + (Q[0][i] - D[0][i]) * br, aa = O[j2 + 1] + D[1][i] + (Q[1][i] - D[1][i]) * br, bb = O[j2 + 2] + D[2][i] + (Q[2][i] - D[2][i]) * br;
     tkFromOk(l, aa, bb, b); img[j2] = tkClamp01(b[0]); img[j2 + 1] = tkClamp01(b[1]); img[j2 + 2] = tkClamp01(b[2]); }
