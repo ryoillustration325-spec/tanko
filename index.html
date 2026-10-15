@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v104</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v105</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4995,8 +4995,8 @@ function tkLook2(img, n, P, w, h){
     body.appendChild(row);
     XE.geoInfo = xel('div', 'geoinfo'); body.appendChild(XE.geoInfo);
   }
-  function cropDone(){ showTab('adj', 'basic'); toast('トリミングを確定しました'); }
-  function cropCancel(){ if (XE.geoSnap){ P.geo = JSON.parse(XE.geoSnap); } showTab('adj', 'basic'); syncGeo(); present(); schedule(); toast('トリミングを取り消しました'); }
+  function cropDone(){ showTab('adj', 'wb'); toast('トリミングを確定しました'); }
+  function cropCancel(){ if (XE.geoSnap){ P.geo = JSON.parse(XE.geoSnap); } showTab('adj', 'wb'); syncGeo(); present(); schedule(); toast('トリミングを取り消しました'); }
   function afterGeo(){ clearPresetMark(); syncGeo(); present(); schedule(); }
   function syncGeo(){
     if (!XE.aspBtns) return;
@@ -5773,14 +5773,14 @@ function tkLook2(img, n, P, w, h){
   };
   var TABS = [
     { key: 'look', label: '仕上げ' },
-    { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['basic','ライト',['basic']],['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['fx','効果',['fx']],['det','ディテール',['det']]] },
-    { key: 'light', label: '光', chips: [['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
+    { key: 'adj', label: '調整', chips: [['geo','トリミング',['geo']],['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['crv','カーブ',['crv']],['fx','効果',['fx']],['det','ディテール',['det']]] },
+    { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['lens','レンズ',['lens']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']],['base','基本',['bright','tone','split','grain']]] },
     { key: 'part', label: '部分', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: '便利', chips: [['hist','履歴',['hist']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
-  var CUR = { tab: 'look', chip: { adj: 'basic' } };   // 調整タブは「ライト」から（トリミングは選んだ時だけ）
+  var CUR = { tab: 'look', chip: { adj: 'wb', light: 'basic' } };   // 調整タブは「カラー」から、光タブは「ライト」から（トリミングは選んだ時だけ）
   TABS.forEach(function(t){
     var b = document.createElement('button'); b.type = 'button'; b.className = 'tab'; b.dataset.t = t.key; b.setAttribute('aria-label', t.label);
     b.innerHTML = ICONS[t.key] + '<span>' + t.label + '</span><i></i>';
