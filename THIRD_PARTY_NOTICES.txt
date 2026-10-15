@@ -20,15 +20,20 @@ This app includes the following third-party software and models.
    License: Apache License 2.0 (全文は末尾)
    変更点 / Modifications: エンコーダとデコーダをONNX形式に書き出し、8bit量子化。Base64のJSファイルに分割。
 
-4. ONNX Runtime Web v1.20.1  — AIの実行
+4. NanoDet-Plus (nanodet-plus-m 320)  — 写っている物の確認（人・動物・食べ物など）
+   Copyright 2020-2021 RangiLyu.  https://github.com/RangiLyu/nanodet
+   License: Apache License 2.0 (全文は末尾)
+   変更点 / Modifications: 公開されているONNX形式のモデルを、ブラウザで読み込むためにBase64のJSファイルに変換。
+
+5. ONNX Runtime Web v1.20.1  — AIの実行
    Copyright (c) Microsoft Corporation.  https://github.com/microsoft/onnxruntime
    License: MIT License
 
-5. JSZip v3.10.1  — まとめて書き出し
+6. JSZip v3.10.1  — まとめて書き出し
    Copyright (c) 2009-2016 Stuart Knightley.  https://github.com/Stuk/jszip
    License: MIT License (MIT / GPLv3 のデュアルライセンスのうちMITを選択)
 
-6. フォント: Zen Kaku Gothic New / Inter  (Google Fonts から読み込み)
+7. フォント: Zen Kaku Gothic New / Inter  (Google Fonts から読み込み)
    License: SIL Open Font License 1.1
 
 
@@ -79,7 +84,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ---------------------------------------------------------------------
-Apache License 2.0（U²-Net / MobileSAM / Segment Anything）
+Apache License 2.0（U²-Net / MobileSAM / Segment Anything / NanoDet）
 ---------------------------------------------------------------------
                                  Apache License
                            Version 2.0, January 2004

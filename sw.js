@@ -1,8 +1,10 @@
 // 淡光：オフラインで動かすための保存係。アプリ本体は毎回新しい版を確かめ、AIなどの大きなファイルは一度取れば端末から読む
-const VER = 'tanko-v101';
+const VER = 'tanko-v102';
+const AI = 'tanko-ai-1';   // AI・エンジン（大きなファイル）は版が変わっても消さない＝一度準備すれば再ダウンロード不要
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const isBig = p => /\/(m_[a-z0-9]+_\d+\.js|ort[^/]*\.(js|mjs|wasm))$/.test(p);
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER && k !== AI).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url);
@@ -14,7 +16,7 @@ self.addEventListener('fetch', e => {
   }
   // それ以外（AI・エンジン・フォントなど）は保存してある物を優先
   e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(r => {
-    if (r.ok && (url.origin === location.origin || url.hostname.endsWith('gstatic.com') || url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('cdnjs.cloudflare.com'))){ const c = r.clone(); caches.open(VER).then(x => x.put(req, c)); }
+    if (r.ok && (url.origin === location.origin || url.hostname.endsWith('gstatic.com') || url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('cdnjs.cloudflare.com'))){ const c = r.clone(); caches.open(url.origin === location.origin && isBig(url.pathname) ? AI : VER).then(x => x.put(req, c)); }
     return r;
   })));
 });

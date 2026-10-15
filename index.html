@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v101</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v102</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2671,6 +2671,30 @@ function tkL6Q(M){
   return q.map(function(v){ return v / Math.max(w, 1e-6); });
 }
 var P_L6KEEP = null;   // 検証用（null＝通常）
+// 仕上がりの場面（周りの色の構成・明るい所と暗い所の色かぶり）と、写っている人の元の肌に近い見本の人物を数枚選び、その肌の色を合わせて使う
+function tkL6SkinAim(img, n, lut, Wr, T, li){
+  if (!T.skin) return null;
+  var step = Math.max(1, Math.floor(n / 30000)), m = Math.ceil(n / step), R = new Float32Array(m * 3), W2 = new Float32Array(m * 4);
+  for (var i = 0, j = 0; i < n; i += step, j++){ R[j * 3] = img[i * 3]; R[j * 3 + 1] = img[i * 3 + 1]; R[j * 3 + 2] = img[i * 3 + 2]; for (var u = 0; u < 4; u++) W2[j * 4 + u] = Wr[i * 4 + u]; }
+  tkApplyLut3(R, m, lut, 33);
+  var L = new Float32Array(m), A = new Float32Array(m), B = new Float32Array(m), k = [0, 0, 0];
+  for (var q = 0; q < m; q++){ tkToOk(R[q * 3], R[q * 3 + 1], R[q * 3 + 2], k); L[q] = k[0]; A[q] = k[1]; B[q] = k[2]; }
+  var S = tkL6Stats(L, A, B, W2, m), d = tkL6Desc(R, m, false);
+  var cast = function(M, lo, hi){ var a = 0, b = 0, c = 0; ['bg', 'sub', 'acc'].forEach(function(r){ var x = M[r]; if (!x) return; x.b.forEach(function(bb){ if (bb[0] >= lo && bb[0] <= hi){ a += bb[1]; b += bb[2]; c++; } }); }); return c ? [a / c, b / c] : [0, 0]; };
+  var ph = cast(S, 0.55, 1), pl = cast(S, 0, 0.45), mt = T.skin.b[T.skin.b.length >> 1], tH = (Math.atan2(mt[2], mt[1]) * 180 / Math.PI + 360) % 360, tC = Math.sqrt(mt[1] * mt[1] + mt[2] * mt[2]);
+  var cand = [];
+  TK_L6.forEach(function(e, i){ if (e.g !== 'person' || !e.m.skin || !e.c) return; var ms = e.m.skin.b[e.m.skin.b.length >> 1], eH = (Math.atan2(ms[2], ms[1]) * 180 / Math.PI + 360) % 360, eC = Math.sqrt(ms[1] * ms[1] + ms[2] * ms[2]);
+    var eh = cast(e.m, 0.55, 1), el = cast(e.m, 0, 0.45);
+    var dS = tkL6DescDist(d, e.c), dK = Math.abs(ph[0] - eh[0]) + Math.abs(ph[1] - eh[1]) + Math.abs(pl[0] - el[0]) + Math.abs(pl[1] - el[1]), dP = Math.abs(tkHueDist(tH, eH)) / 15 + Math.abs(tC - eC) / 0.015;
+    cand.push({ i: i, d: dS + 10.0 * dK + 0.6 * dP, H: eH, C: eC, L: e.m.skin.q[3] }); });
+  if (!cand.length) return null;
+  cand.sort(function(a, b){ return a.d - b.d; }); var top = cand.slice(0, 6), d0 = top[0].d * 0.15 + 0.02;
+  var pk = cand.filter(function(c){ return c.i === li; })[0]; if (pk && top.indexOf(pk) < 0) top.push(pk);
+  var sx = 0, sy = 0, sc = 0, sl = 0, sw = 0, w0 = 1 / Math.pow(top[0].d + d0, 2);
+  top.forEach(function(c){ var w = c === pk ? w0 : 1 / Math.pow(c.d + d0, 2); c.w = w; sx += Math.cos(c.H * Math.PI / 180) * w; sy += Math.sin(c.H * Math.PI / 180) * w; sc += c.C * w; sl += c.L * w; sw += w; });
+  var aim = { H: (Math.atan2(sy, sx) * 180 / Math.PI + 360) % 360, C: sc / sw, L: sl / sw, tH: tH, tC: tC, nowL: S.skin ? S.skin.q[3] : null, pick: top.map(function(c){ return c.i; }) };
+  return aim;
+}
 function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   kS = kS || 1;
   // 1. トーンカーブ：写真の明るさの配分（7点）→ 見本の配分。全体の明るさ（中間）は写真を半分残す。傾きに上限・下限（階調が詰まらない・跳ねない）
@@ -2707,8 +2731,9 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   var ct0 = tkL6Chroma(T), cs0 = tkL6Chroma(M), ks = ct0 > 0.004 ? Math.max(1 - 0.25 * Math.min(1.6, kS), Math.min(1 + 0.3 * Math.min(1.5, kS), cs0 / ct0)) : 1;   // v84と同じ（強く抜くと葉が割れ、青も消えるため）   /* 見本が淡い時は大きく抑える（見本の実測：全体の鮮やかさは手持ちの写真の約1/3）。見本の実測値で合わせる時は全量、以前の測り方の時だけ量を掛ける */ ks = 1 + (ks - 1) * sC;
   // 4. 肌（HSLのオレンジに当たる）：写真の肌の色の近くだけ、見本の肌の色へ。見本に肌が無い時は、肌の色をグレーディングから守るだけ
   var SKt = null, SKd = [0, 0];
-  if (T.skin){ var mt = T.skin.b[T.skin.b.length >> 1]; SKt = { h: (Math.atan2(mt[2], mt[1]) * 180 / Math.PI + 360) % 360 };
-    if (M.skin){ var ms = M.skin.b[M.skin.b.length >> 1], ha = Math.atan2(ms[2], ms[1]), ht = Math.atan2(mt[2], mt[1]), dh = ((ha - ht) * 180 / Math.PI + 540) % 360 - 180; SKd = [Math.max(-20, Math.min(20, dh)) * skn * 1.2, Math.max(0.8, Math.min(1.2, Math.sqrt(ms[1] * ms[1] + ms[2] * ms[2]) / Math.max(0.01, Math.sqrt(mt[1] * mt[1] + mt[2] * mt[2])))) ]; } }
+  if (T.skin){ var mt = T.skin.b[T.skin.b.length >> 1]; SKt = { h: (Math.atan2(mt[2], mt[1]) * 180 / Math.PI + 360) % 360, c: Math.sqrt(mt[1] * mt[1] + mt[2] * mt[2]) };
+    if (M._aim){ var am = M._aim, dh0 = tkHueDist(am.H, SKt.h); SKd = [Math.max(-20, Math.min(20, dh0)) * skn * 1.2, Math.max(0.6, Math.min(1.2, am.C / Math.max(0.01, Math.sqrt(mt[1] * mt[1] + mt[2] * mt[2]))))]; SKd.cs = 2; }
+    else if (M.skin){ var ms = M.skin.b[M.skin.b.length >> 1], ha = Math.atan2(ms[2], ms[1]), ht = Math.atan2(mt[2], mt[1]), dh = ((ha - ht) * 180 / Math.PI + 540) % 360 - 180; SKd = [Math.max(-20, Math.min(20, dh)) * skn * 1.2, Math.max(0.8, Math.min(1.2, Math.sqrt(ms[1] * ms[1] + ms[2] * ms[2]) / Math.max(0.01, Math.sqrt(mt[1] * mt[1] + mt[2] * mt[2])))) ]; } }
   var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0;
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
@@ -2719,8 +2744,13 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
     // 肌の色の近く：グレーディングを弱め（青い肌にしない）、肌の色相・鮮やかさを見本へ
     var wsk = SKt ? Math.exp(-Math.pow(tkHd(H, SKt.h) / 32, 2)) * tkSS((C - 0.01) / 0.02) * tkSS((L0 - 0.3) / 0.12) * (1 - tkSS((L0 - 0.95) / 0.04)) : 0;
     var kc = 1 + (ks - 1) * (1 - 0.6 * wsk), A1 = A * kc, B1 = B * kc;
-    if (wsk > 0.001 && (SKd[0] || SKd[1])){ var hr = (H + SKd[0] * wsk) * Math.PI / 180, cr = Math.sqrt(A1 * A1 + B1 * B1) * (1 + ((SKd[1] || 1) - 1) * wsk * skn); A1 = Math.cos(hr) * cr; B1 = Math.sin(hr) * cr; }
-    var gw = dkk * (1 - 0.7 * wsk);
+    var wsd = wsk, wlp = 0; if (SKt && M._aim){ var dsk = tkHueDist(H, SKt.h); if (dsk < -9){ wlp = tkSS((-dsk - 9) / 9) * Math.exp(-Math.pow(tkHd(H, 15) / 40, 2)) * tkSS((C - SKt.c * 1.05) / (SKt.c * 0.3 + 0.003)) * tkSS((L0 - 0.2) / 0.12); wsd *= 1 - tkSS((-dsk - 9) / 9) * tkSS((C - SKt.c * 0.95) / (SKt.c * 0.3 + 0.003)); } }   /* 唇・頬の赤い所（肌より赤く濃い色）は肌の色へ寄せない＝元の赤さのまま */
+    if (wsd > 0.001 && (SKd[0] || SKd[1])){ var wsk0 = wsk; wsk = wsd; var hr = (H + SKd[0] * wsk) * Math.PI / 180, cr = Math.sqrt(A1 * A1 + B1 * B1) * (1 + ((SKd[1] || 1) - 1) * wsk * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn)); A1 = Math.cos(hr) * cr; B1 = Math.sin(hr) * cr; wsk = wsk0; }
+    if (M._aim && wsd > 0.02){ var ce = Math.sqrt(A1 * A1 + B1 * B1), he = (Math.atan2(B1, A1) * 180 / Math.PI + 360) % 360, cm0 = SKt.c * (SKd[1] || 1), hm0 = SKt.h + SKd[0], ke = 0.4 * wsd * tkSS((L0 - 0.3) / 0.15);
+      if (ce > cm0) ce = cm0 + (ce - cm0) * (1 - ke); var dhe = tkHueDist(he, hm0); if (dhe < 0) he -= dhe * ke * 0.7;
+      A1 = Math.cos(he * Math.PI / 180) * ce; B1 = Math.sin(he * Math.PI / 180) * ce; }   /* 肌の赤いムラ（肌の色より赤く濃い所）をならす＝澄んだ肌。唇は外す */
+    if (wlp > 0.001){ var rl = Math.min(1, Math.sqrt(1 + ((SKd[1] || 1) - 1) * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn))), Al = A * rl, Bl = B * rl; A1 += (Al - A1) * wlp * 0.85; B1 += (Bl - B1) * wlp * 0.85; }   /* 唇・赤い所：元の色相のまま、肌を落ち着かせた分の半分だけ落ち着かせる（口紅のようにも、肌から浮くようにもならない） */
+    var gw = dkk * (1 - 0.7 * wsk) * (1 - wlp * 0.6);
     tkFromOk(L1, A1 + gA * gw, B1 + gB * gw, o);
     LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
@@ -2985,7 +3015,9 @@ function tkLook6Core(img, n, P, w, h, mode){
     // 全体の鮮やかさ：画素の鮮やかさの中央値どうしで比べる（見本の実測値 mc）
     var mcS = P.l6Custom ? P.l6CustomMC : (TK_L6[li] && TK_L6[li].mc), mcT = 0;
     if (mcS){ var hc = new Float64Array(200), cc = 0; for (var q1 = 0; q1 < n; q1 += 2){ hc[Math.min(199, (Math.sqrt(Ab[q1] * Ab[q1] + Bb[q1] * Bb[q1]) * 1000) | 0)]++; cc++; } var s1 = 0; for (var q2 = 0; q2 < 200; q2++){ s1 += hc[q2]; if (s1 >= cc / 2){ mcT = q2 / 1000; break; } } }
-    tkApplyLut3(img, n, tkL6SmoothLut(M, T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, (mcS && mcT > 0.004) ? mcS / mcT : null), 33);
+    var satR6 = (mcS && mcT > 0.004) ? mcS / mcT : null, lut6 = tkL6SmoothLut(M, T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6);
+    if (person && !P.l6Custom && T.skin){ var aim6 = tkL6SkinAim(img, n, lut6, Wr, T, li); if (aim6) lut6 = tkL6SmoothLut(Object.assign({}, M, { _aim: aim6 }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6); }   /* 一度かけた仕上がりの場面から、合う肌を選んで作り直す */
+    tkApplyLut3(img, n, lut6, 33);
     var mm0 = (P.l5Master == null ? 75 : P.l5Master) / 100; if (mm0 < 1) for (var q0 = 0; q0 < img.length; q0++) img[q0] = I0[q0] + (img[q0] - I0[q0]) * mm0;
     return;
   }
@@ -3350,7 +3382,7 @@ function tkLook2(img, n, P, w, h){
   var RN = 4;
   var ORT_BASE = window.TK_ORT_BASE || (function(){ try{ return new URL('./', document.baseURI).href; }catch(e){ return ''; } })();   // エンジンは同梱（外部からの取得はブロックされるため）
   var MODEL_BASE = window.TK_MODEL_BASE || '';
-  var MODELS = { u2netp: ['m_u2netp_0.js'], midas: ['m_midas_0.js', 'm_midas_1.js'], samenc: ['m_samenc_0.js', 'm_samenc_1.js'], samdec: ['m_samdec_0.js'] };
+  var MODELS = { u2netp: ['m_u2netp_0.js'], midas: ['m_midas_0.js', 'm_midas_1.js'], samenc: ['m_samenc_0.js', 'm_samenc_1.js'], samdec: ['m_samdec_0.js'], det: ['m_det_0.js'] };
   var MR = 768;               // マスクの解像度（長辺）
   var regEls = {};
   var RSL = [ // キー, ラベル, 最小, 最大, 種別(cfg=範囲系 / adj=色系)
@@ -4155,7 +4187,7 @@ function tkLook2(img, n, P, w, h){
     updateRegUI();
   }
   function regNewPhoto(){
-    REG.ready = false; REG.data = null; REG.auto = null; REG.emb = null;
+    REG.ready = false; REG.data = null; REG.auto = null; REG.emb = null; REG.det = null;
     REG.adds = nulls(); REG.erases = nulls();
     REG.cfg.forEach(function(c){ c.grow = 0; c.feather = 20; });
     REG.tool = 'off'; document.body.classList.remove('brushing'); REG.pickDodge = false;
@@ -4186,6 +4218,18 @@ function tkLook2(img, n, P, w, h){
     return loading[name];
   }
   function canvasOf(w, h, draw){ var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d', { colorSpace: CS }); draw(x); return x.getImageData(0, 0, w, h).data; }
+  // 写っている物（NanoDet：人・動物・食べ物など80種）：写真全体で、それぞれが写っている確からしさの最大値だけを使う（猫・料理を人物と間違えないため）
+  function runDet(){
+    var d = canvasOf(320, 320, function(x){ x.drawImage(img, 0, 0, 320, 320); }), n = 320 * 320, inp = new Float32Array(3 * n), mean = [103.53, 116.28, 123.675], sd = [57.375, 57.12, 58.395];
+    for (var i = 0; i < n; i++){ inp[i] = (d[i * 4 + 2] - mean[0]) / sd[0]; inp[n + i] = (d[i * 4 + 1] - mean[1]) / sd[1]; inp[2 * n + i] = (d[i * 4] - mean[2]) / sd[2]; }   // 青・緑・赤の順
+    var s = S.det, feeds = {}; feeds[s.inputNames[0]] = new ort.Tensor('float32', inp, [1, 3, 320, 320]);
+    return s.run(feeds).then(function(r){
+      var o = r[s.outputNames[0]].data, K = r[s.outputNames[0]].dims[2], A = o.length / K, mx = new Float32Array(80);
+      for (var a = 0; a < A; a++) for (var k = 0; k < 80; k++){ var v = o[a * K + k]; if (v > mx[k]) mx[k] = v; }
+      var an = 0, fd = 0; for (var k2 = 14; k2 <= 23; k2++) an = Math.max(an, mx[k2]); for (var k3 = 46; k3 <= 55; k3++) fd = Math.max(fd, mx[k3]);   // 14〜23：鳥・猫・犬など動物、46〜55：果物・料理
+      return { person: mx[0], animal: an, food: fd };
+    });
+  }
   // 主役の見当（u2netp）：色かぶりを補正してから
   function runU2(flip){
     var d = canvasOf(320, 320, function(x){ if (flip){ x.translate(320, 0); x.scale(-1, 1); } x.drawImage(img, 0, 0, 320, 320); });
@@ -4266,14 +4310,14 @@ function tkLook2(img, n, P, w, h){
   function runSegmentation(opt){
     opt = opt || {};
     if (!img || REG.busy) return Promise.resolve();
-    REG.busy = true; REG.hasSam = false; updateRegUI();
+    REG.busy = true; REG.hasSam = false; REG.det = null; updateRegUI();
     var sz = sizeFor(MR); REG.mw = sz[0]; REG.mh = sz[1];
     var px = readPixels(REG.mw, REG.mh), n = REG.mw * REG.mh, rgb = new Float32Array(n * 3), i;
     for (i = 0; i < n; i++){ rgb[i * 3] = px[i * 4] / 255; rgb[i * 3 + 1] = px[i * 4 + 1] / 255; rgb[i * 3 + 2] = px[i * 4 + 2] / 255; }
     REG.F = tkLabFeat(rgb, n);
     var t0 = Date.now(), first = !S.samenc, u2s = null, depth = null, sam = null, notes = [], errs = [];
     function why(e){ var m = (e && (e.message || e)) + ''; if (errs.indexOf(m) < 0) errs.push(m.slice(0, 140)); }
-    function step(t){ regStatus(t + (first ? '（初回はAIの読み込みに時間がかかります・約55MB）' : '')); }
+    function step(t){ regStatus(t + (first ? '（初回はAIの読み込みに時間がかかります・約61MB）' : '')); }
     var G = new Float32Array(n); for (i = 0; i < n; i++) G[i] = REG.F.L[i] / 100;
     step('① 主役を探しています…');
     return ensureModel('u2netp').then(function(){
@@ -4290,6 +4334,8 @@ function tkLook2(img, n, P, w, h){
       var pr = u2s ? subjectPrompts(u2s) : null;
       return pr ? samMask(pr).then(function(m){ sam = m; }) : null;
     }, function(e){ notes.push('物の判定'); why(e); })
+    .then(function(){ step('④ 写っている物を確かめています…'); return ensureModel('det').then(runDet).then(function(d){ REG.det = d; }); })
+    .then(null, function(e){ notes.push('写っている物'); why(e); })
     .then(function(){
       var subj = tkSubjectMerge(sam, u2s, REG.mw, REG.mh);
       REG.auto = tkRoleMasks(REG.F, subj, depth, REG.mw, REG.mh).slice(0, 4);
@@ -5176,7 +5222,7 @@ function tkLook2(img, n, P, w, h){
     b.dataset.src = src; b.textContent = src === 'prev' ? '直前の写真の調整を当てる' : 'コピーした設定を貼り付け';
     b.classList.add('show'); clearTimeout(b._t); b._t = setTimeout(function(){ b.classList.remove('show'); }, 7000);
   }
-  // ---- AIの準備（C6）：AIのファイル（約65MB）を、使う前に端末へ入れておく ----
+  // ---- AIの準備（C6）：AIのファイル（約72MB）を、使う前に端末へ入れておく ----
   function aiFiles(){ var f = ['ort.wasm.min.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']; Object.keys(MODELS).forEach(function(k){ MODELS[k].forEach(function(x){ f.push(x); }); }); return f; }
   function aiCachedCount(){
     if (!window.caches) return Promise.resolve(-1);
@@ -5195,11 +5241,11 @@ function tkLook2(img, n, P, w, h){
   }
   function aiRefresh(){
     if (!XE.aiStat2) return;
-    aiCachedCount().then(function(c){ var t = aiFiles().length; XE.aiStat2.textContent = c < 0 ? 'この環境では保存状態を確かめられません' : c >= t ? '準備済み：AIは通信なしで使えます' : '未準備：' + c + ' / ' + t + '（初めて使う時に約65MBを読み込みます）'; XE.aiStat2.className = 'rstat ' + (c >= t ? 'okc' : ''); });
+    aiCachedCount().then(function(c){ var t = aiFiles().length; XE.aiStat2.textContent = c < 0 ? 'この環境では保存状態を確かめられません' : c >= t ? '準備済み：AIは通信なしで使えます' : '未準備：' + c + ' / ' + t + '（初めて使う時に約72MBを読み込みます）'; XE.aiStat2.className = 'rstat ' + (c >= t ? 'okc' : ''); });
   }
   function buildAiExtra(body){
     XE.aiStat2 = xel('div', 'rstat', '確認中…'); body.appendChild(XE.aiStat2);
-    XE.aiPrep = xbtn('今のうちにAIを準備（約65MB・Wi-Fi推奨）', null, function(){ aiPrepare(false); }); body.appendChild(XE.aiPrep);
+    XE.aiPrep = xbtn('今のうちにAIを準備（約72MB・Wi-Fi推奨）', null, function(){ aiPrepare(false); }); body.appendChild(XE.aiPrep);
     var ln = xel('div', 'rline'); ln.appendChild(xel('span', '', 'アプリを開いた時に、未準備なら自動で準備')); ln.appendChild(xel('span', 'sp'));
     var tg = xel('button', 'tg'); tg.type = 'button'; var on = false; try{ on = localStorage.getItem('retouch-aiauto') === '1'; }catch(e){} tg.classList.toggle('on', on);
     tg.addEventListener('click', function(){ on = !on; tg.classList.toggle('on', on); try{ localStorage.setItem('retouch-aiauto', on ? '1' : '0'); }catch(e){} });
@@ -5527,7 +5573,7 @@ function tkLook2(img, n, P, w, h){
   function runBatch(files){
     if (batching) return; if (!img){ toast('先に1枚目の写真で設定を作ってください'); return; }
     batching = true; XE.bBtn.disabled = true;
-    var origImg = img, keep = { ready: REG.ready, auto: REG.auto, adds: REG.adds, erases: REG.erases, mw: REG.mw, mh: REG.mh, F: REG.F, emb: REG.emb, hasSam: REG.hasSam },
+    var origImg = img, keep = { ready: REG.ready, auto: REG.auto, adds: REG.adds, erases: REG.erases, mw: REG.mw, mh: REG.mh, F: REG.F, emb: REG.emb, hasSam: REG.hasSam, det: REG.det },
         dodge = JSON.parse(JSON.stringify(P.reg.dodge)), zip = null, done = 0, fails = 0, t0 = Date.now();
     function stat(t){ XE.bStat.textContent = t; }
     var chain = loadJSZip().then(function(){ zip = new JSZip(); });
@@ -5558,7 +5604,7 @@ function tkLook2(img, n, P, w, h){
     });
     chain.then(function(){
       img = origImg;
-      REG.ready = keep.ready; REG.auto = keep.auto; REG.adds = keep.adds; REG.erases = keep.erases; REG.mw = keep.mw; REG.mh = keep.mh; REG.F = keep.F; REG.emb = keep.emb; REG.hasSam = keep.hasSam;
+      REG.ready = keep.ready; REG.auto = keep.auto; REG.adds = keep.adds; REG.erases = keep.erases; REG.mw = keep.mw; REG.mh = keep.mh; REG.F = keep.F; REG.emb = keep.emb; REG.hasSam = keep.hasSam; REG.det = keep.det;
       P.reg.dodge = dodge; if (REG.ready) pushRegions(); updateRegUI(); schedule();
       if (!done) throw new Error('書き出せた写真がありません');
       stat('ZIPにまとめています…');
@@ -6000,6 +6046,7 @@ function tkLook2(img, n, P, w, h){
   }
   var L6_PFORCE = null;   // 人物かどうかを手で決めた時（null＝自動）。写真を変えると自動に戻る
   function l6Person(){
+    if (REG.ready && REG.det && REG.det.person < 0.45) return false;   /* AIで人が見つからない写真（猫・料理など）は人物にしない。手だけの写真も人として見つかる */
     if (REG.ready && REG.data){ try{ var mw = REG.mw, mh = REG.mh, nn = mw * mh, rp = readPixels(mw, mh), SWm = new Float32Array(nn); for (var i = 0; i < nn; i++) SWm[i] = REG.data[i * RN] / 255; var est = tkSkinFind(rp, nn, SWm, true); return !!(est && est.frac >= 0.01); }catch(e){} }
     // AIなし：肌らしい色（橙〜黄みの、鮮やかすぎない色・中〜明るい）が十分にあり、しかも同じ色相の鮮やかな色（花・果物・紅葉）が多くない時だけ人物とみる
     var sz = sizeFor(200), px = readPixels(sz[0], sz[1]), nn = sz[0] * sz[1], k = [0, 0, 0], sk = 0, vivid = 0;
@@ -6290,7 +6337,7 @@ function tkLook2(img, n, P, w, h){
     XE.autoAi.textContent = 'AIで人物・主役も合わせる'; XE.lkSkinBtn.hidden = true;
     var needAi = !REG.ready && AUTO.notes.indexOf('主役') < 0;
     XE.autoAi.hidden = !needAi || AUTO.busy;
-    if (!AUTO.busy) XE.autoSt.textContent = needAi ? '人物・主役の補正はAIの準備が必要です（初回は約55MBの読み込み）' : '色の細かい調整は「調整」タブでそのまま上書きできます';
+    if (!AUTO.busy) XE.autoSt.textContent = needAi ? '人物・主役の補正はAIの準備が必要です（初回は約61MBの読み込み）' : '色の細かい調整は「調整」タブでそのまま上書きできます';
   }
   // 濃い青・肌の範囲（マスク）を、見本1枚に寄せるのパネルの中で直す
   var L6EDIT = false;
