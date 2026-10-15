@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v102</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v103</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2721,6 +2721,12 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
   // 最後に傾きの上限（急な立ち上がり＝細かい明暗のまだら・割れを作らない）。下限の都合で上が持ち上がった所は、下を少し上げてならす
   for (var it5 = 0; it5 < 3; it5++){ for (var hs = xs.length - 1; hs >= 1; hs--){ var dxs = xs[hs] - xs[hs - 1]; if (dxs > 0 && ys[hs] - ys[hs - 1] > dxs * 1.6) ys[hs - 1] = ys[hs] - dxs * 1.6; } }
   for (var hc4 = 1; hc4 < ys.length; hc4++) if (ys[hc4] < ys[hc4 - 1] + 0.002) ys[hc4] = ys[hc4 - 1] + 0.002;
+  if (M._np){   // 人物以外：明るさの「形」は見本へ寄せすぎない（明るい写真を暗い見本の形に押し込むと、明るい所の階調が引き伸ばされて白い毛・壁・空が割れる）
+    var NPD = 0.08, NPS = 1.25;
+    for (var nq = 0; nq < xs.length; nq++){ if (xs[nq] > 0.3) ys[nq] = Math.max(ys[nq], xs[nq] - NPD * (1 - 0.4 * tkSS((xs[nq] - 0.6) / 0.35))); }   /* 中間〜明るい所は元から大きく沈めない */
+    for (var it6 = 0; it6 < 3; it6++){ for (var ns = xs.length - 1; ns >= 1; ns--){ var dxn = xs[ns] - xs[ns - 1]; if (xs[ns - 1] >= 0.3 && dxn > 0 && ys[ns] - ys[ns - 1] > dxn * NPS) ys[ns - 1] = ys[ns] - dxn * NPS; } }   /* 明るい側の傾き（コントラストの伸び）に上限 */
+    for (var nc = 1; nc < ys.length; nc++) if (ys[nc] < ys[nc - 1] + 0.002) ys[nc] = ys[nc - 1] + 0.002;
+  }
   var curve = tkL6MonoFn(xs, ys);
   // 2. カラーグレーディング：明るさごとの灰色の色かぶりを、写真→見本の差だけ（明るさに沿ってなめらかに・量に上限）
   var GL = [], GA = [], GB = [];
@@ -2911,8 +2917,31 @@ function tkLook6(img, n, P, w, h){
   if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33);
   for (var j = 0, j3 = 0; j < n; j++, j3 += 3){ var wv = Wsk[j]; if (wv > 0.001){ img[j3] += (Sk[j3] - img[j3]) * wv; img[j3 + 1] += (Sk[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Sk[j3 + 2] - img[j3 + 2]) * wv; } }
 })();
+  if (ISk && w && h && !P.l6Person && STB > 0) tkL6Stable(img, ISk, n, w, h, STB);   /* 人物以外：明るい所・平らな所の割れを防ぐ */
   if (ISk && WSK0 && P.l6SkinTex !== 0) tkL6SkinTex(img, ISk, n, P, w, h, WSK0);
   if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = I06[q6] + (img[q6] - I06[q6]) * mm6;
+}
+// 割れ止め（人物以外）：仕上げで変わった分（明るさ・色）を、元の写真の明るさを手がかりに「同じ面の中ではそろえる」。
+//   大きな明暗の境目（猫と床、木と空）では変わり方の違いを残し、白い毛・壁・空など平らな面の中の小さなムラ（クリーム色の毛の斑・壁の目地）が
+//   色や明るさの差として引き伸ばされない＝割れない。全体の色・明るさの寄せはそのまま
+var STB = 1, STR = 0.008, STE = 0.002;
+function tkGuidedD(I, p, w, h, r, eps){
+  var n = w * h, Ip = new Float32Array(n), II = new Float32Array(n), i;
+  for (i = 0; i < n; i++){ Ip[i] = I[i] * p[i]; II[i] = I[i] * I[i]; }
+  var mI = tkBlur1(I, w, h, r), mp = tkBlur1(p, w, h, r), mIp = tkBlur1(Ip, w, h, r), mII = tkBlur1(II, w, h, r);
+  var A = new Float32Array(n), B = new Float32Array(n);
+  for (i = 0; i < n; i++){ var v = mII[i] - mI[i] * mI[i], c = mIp[i] - mI[i] * mp[i]; A[i] = c / (v + eps); B[i] = mp[i] - A[i] * mI[i]; }
+  A = tkBlur1(A, w, h, r); B = tkBlur1(B, w, h, r);
+  var q = new Float32Array(n); for (i = 0; i < n; i++) q[i] = A[i] * I[i] + B[i];
+  return q;
+}
+function tkL6Stable(img, I0, n, w, h, k){
+  var L0 = new Float32Array(n), D = [new Float32Array(n), new Float32Array(n), new Float32Array(n)], O = new Float32Array(n * 3), a = [0, 0, 0], b = [0, 0, 0], i;
+  for (i = 0; i < n; i++){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], a); tkToOk(img[j], img[j + 1], img[j + 2], b); L0[i] = a[0]; D[0][i] = b[0] - a[0]; D[1][i] = b[1] - a[1]; D[2][i] = b[2] - a[2]; O[j] = a[0]; O[j + 1] = a[1]; O[j + 2] = a[2]; }
+  var r = Math.max(2, Math.max(w, h) * STR), Q = D.map(function(d){ return tkGuidedD(L0, d, w, h, r, STE); });
+  for (i = 0; i < n; i++){ var j2 = i * 3, br = k * tkSS((L0[i] - 0.25) / 0.25);   /* 暗い所はそのまま（黒の締まり・影の青はいじらない） */
+    var l = O[j2] + D[0][i] + (Q[0][i] - D[0][i]) * br, aa = O[j2 + 1] + D[1][i] + (Q[1][i] - D[1][i]) * br, bb = O[j2 + 2] + D[2][i] + (Q[2][i] - D[2][i]) * br;
+    tkFromOk(l, aa, bb, b); img[j2] = tkClamp01(b[0]); img[j2 + 1] = tkClamp01(b[1]); img[j2 + 2] = tkClamp01(b[2]); }
 }
 // 葉の深さ：見本（植物の写真）の実測＝葉の明るさ中央0.40・色相152°・鮮やかさ0.032（明るさに対して0.08）。
 //   写真の葉の明るさ（中央）が見本より明るい分だけ、緑の色の所を暗く（比で）。鮮やかさは少しだけ下げる（暗くすると色が濃く見えるため）。
@@ -3015,7 +3044,7 @@ function tkLook6Core(img, n, P, w, h, mode){
     // 全体の鮮やかさ：画素の鮮やかさの中央値どうしで比べる（見本の実測値 mc）
     var mcS = P.l6Custom ? P.l6CustomMC : (TK_L6[li] && TK_L6[li].mc), mcT = 0;
     if (mcS){ var hc = new Float64Array(200), cc = 0; for (var q1 = 0; q1 < n; q1 += 2){ hc[Math.min(199, (Math.sqrt(Ab[q1] * Ab[q1] + Bb[q1] * Bb[q1]) * 1000) | 0)]++; cc++; } var s1 = 0; for (var q2 = 0; q2 < 200; q2++){ s1 += hc[q2]; if (s1 >= cc / 2){ mcT = q2 / 1000; break; } } }
-    var satR6 = (mcS && mcT > 0.004) ? mcS / mcT : null, lut6 = tkL6SmoothLut(M, T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6);
+    var satR6 = (mcS && mcT > 0.004) ? mcS / mcT : null, lut6 = tkL6SmoothLut(person ? M : Object.assign({}, M, { _np: 1 }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6);
     if (person && !P.l6Custom && T.skin){ var aim6 = tkL6SkinAim(img, n, lut6, Wr, T, li); if (aim6) lut6 = tkL6SmoothLut(Object.assign({}, M, { _aim: aim6 }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6); }   /* 一度かけた仕上がりの場面から、合う肌を選んで作り直す */
     tkApplyLut3(img, n, lut6, 33);
     var mm0 = (P.l5Master == null ? 75 : P.l5Master) / 100; if (mm0 < 1) for (var q0 = 0; q0 < img.length; q0++) img[q0] = I0[q0] + (img[q0] - I0[q0]) * mm0;
