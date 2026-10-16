@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v111</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v112</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2902,7 +2902,8 @@ function tkL6Clarity(img, n, w, h, target, amt, WS){
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
-  var liT = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liT] != null) liT = TK_L6_OLD[liT]; var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n, P.l6Custom ? null : (TK_L6[liT] && TK_L6[liT].m)) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
+  var IT0 = (w && h && !P.l6Person) ? new Float32Array(img) : null;   /* 電球色を整える前の写真（割れ止めの手がかり） */
+  var liT = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liT] != null) liT = TK_L6_OLD[liT]; var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n, P.l6Custom ? null : (TK_L6[liT] && TK_L6[liT].m), w, h, (P.l6BlueMode | 0) === 1) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
   var ISk = (w && h) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
   var WSK0 = ISk ? tkL6SkinW(ISk, P, w, h) : null;   /* 肌の範囲（やわらかさは肌にかけない＝顔の丸みの陰影を残す） */
   (function(){
@@ -2940,7 +2941,7 @@ function tkLook6(img, n, P, w, h){
   if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33);
   for (var j = 0, j3 = 0; j < n; j++, j3 += 3){ var wv = Wsk[j]; if (wv > 0.001){ img[j3] += (Sk[j3] - img[j3]) * wv; img[j3 + 1] += (Sk[j3 + 1] - img[j3 + 1]) * wv; img[j3 + 2] += (Sk[j3 + 2] - img[j3 + 2]) * wv; } }
 })();
-  if (ISk && w && h && !P.l6Person && STB > 0) tkL6Stable(img, ISk, n, w, h, STB);   /* 人物以外：明るい所・平らな所の割れを防ぐ */
+  if (ISk && w && h && !P.l6Person && STB > 0) tkL6Stable(img, (P._tung > 0.05 && IT0) ? IT0 : ISk, n, w, h, STB);   /* 人物以外：明るい所・平らな所の割れを防ぐ */
   if (ISk && !P.l6Person && !P.l6Custom){ var liE = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liE] != null) liE = TK_L6_OLD[liE]; var eE = TK_L6[liE]; if (eE && eE.m && eE.m._q) tkL6ToneEnds(img, ISk, n, eE.m._q, 0.35); }   /* 人物以外：黒の浮き・白の抜けを見本へ */
   if (ISk && w && h && !P.l6Person) tkL6KeepVivid(img, ISk, n);   /* 人物以外：主役の色（花・毛・果物）は抜きすぎない・青白いベールをかけない */
   if (ISk && w && h) tkL6SkyFix(img, ISk, n, w, h, !!P.l6Person);   /* 人物の写真は青い空だけ（白い壁・白い布の背景は空としない） */   /* 人物以外：空は空の規則で（晴れは沈めつつ鮮やかに、曇りは淡く無彩色に） */
@@ -2975,7 +2976,7 @@ function tkL6ToneEnds(img, I0, n, q, amt){
 //   照明の色かぶり（明るさの帯ごとの平均の色）を、大林さんの暖かい写真34枚の実測へ置き換える。
 //   明るい所＝クリームがかった黄（色相84°・濃さ0.032）、中間＝琥珀（69°・0.042）、影＝ほぼ無彩色（95°・0.011）。
 //   色かぶりより鮮やかな分（ジュース・縞・花）は8割残す＝主役の色は消えない。青は足さない
-function tkL6Tungsten(img, I0, n, MS6){
+function tkL6Tungsten(img, I0, n, MS6, w, h, bm1){
   var st = Math.max(1, Math.floor(n / 40000)), k = [0, 0, 0], hist = new Float64Array(100), cnt = 0;
   for (var i = 0; i < n; i += st){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], k); hist[Math.min(99, (k[0] * 100) | 0)]++; cnt++; }
   var s0 = 0, th = 1; for (var b0 = 99; b0 >= 0; b0--){ s0 += hist[b0]; if (s0 >= cnt * 0.05){ th = b0 / 100; break; } }
@@ -2989,14 +2990,17 @@ function tkL6Tungsten(img, I0, n, MS6){
   var CA = [], CB = []; for (var q2 = 0; q2 < NB; q2++){ var wq = BN[q2] / (BN[q2] + gN * 0.01); CA.push((BN[q2] ? BA[q2] / BN[q2] : gA) * wq + gA * (1 - wq)); CB.push((BN[q2] ? BB[q2] / BN[q2] : gB) * wq + gB * (1 - wq)); }
   for (var it = 0; it < 2; it++) for (var q3 = 1; q3 < NB - 1; q3++){ CA[q3] = (CA[q3 - 1] + 2 * CA[q3] + CA[q3 + 1]) / 4; CB[q3] = (CB[q3 - 1] + 2 * CB[q3] + CB[q3 + 1]) / 4; }
   var fT = 1; if (MS6){ var sm6 = tkL6Cast(MS6, 0.6), sh6 = tkL6Cast(MS6, 0.85); fT = Math.max(0.3, Math.min(1.7, 1 + (sm6[1] + sh6[1]) / 2 / 0.018)); }   /* 見本の光の温度：暖かい見本ほど琥珀を多く、中立・青い見本ほど電球の色を抜く＝候補ごとに暖かさが変わる */
-  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.042 + (0.032 - 0.042) * w2) * 1.6 * fT, hw = 66 + (78 - 66) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * 0.028, bc = Math.sin(245 * Math.PI / 180) * 0.028; var t0a = ac + (aw - ac) * w1, t0b = bc + (bw - bc) * w1; if (MS6){ var sc6 = tkL6Cast(MS6, L), ms6 = 0.25; t0a = t0a * (1 - ms6) + sc6[0] * 1.3 * ms6; t0b = t0b * (1 - ms6) + sc6[1] * 1.3 * ms6; } return [t0a, t0b];   /* 選んだ見本の色かぶりも半分ほど混ぜる＝候補ごとに色味が変わる（暖かい見本は琥珀、中立は生成り、青い見本は青寄り） */   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
+  var tgt = function(L){ var w1 = tkSS((L - 0.12) / 0.32), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.042 + (0.032 - 0.042) * w2) * 1.6 * fT, hw = 66 + (78 - 66) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * (bm1 ? 0.012 : 0.028), bc = Math.sin(245 * Math.PI / 180) * (bm1 ? 0.012 : 0.028);   /* 青影も重ねる時は影の藍を控えめに（二重にかけて青い斑にしない） */ var t0a = ac + (aw - ac) * w1, t0b = bc + (bw - bc) * w1; if (MS6){ var sc6 = tkL6Cast(MS6, L), ms6 = 0.25; t0a = t0a * (1 - ms6) + sc6[0] * 1.3 * ms6; t0b = t0b * (1 - ms6) + sc6[1] * 1.3 * ms6; } return [t0a, t0b];   /* 選んだ見本の色かぶりも半分ほど混ぜる＝候補ごとに色味が変わる（暖かい見本は琥珀、中立は生成り、青い見本は青寄り） */   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
     var C = 0, H = 0;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
-  var a = [0, 0, 0];
+  var a = [0, 0, 0], VK = null;
+  // 照明より鮮やかな物を守る量は、まわりと一続きに（1画素ずつ決めると、毛の縞・じゅうたんの目で「守る所／抜く所」がまだらに割れる）
+  if (w && h && w * h === n){ var cAv = new Float32Array(n), cBv = new Float32Array(n); for (var v0 = 0; v0 < n; v0++){ var jv = v0 * 3; tkToOk(img[jv], img[jv + 1], img[jv + 2], a); cAv[v0] = a[1]; cBv[v0] = a[2]; } var sgv = Math.max(2, Math.max(w, h) * 0.012); cAv = tkBlur1(cAv, w, h, sgv); cBv = tkBlur1(cBv, w, h, sgv); VK = new Float32Array(n); for (var v1 = 0; v1 < n; v1++) VK[v1] = Math.sqrt(cAv[v1] * cAv[v1] + cBv[v1] * cBv[v1]); }
   for (var p = 0; p < n; p++){
     var jp = p * 3; tkToOk(img[jp], img[jp + 1], img[jp + 2], a); var f = Math.max(0, Math.min(NB - 1.001, a[0] * NB - 0.5)), f0 = Math.floor(f), ft = f - f0, f1 = Math.min(NB - 1, f0 + 1);
     var cA = CA[f0] + (CA[f1] - CA[f0]) * ft, cB = CB[f0] + (CB[f1] - CB[f0]) * ft, T = tgt(a[0]);
-    var nA = T[0] + (a[1] - cA) * 0.8, nB = T[1] + (a[2] - cB) * 0.8;
-    var cC = Math.sqrt(cA * cA + cB * cB), pC = Math.sqrt(a[1] * a[1] + a[2] * a[2]), sp = str * (1 - 0.65 * tkSS((pC / Math.max(0.01, cC) - 1.1) / 0.4));   /* 照明より鮮やかな物（ジュース・果物）は弱めに＝色が抜けない */
+    var rA = a[1] - cA, rB = a[2] - cB, cn = Math.max(1e-4, Math.sqrt(cA * cA + cB * cB)), ux = cA / cn, uy = cB / cn, rp = rA * ux + rB * uy, rq = -rA * uy + rB * ux; rq *= 0.35;   /* 照明の色からのずれのうち、色相方向のずれ（橙⇔黄の小さな揺れ）は縮める＝照明を抜いた後にピンク・緑のまだらとして浮かない */
+    var nA = T[0] + (rp * ux - rq * uy) * 0.8, nB = T[1] + (rp * uy + rq * ux) * 0.8;
+    var cC = Math.sqrt(cA * cA + cB * cB), pC = VK ? VK[p] : Math.sqrt(a[1] * a[1] + a[2] * a[2]), sp = str * (1 - 0.65 * tkSS((pC / Math.max(0.01, cC) - 1.2) / 0.5));   /* 照明より鮮やかな物（ジュース・果物）は弱めに＝色が抜けない */
     tkFromOk(a[0], a[1] + (nA - a[1]) * sp, a[2] + (nB - a[2]) * sp, a); img[jp] = tkClamp01(a[0]); img[jp + 1] = tkClamp01(a[1]); img[jp + 2] = tkClamp01(a[2]);
   }
   return str;
