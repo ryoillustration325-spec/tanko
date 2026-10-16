@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v106</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v107</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2930,6 +2930,7 @@ function tkLook6(img, n, P, w, h){
 })();
   if (ISk && w && h && !P.l6Person && STB > 0) tkL6Stable(img, ISk, n, w, h, STB);   /* 人物以外：明るい所・平らな所の割れを防ぐ */
   if (ISk && !P.l6Person && !P.l6Custom){ var liE = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liE] != null) liE = TK_L6_OLD[liE]; var eE = TK_L6[liE]; if (eE && eE.m && eE.m._q) tkL6ToneEnds(img, ISk, n, eE.m._q, 0.6); }   /* 人物以外：黒の浮き・白の抜けを見本へ */
+  if (ISk && w && h && !P.l6Person) tkL6SkyFix(img, ISk, n, w, h);   /* 人物以外：空は空の規則で（晴れは沈めつつ鮮やかに、曇りは淡く無彩色に） */
   if (ISk && WSK0 && P.l6SkinTex !== 0) tkL6SkinTex(img, ISk, n, P, w, h, WSK0);
   if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = I06[q6] + (img[q6] - I06[q6]) * mm6;
 }
@@ -2950,6 +2951,42 @@ function tkL6ToneEnds(img, I0, n, q, amt){
   if (!(p2 < p50 - 0.02 && p50 < p98 - 0.02)) return;
   var f = tkL6MonoFn(xs, ys), a = [0, 0, 0];
   for (var p = 0; p < n; p++){ var jp = p * 3; tkToOk(img[jp], img[jp + 1], img[jp + 2], a); var L1 = f(a[0]); tkFromOk(L1, a[1], a[2], a); img[jp] = tkClamp01(a[0]); img[jp + 1] = tkClamp01(a[1]); img[jp + 2] = tkClamp01(a[2]); }
+}
+// 空：写真の上の方から続く、明るく平らな「青い所・白っぽい所」を空とみなし、そこだけ空の規則で仕上げ直す。
+//   見本の空はほとんど曇り（淡い）なので、写真全体の規則のままだと晴れの空まで霞む・水色になる
+//   晴れ（元の空がはっきり青い）＝少し沈めて藍の方へ回しつつ、鮮やかさは元の8割。曇り（白っぽい）＝仕上がりの明るさのまま、色はほぼ無彩色（ごく薄い藍）
+function tkL6SkyFix(img, I0, n, w, h){
+  var s = 400 / Math.max(w, h), W = Math.max(8, Math.round(w * s)), H = Math.max(8, Math.round(h * s)), m = W * H, k = [0, 0, 0];
+  var L = new Float32Array(m), A = new Float32Array(m), B = new Float32Array(m), cand = new Uint8Array(m);
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++){ var sx = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), sy = Math.min(h - 1, Math.floor((y + 0.5) * h / H)), q = (sy * w + sx) * 3, i = y * W + x; tkToOk(I0[q], I0[q + 1], I0[q + 2], k); L[i] = k[0]; A[i] = k[1]; B[i] = k[2]; }
+  var Lb = tkBlur1(L, W, H, 3), tex = new Float32Array(m); for (var i2 = 0; i2 < m; i2++){ var dd = L[i2] - Lb[i2]; tex[i2] = dd * dd; } tex = tkBlur1(tex, W, H, 4);
+  for (var i3 = 0; i3 < m; i3++){ var C = Math.sqrt(A[i3] * A[i3] + B[i3] * B[i3]), Hh = (Math.atan2(B[i3], A[i3]) * 180 / Math.PI + 360) % 360, yy = Math.floor(i3 / W) / H;
+    var blue = C > 0.02 && tkHd(Hh, 235) < 40 && L[i3] > 0.4, white = L[i3] > 0.72 && C < 0.035;
+    cand[i3] = (blue || white) && Math.sqrt(tex[i3]) < 0.02 && yy < 0.8 ? 1 : 0; }
+  // 上の端から続いている所だけ（壁・白い服・水たまりを空としない）
+  var sky = new Uint8Array(m), st = [];
+  for (var x2 = 0; x2 < W; x2++){ for (var y2 = 0; y2 < Math.max(1, Math.round(H * 0.05)); y2++){ var j = y2 * W + x2; if (cand[j] && !sky[j]){ sky[j] = 1; st.push(j); } } }
+  while (st.length){ var c = st.pop(), cx = c % W, cy = (c - cx) / W; [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function(d){ var nx = cx + d[0], ny = cy + d[1]; if (nx < 0 || ny < 0 || nx >= W || ny >= H) return; var nj = ny * W + nx; if (cand[nj] && !sky[nj]){ sky[nj] = 1; st.push(nj); } }); }
+  var cnt = 0, sc = [], sl = 0; for (var i4 = 0; i4 < m; i4++) if (sky[i4]){ cnt++; sc.push(Math.sqrt(A[i4] * A[i4] + B[i4] * B[i4])); }
+  if (cnt < m * 0.03) return;
+  sc.sort(function(a, b){ return a - b; }); var clear = tkSS((sc[Math.floor(sc.length * 0.6)] - 0.03) / 0.03);   /* 空の色の濃さ（上位4割）で晴れ／曇り */
+  var yT = H, yB = 0; for (var i6 = 0; i6 < m; i6++) if (sky[i6]){ var yr = Math.floor(i6 / W); if (yr < yT) yT = yr; if (yr > yB) yB = yr; } var ySpan = Math.max(1, yB - yT);
+  var M = new Float32Array(m); for (var i5 = 0; i5 < m; i5++) M[i5] = sky[i5];
+  var Me = new Float32Array(m); for (var i7 = 0; i7 < m; i7++){ var ex = i7 % W, ey = (i7 - ex) / W; Me[i7] = (M[i7] && (ex === 0 || M[i7 - 1]) && (ex === W - 1 || M[i7 + 1]) && (ey === 0 || M[i7 - W]) && (ey === H - 1 || M[i7 + W])) ? 1 : 0; }   /* 縁を1つ内側へ（雲・電柱・枝の際に色を乗せない） */
+  M = tkGuided(L, tkBlur1(Me, W, H, 1), W, H, 2, 1e-3);   /* 境目は元の明るさに沿わせる（木の枝・建物の縁に縁取りを出さない） */
+  var a = [0, 0, 0], b = [0, 0, 0], ih = 236 * Math.PI / 180;
+  for (var p = 0; p < n; p++){
+    var px = p % w, py = (p - px) / w, gx = Math.min(W - 1, Math.floor(px * W / w)), gy = Math.min(H - 1, Math.floor(py * H / h)), wv = M[gy * W + gx]; if (wv < 0.02) continue;
+    var jp = p * 3; tkToOk(I0[jp], I0[jp + 1], I0[jp + 2], a); tkToOk(img[jp], img[jp + 1], img[jp + 2], b);
+    var C0 = Math.sqrt(a[1] * a[1] + a[2] * a[2]), H0 = Math.atan2(a[2], a[1]) * 180 / Math.PI, wb = tkSS((C0 - 0.02) / 0.025) * clear;   /* 青い空の所ほど晴れの規則 */
+    var tY = Math.max(0, Math.min(1, (gy - yT) / ySpan)), Ht = H0 + tkHueDist(237, (H0 + 360) % 360) * 0.5, Ct = C0 * 0.8 * (1.05 - 0.15 * tY), Lt = a[0] - 0.07 * (1.4 - 1.1 * tY) * tkSS((a[0] - 0.4) / 0.3);   /* 見本の晴れの空：上ほど深く濃い青（明るさ0.62・濃さ0.067）、地平線へ淡く明るく（0.80・0.022） */
+    var At = Math.cos(Ht * Math.PI / 180) * Ct, Bt = Math.sin(Ht * Math.PI / 180) * Ct;
+    var Aw = a[1] * 0.5 + Math.cos(ih) * 0.012, Bw = a[2] * 0.5 + Math.sin(ih) * 0.012;   /* 曇り：元のごく薄い色＋ごく薄い藍 */
+    var Cb = Math.sqrt(b[1] * b[1] + b[2] * b[2]); if (Cb > Ct){ At *= Cb / Ct; Bt *= Cb / Ct; } Lt = Math.min(b[0], Lt);   /* すでに鮮やか・深く仕上がっている空は、それより淡く・明るくしない */
+    var tL = b[0] + (Lt - b[0]) * wb, tA = Aw + (At - Aw) * wb, tB = Bw + (Bt - Bw) * wb;
+    var l = b[0] + (tL - b[0]) * wv, aa = b[1] + (tA - b[1]) * wv, bb = b[2] + (tB - b[2]) * wv;
+    tkFromOk(l, aa, bb, b); img[jp] = tkClamp01(b[0]); img[jp + 1] = tkClamp01(b[1]); img[jp + 2] = tkClamp01(b[2]);
+  }
 }
 function tkGuidedD(I, p, w, h, r, eps){
   var n = w * h, Ip = new Float32Array(n), II = new Float32Array(n), i;
@@ -2992,7 +3029,7 @@ function tkL6BlueLut(mode, amt){
     // 藍を足す（灰色・青・緑に）
     var blu = Math.exp(-Math.pow(tkHd(H, 250) / 40, 2)) * tkSS((C - 0.03) / 0.04);   /* すでに青い物（シート・服・空）には足さない＝青の塊にしない */
     var tgt = (mode === 1 ? 0.058 : mode === 2 ? 0.052 : 0.05) * k, prj = A * Math.cos(ih) + B * Math.sin(ih);   /* 見本の量（その明るさの帯の青み）まで。すでに青い分は差し引く＝重ねて濃くしない */
-    var add = Math.max(0, tgt - Math.max(0, prj) * 0.8) * (1 - 0.8 * blu);   /* 見本の実測：その明るさの帯で0.04〜0.06 */ A += Math.cos(ih) * add; B += Math.sin(ih) * add;
+    var add = Math.max(0, tgt - Math.max(0, prj) * 0.8) * (1 - 0.8 * blu) * (mode === 3 ? 1 - 0.75 * tkSS((L - 0.8) / 0.12) * (1 - tkSS((C - 0.025) / 0.02)) : 1);   /* 青光：曇り空・白い壁のような白っぽい明るい所には薄く（見本の明るい白はほぼ無彩色）＝水色にしない */   /* 見本の実測：その明るさの帯で0.04〜0.06 */ A += Math.cos(ih) * add; B += Math.sin(ih) * add;
     // コントラスト：黒は締め、青影・中間は中間を少し沈め、青光は光を残して影を締める
     var Lc = L;
     if (mode === 1) Lc = L - 0.05 * amt * wb * (1 - tkSS((L - 0.35) / 0.2));
