@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v110</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v111</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2630,7 +2630,7 @@ function tkL6TungStr(px, n){
 }
 function tkL6Rank(T, subj, desc){
   // 人物以外：今の色の近さではなく「写っている物の色の構成（緑・空と水・木の茶色…）と昼夜」が近い見本を選ぶ
-  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; if (desc.tung > 0.3 && /青/.test(e.d)) d *= 1 + 0.6 * desc.tung;   /* 電球色の写真は青い見本を後ろへ（無理に青くしない） */ return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
+  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; if (desc.tung > 0.3 && /青/.test(e.d)) d *= 1 + 0.25 * desc.tung;   /* 電球色の写真は青い見本を後ろへ（無理に青くしない） */ return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
   var tv = tkL6Vec(T);
   return TK_L6.map(function(e, i){ var ev = tkL6Vec(e.m), d = 0; for (var j = 0; j < tv.length; j++){ var w = (j % 6) === 1 ? 2 : 1; d += w * (tv[j] - ev[j]) * (tv[j] - ev[j]); } if (subj && e.g === subj) d *= 0.6; if (subj === 'person' && e.g !== 'person') d *= 1.4; if (!subj && e.g === 'person') d *= 1.6; return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
 }
@@ -2902,7 +2902,7 @@ function tkL6Clarity(img, n, w, h, target, amt, WS){
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
-  var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
+  var liT = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liT] != null) liT = TK_L6_OLD[liT]; var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n, P.l6Custom ? null : (TK_L6[liT] && TK_L6[liT].m)) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
   var ISk = (w && h) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
   var WSK0 = ISk ? tkL6SkinW(ISk, P, w, h) : null;   /* 肌の範囲（やわらかさは肌にかけない＝顔の丸みの陰影を残す） */
   (function(){
@@ -2975,7 +2975,7 @@ function tkL6ToneEnds(img, I0, n, q, amt){
 //   照明の色かぶり（明るさの帯ごとの平均の色）を、大林さんの暖かい写真34枚の実測へ置き換える。
 //   明るい所＝クリームがかった黄（色相84°・濃さ0.032）、中間＝琥珀（69°・0.042）、影＝ほぼ無彩色（95°・0.011）。
 //   色かぶりより鮮やかな分（ジュース・縞・花）は8割残す＝主役の色は消えない。青は足さない
-function tkL6Tungsten(img, I0, n){
+function tkL6Tungsten(img, I0, n, MS6){
   var st = Math.max(1, Math.floor(n / 40000)), k = [0, 0, 0], hist = new Float64Array(100), cnt = 0;
   for (var i = 0; i < n; i += st){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], k); hist[Math.min(99, (k[0] * 100) | 0)]++; cnt++; }
   var s0 = 0, th = 1; for (var b0 = 99; b0 >= 0; b0--){ s0 += hist[b0]; if (s0 >= cnt * 0.05){ th = b0 / 100; break; } }
@@ -2988,7 +2988,8 @@ function tkL6Tungsten(img, I0, n){
   var gA = 0, gB = 0, gN = 0; for (var q = 0; q < NB; q++){ gA += BA[q]; gB += BB[q]; gN += BN[q]; } gA /= Math.max(1, gN); gB /= Math.max(1, gN);
   var CA = [], CB = []; for (var q2 = 0; q2 < NB; q2++){ var wq = BN[q2] / (BN[q2] + gN * 0.01); CA.push((BN[q2] ? BA[q2] / BN[q2] : gA) * wq + gA * (1 - wq)); CB.push((BN[q2] ? BB[q2] / BN[q2] : gB) * wq + gB * (1 - wq)); }
   for (var it = 0; it < 2; it++) for (var q3 = 1; q3 < NB - 1; q3++){ CA[q3] = (CA[q3 - 1] + 2 * CA[q3] + CA[q3 + 1]) / 4; CB[q3] = (CB[q3 - 1] + 2 * CB[q3] + CB[q3 + 1]) / 4; }
-  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.042 + (0.032 - 0.042) * w2) * 1.6, hw = 66 + (78 - 66) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * 0.028, bc = Math.sin(245 * Math.PI / 180) * 0.028; return [ac + (aw - ac) * w1, bc + (bw - bc) * w1];   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
+  var fT = 1; if (MS6){ var sm6 = tkL6Cast(MS6, 0.6), sh6 = tkL6Cast(MS6, 0.85); fT = Math.max(0.3, Math.min(1.7, 1 + (sm6[1] + sh6[1]) / 2 / 0.018)); }   /* 見本の光の温度：暖かい見本ほど琥珀を多く、中立・青い見本ほど電球の色を抜く＝候補ごとに暖かさが変わる */
+  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.042 + (0.032 - 0.042) * w2) * 1.6 * fT, hw = 66 + (78 - 66) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * 0.028, bc = Math.sin(245 * Math.PI / 180) * 0.028; var t0a = ac + (aw - ac) * w1, t0b = bc + (bw - bc) * w1; if (MS6){ var sc6 = tkL6Cast(MS6, L), ms6 = 0.25; t0a = t0a * (1 - ms6) + sc6[0] * 1.3 * ms6; t0b = t0b * (1 - ms6) + sc6[1] * 1.3 * ms6; } return [t0a, t0b];   /* 選んだ見本の色かぶりも半分ほど混ぜる＝候補ごとに色味が変わる（暖かい見本は琥珀、中立は生成り、青い見本は青寄り） */   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
     var C = 0, H = 0;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
   var a = [0, 0, 0];
   for (var p = 0; p < n; p++){
@@ -6247,7 +6248,7 @@ function tkLook2(img, n, P, w, h){
     // 元の写真そのものの採点：すでに雰囲気が近いほど、足す量を減らし、変えることを減点する
     var s0 = tkL6Score(src, src, w, h, A.person), rr = rank.length > 5 ? rank[0].d / Math.max(1e-6, rank[5].d) : 1, near = Math.max(0, Math.min(1, (0.55 - rr) / 0.35));   // 1＝元の写真が見本の1枚とほぼ同じ雰囲気（いちばん近い見本だけ飛び抜けて近い）
     var amt = Math.round(100 - 65 * near); base.l5Master = amt; A.autoAmt = amt; A.near = near;
-    { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(src), w, h), 0, 0); res.push({ i: -1, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
+    { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(src), w, h), 0, 0); res.push({ i: -1, px: src, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
     A.judging = true; A.cands = null; if (XE.l6Box) l6Render();
     var bq = null, bk = 0, rmed0 = null;
     function step(){
@@ -6258,7 +6259,7 @@ function tkLook2(img, n, P, w, h){
         try{
           var out = tkProcess(src, w, h, q), sc = tkL6Score(src, out, w, h, A.person);
           var cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out), w, h), 0, 0);
-          res.push({ i: c, s: sc.score, r: sc, url: cv.toDataURL('image/jpeg', 0.75) });
+          res.push({ i: c, px: out, s: sc.score, r: sc, url: cv.toDataURL('image/jpeg', 0.75) });
         }catch(e){}
       }
       if (k < pool.length){ setTimeout(step, 0); return; }
@@ -6268,14 +6269,20 @@ function tkLook2(img, n, P, w, h){
       res.forEach(function(x){ if (x.i < 0 || x.bm) return; x.s = adj(x); });
       res.sort(function(a, b){ return a.s - b.s; });
       // 人物でない写真：上位2つの見本に、青影・中間・青光をそれぞれ実際にかけて採点（崩れていなければ青ありを少し優先）
-      if (!A.person && !bq){ bq = []; res.filter(function(x){ return x.i >= 0; }).slice(0, 2).forEach(function(x){ [1, 2, 3].forEach(function(m){ bq.push({ i: x.i, bm: m }); }); }); }
+      if (!A.person && !bq){ bq = []; var tgJ = (A.fullRank && l6Desc().tung) || 0; res.filter(function(x){ return x.i >= 0; }).slice(0, 2).forEach(function(x){ (tgJ > 0.3 ? [1] : [1, 2, 3]).forEach(function(m){ bq.push({ i: x.i, bm: m }); }); }); }
       while (bq && bk < bq.length && Date.now() - t0 < 60){
         var bc = bq[bk++], qb = JSON.parse(JSON.stringify(base)); qb.l6Idx = bc.i; qb.l6V = 2; qb.l6Custom = null; qb.l6BlueMode = bc.bm;
         try{ var ob = tkProcess(src, w, h, qb), sb = tkL6Score(src, ob, w, h, A.person); var cvb = document.createElement('canvas'); cvb.width = w; cvb.height = h; cvb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(ob), w, h), 0, 0);
-          var xb = { i: bc.i, bm: bc.bm, s: 0, r: sb, url: cvb.toDataURL('image/jpeg', 0.75) }; xb.s = adj(xb) - TK_L6_BLUEPREF; res.push(xb); }catch(e){}
+          var xb = { i: bc.i, bm: bc.bm, px: ob, s: 0, r: sb, url: cvb.toDataURL('image/jpeg', 0.75) }; xb.s = adj(xb) - TK_L6_BLUEPREF; res.push(xb); }catch(e){}
       }
       if (bq && bk < bq.length){ setTimeout(step, 0); return; }
       res.sort(function(a, b){ return a.s - b.s; });
+      // 候補の並び：いちばん良いものはそのまま先頭。2つ目以降は「すでに並べた候補と見た目が近いほど後ろへ」、ほぼ同じ仕上がりは出さない＝色味の違う選択肢が並ぶ
+      (function(){ var dif = function(a, b){ if (!a || !b || a.length !== b.length) return 1; var sm = 0, c = 0; for (var t = 0; t < a.length; t += 16){ sm += Math.abs(a[t] - b[t]) + Math.abs(a[t + 1] - b[t + 1]) + Math.abs(a[t + 2] - b[t + 2]); c += 3; } return sm / c / 255; };
+        var rest = res.slice(), sel = [rest.shift()];
+        while (rest.length){ var bi = -1, bv = 1e9; for (var u = 0; u < rest.length; u++){ var md = 1; for (var v = 0; v < sel.length; v++) md = Math.min(md, dif(rest[u].px, sel[v].px)); rest[u]._md = md; var val = rest[u].s + 2.5 * Math.exp(-md / 0.025); if (val < bv){ bv = val; bi = u; } }
+          var pk = rest.splice(bi, 1)[0]; if (pk._md >= 0.008 || pk.i < 0) sel.push(pk); }
+        res = sel; res.forEach(function(x){ delete x.px; }); })();
       A.cands = res; A.judging = false;
       if (!A.picked && !A.custom && res.length){
         var top = res[0];
