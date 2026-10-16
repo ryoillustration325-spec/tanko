@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v109</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v110</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2777,7 +2777,7 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
     if (wlp > 0.001){ var rl = Math.min(1, Math.sqrt(1 + ((SKd[1] || 1) - 1) * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn))), Al = A * rl, Bl = B * rl; A1 += (Al - A1) * wlp * 0.85; B1 += (Bl - B1) * wlp * 0.85; }   /* 唇・赤い所：元の色相のまま、肌を落ち着かせた分の半分だけ落ち着かせる（口紅のようにも、肌から浮くようにもならない） */
     var wsg = SKt ? Math.exp(-Math.pow(tkHd(H, SKt.h) / 32, 2)) * tkSS((C - 0.012) / 0.02) * tkSS((L0 - 0.1) / 0.12) * (1 - tkSS((L0 - 0.95) / 0.04)) : 0;   /* 影になった肌（手のひら・頬の影）も青くしない＝紫がかった灰色にならない */
     var gw = dkk * (1 - 0.7 * Math.max(wsk, 0.85 * wsg)) * (1 - wlp * 0.6) * (1 - 0.7 * wwm);
-    var gAo = gA * gw, gBo = gB * gw; if (M._tg > 0.05){ var hgc = (Math.atan2(gBo, gAo) * 180 / Math.PI + 360) % 360; if (tkHd(hgc, 230) < 75){ var sgc = 1 - 0.85 * M._tg * (1 - tkSS((L0 - 0.6) / 0.3)); gAo *= sgc; gBo *= sgc; } }   /* 電球色の写真：影に青を入れない（見本の暖かい写真の影はほぼ無彩色） */
+    var gAo = gA * gw, gBo = gB * gw; if (false && M._tg > 0.05){ var hgc = (Math.atan2(gBo, gAo) * 180 / Math.PI + 360) % 360; if (tkHd(hgc, 230) < 75){ var sgc = 1 - 0.85 * M._tg * (1 - tkSS((L0 - 0.6) / 0.3)); gAo *= sgc; gBo *= sgc; } }   /* 電球色の写真：影に青を入れない（見本の暖かい写真の影はほぼ無彩色） */
     tkFromOk(L1, A1 + gAo, B1 + gBo, o);
     LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
@@ -2919,13 +2919,13 @@ function tkLook6(img, n, P, w, h){
   // 葉の深さ（人物でない写真）：葉は見本のように暗く沈めて濃く（色を抜いて灰緑にしない）、黄緑は青緑の方へ
   var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person) tkL6Foliage(img, n, fo);
   // 青の入れ方（人物でない写真）：1＝青影（暗い所に藍）／2＝中間（中くらいの明るさを青緑〜藍へ）／3＝青光（明るい所・光を青く）。黒は締める
-  var bmd = (P._tung || 0) > 0.3 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
+  var bmd = (P._tung || 0) > 0.3 && (P.l6BlueMode | 0) !== 1 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
   // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
   if (P.l6Follow !== 0){ var li6 = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li6] != null) li6 = TK_L6_OLD[li6]; var M6 = P.l6Custom || (TK_L6[li6] || TK_L6[0]).m, tr = tkL6Traits(M6);
     dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; }   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
-  if (P._tung){ dBg *= 1 - 0.7 * P._tung; tl *= 1 - P._tung; }   /* 電球色の写真は濃い青・青緑を控える */
+  if (P._tung){ tl *= 1 - P._tung; }   /* 電球色の写真は濃い青・青緑を控える */
   dBg = Math.round(dBg * 100) / 100; dSk = Math.round(dSk * 100) / 100; tl = Math.round(tl * 100) / 100; cm = Math.round(cm * 100) / 100;
   if (dBg <= 0 && dSk <= 0 && tl <= 0 && cm <= 0) return;
   var kBk = P.l6Person ? 'bg' : 'bgn', kB = kBk + dBg + ',' + tl + ',' + cm, kS = 's' + dSk;
@@ -2988,7 +2988,8 @@ function tkL6Tungsten(img, I0, n){
   var gA = 0, gB = 0, gN = 0; for (var q = 0; q < NB; q++){ gA += BA[q]; gB += BB[q]; gN += BN[q]; } gA /= Math.max(1, gN); gB /= Math.max(1, gN);
   var CA = [], CB = []; for (var q2 = 0; q2 < NB; q2++){ var wq = BN[q2] / (BN[q2] + gN * 0.01); CA.push((BN[q2] ? BA[q2] / BN[q2] : gA) * wq + gA * (1 - wq)); CB.push((BN[q2] ? BB[q2] / BN[q2] : gB) * wq + gB * (1 - wq)); }
   for (var it = 0; it < 2; it++) for (var q3 = 1; q3 < NB - 1; q3++){ CA[q3] = (CA[q3 - 1] + 2 * CA[q3] + CA[q3 + 1]) / 4; CB[q3] = (CB[q3 - 1] + 2 * CB[q3] + CB[q3 + 1]) / 4; }
-  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var C = (0.011 + (0.042 - 0.011) * w1 + (0.032 - 0.042) * w2) * 1.4, H = 80 + (66 - 80) * w1 + (78 - 66) * w2;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
+  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.042 + (0.032 - 0.042) * w2) * 1.6, hw = 66 + (78 - 66) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * 0.028, bc = Math.sin(245 * Math.PI / 180) * 0.028; return [ac + (aw - ac) * w1, bc + (bw - bc) * w1];   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
+    var C = 0, H = 0;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
   var a = [0, 0, 0];
   for (var p = 0; p < n; p++){
     var jp = p * 3; tkToOk(img[jp], img[jp + 1], img[jp + 2], a); var f = Math.max(0, Math.min(NB - 1.001, a[0] * NB - 0.5)), f0 = Math.floor(f), ft = f - f0, f1 = Math.min(NB - 1, f0 + 1);
