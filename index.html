@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v108</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v109</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2619,9 +2619,18 @@ function tkL6DescDist(p, s){ var d = 0; for (var i = 0; i < 12; i++) d += 2 * Ma
 // 淡い見本を優先：色が淡く（画素の鮮やかさ）、質感が柔らかい（近くの明暗の揺れ）見本ほど上に
 var TK_L6_PALE = true; try{ TK_L6_PALE = localStorage.getItem('retouch-l6pale') !== '0'; }catch(e){}
 function tkL6PaleK(e){ if (!TK_L6_PALE) return 1; var mc = e.mc != null ? e.mc : 0.02, lc = e.lc ? e.lc[0] : 0.05; var q50 = e.m && e.m._q ? e.m._q[3] : 0.5; return 1 + 0.9 * Math.max(0, (mc - 0.016) / 0.03) + 0.5 * Math.max(0, (lc - 0.05) / 0.04) + 0.8 * Math.max(0, (0.55 - q50) / 0.2); }   // 色が淡い・柔らかい・明るい見本ほど上に
+// 電球色の強さ（0〜1）：いちばん明るい所（上位5%）の平均の色が、電球色（色相65°前後）にどれだけ染まっているか
+function tkL6TungStr(px, n){
+  var st = Math.max(1, Math.floor(n / 20000)), k = [0, 0, 0], hist = new Float64Array(100), cnt = 0;
+  for (var i = 0; i < n; i += st){ tkToOk(px[i * 4] / 255, px[i * 4 + 1] / 255, px[i * 4 + 2] / 255, k); hist[Math.min(99, (k[0] * 100) | 0)]++; cnt++; }
+  var s = 0, th = 1; for (var b = 99; b >= 0; b--){ s += hist[b]; if (s >= cnt * 0.05){ th = b / 100; break; } }
+  var sa = 0, sb = 0, c = 0; for (var j = 0; j < n; j += st){ tkToOk(px[j * 4] / 255, px[j * 4 + 1] / 255, px[j * 4 + 2] / 255, k); if (k[0] >= th){ sa += k[1]; sb += k[2]; c++; } }
+  if (!c) return 0; var ca = sa / c, cb = sb / c, cc = Math.sqrt(ca * ca + cb * cb), ch = (Math.atan2(cb, ca) * 180 / Math.PI + 360) % 360;
+  return tkSS((cc - 0.03) / 0.03) * Math.exp(-Math.pow(tkHd(ch, 65) / 45, 2));
+}
 function tkL6Rank(T, subj, desc){
   // 人物以外：今の色の近さではなく「写っている物の色の構成（緑・空と水・木の茶色…）と昼夜」が近い見本を選ぶ
-  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
+  if (!subj && desc) return TK_L6.map(function(e, i){ var d = e.c ? tkL6DescDist(desc, e.c) : 9; if (e.g === 'person') d *= 1.5; if (desc.tung > 0.3 && /青/.test(e.d)) d *= 1 + 0.6 * desc.tung;   /* 電球色の写真は青い見本を後ろへ（無理に青くしない） */ return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
   var tv = tkL6Vec(T);
   return TK_L6.map(function(e, i){ var ev = tkL6Vec(e.m), d = 0; for (var j = 0; j < tv.length; j++){ var w = (j % 6) === 1 ? 2 : 1; d += w * (tv[j] - ev[j]) * (tv[j] - ev[j]); } if (subj && e.g === subj) d *= 0.6; if (subj === 'person' && e.g !== 'person') d *= 1.4; if (!subj && e.g === 'person') d *= 1.6; return { i: i, d: d * tkL6PaleK(e) }; }).sort(function(a, b){ return a.d - b.d; });
 }
@@ -2768,7 +2777,8 @@ function tkL6SmoothLut(M, T, Lb, n, sL, sC, dk, skn, kS, satR){
     if (wlp > 0.001){ var rl = Math.min(1, Math.sqrt(1 + ((SKd[1] || 1) - 1) * (SKd.cs ? Math.min(1, skn * SKd.cs) : skn))), Al = A * rl, Bl = B * rl; A1 += (Al - A1) * wlp * 0.85; B1 += (Bl - B1) * wlp * 0.85; }   /* 唇・赤い所：元の色相のまま、肌を落ち着かせた分の半分だけ落ち着かせる（口紅のようにも、肌から浮くようにもならない） */
     var wsg = SKt ? Math.exp(-Math.pow(tkHd(H, SKt.h) / 32, 2)) * tkSS((C - 0.012) / 0.02) * tkSS((L0 - 0.1) / 0.12) * (1 - tkSS((L0 - 0.95) / 0.04)) : 0;   /* 影になった肌（手のひら・頬の影）も青くしない＝紫がかった灰色にならない */
     var gw = dkk * (1 - 0.7 * Math.max(wsk, 0.85 * wsg)) * (1 - wlp * 0.6) * (1 - 0.7 * wwm);
-    tkFromOk(L1, A1 + gA * gw, B1 + gB * gw, o);
+    var gAo = gA * gw, gBo = gB * gw; if (M._tg > 0.05){ var hgc = (Math.atan2(gBo, gAo) * 180 / Math.PI + 360) % 360; if (tkHd(hgc, 230) < 75){ var sgc = 1 - 0.85 * M._tg * (1 - tkSS((L0 - 0.6) / 0.3)); gAo *= sgc; gBo *= sgc; } }   /* 電球色の写真：影に青を入れない（見本の暖かい写真の影はほぼ無彩色） */
+    tkFromOk(L1, A1 + gAo, B1 + gBo, o);
     LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
   return LUT;
@@ -2892,6 +2902,7 @@ function tkL6Clarity(img, n, w, h, target, amt, WS){
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
+  var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
   var ISk = (w && h) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
   var WSK0 = ISk ? tkL6SkinW(ISk, P, w, h) : null;   /* 肌の範囲（やわらかさは肌にかけない＝顔の丸みの陰影を残す） */
   (function(){
@@ -2908,12 +2919,13 @@ function tkLook6(img, n, P, w, h){
   // 葉の深さ（人物でない写真）：葉は見本のように暗く沈めて濃く（色を抜いて灰緑にしない）、黄緑は青緑の方へ
   var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person) tkL6Foliage(img, n, fo);
   // 青の入れ方（人物でない写真）：1＝青影（暗い所に藍）／2＝中間（中くらいの明るさを青緑〜藍へ）／3＝青光（明るい所・光を青く）。黒は締める
-  var bmd = P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100; if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
+  var bmd = (P._tung || 0) > 0.3 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
   // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
   if (P.l6Follow !== 0){ var li6 = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[li6] != null) li6 = TK_L6_OLD[li6]; var M6 = P.l6Custom || (TK_L6[li6] || TK_L6[0]).m, tr = tkL6Traits(M6);
     dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; }   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
+  if (P._tung){ dBg *= 1 - 0.7 * P._tung; tl *= 1 - P._tung; }   /* 電球色の写真は濃い青・青緑を控える */
   dBg = Math.round(dBg * 100) / 100; dSk = Math.round(dSk * 100) / 100; tl = Math.round(tl * 100) / 100; cm = Math.round(cm * 100) / 100;
   if (dBg <= 0 && dSk <= 0 && tl <= 0 && cm <= 0) return;
   var kBk = P.l6Person ? 'bg' : 'bgn', kB = kBk + dBg + ',' + tl + ',' + cm, kS = 's' + dSk;
@@ -2959,6 +2971,34 @@ function tkL6ToneEnds(img, I0, n, q, amt){
 //   晴れ（元の空がはっきり青い）＝少し沈めて藍の方へ回しつつ、鮮やかさは元の8割。曇り（白っぽい）＝仕上がりの明るさのまま、色はほぼ無彩色（ごく薄い藍）
 // 主役の色を守る（人物以外）：元が鮮やかな色（花・毛・果物・ジュース）は、見本の淡さに合わせて抜いても元の8割は残し、色相は青の方へ大きく回さない
 //   （緑・青は見本の深い緑・空の規則に任せる）
+// 電球色の写真（いちばん明るい所がすでに電球色に染まっている時だけ）：
+//   照明の色かぶり（明るさの帯ごとの平均の色）を、大林さんの暖かい写真34枚の実測へ置き換える。
+//   明るい所＝クリームがかった黄（色相84°・濃さ0.032）、中間＝琥珀（69°・0.042）、影＝ほぼ無彩色（95°・0.011）。
+//   色かぶりより鮮やかな分（ジュース・縞・花）は8割残す＝主役の色は消えない。青は足さない
+function tkL6Tungsten(img, I0, n){
+  var st = Math.max(1, Math.floor(n / 40000)), k = [0, 0, 0], hist = new Float64Array(100), cnt = 0;
+  for (var i = 0; i < n; i += st){ var j = i * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], k); hist[Math.min(99, (k[0] * 100) | 0)]++; cnt++; }
+  var s0 = 0, th = 1; for (var b0 = 99; b0 >= 0; b0--){ s0 += hist[b0]; if (s0 >= cnt * 0.05){ th = b0 / 100; break; } }
+  var sa = 0, sb = 0, c0 = 0; for (var i2 = 0; i2 < n; i2 += st){ var j2 = i2 * 3; tkToOk(I0[j2], I0[j2 + 1], I0[j2 + 2], k); if (k[0] >= th){ sa += k[1]; sb += k[2]; c0++; } }
+  if (!c0) return 0; var ca = sa / c0, cb = sb / c0, cc = Math.sqrt(ca * ca + cb * cb), ch = (Math.atan2(cb, ca) * 180 / Math.PI + 360) % 360;
+  var str = tkSS((cc - 0.03) / 0.03) * Math.exp(-Math.pow(tkHd(ch, 65) / 45, 2)); if (str < 0.05) return 0;
+  // 仕上がりの、明るさの帯ごとの平均の色（＝照明の色かぶり）
+  var NB = 16, BA = new Float64Array(NB), BB = new Float64Array(NB), BN = new Float64Array(NB);
+  for (var i3 = 0; i3 < n; i3 += st){ var j3 = i3 * 3; tkToOk(img[j3], img[j3 + 1], img[j3 + 2], k); var bi = Math.min(NB - 1, Math.max(0, (k[0] * NB) | 0)); BA[bi] += k[1]; BB[bi] += k[2]; BN[bi]++; }
+  var gA = 0, gB = 0, gN = 0; for (var q = 0; q < NB; q++){ gA += BA[q]; gB += BB[q]; gN += BN[q]; } gA /= Math.max(1, gN); gB /= Math.max(1, gN);
+  var CA = [], CB = []; for (var q2 = 0; q2 < NB; q2++){ var wq = BN[q2] / (BN[q2] + gN * 0.01); CA.push((BN[q2] ? BA[q2] / BN[q2] : gA) * wq + gA * (1 - wq)); CB.push((BN[q2] ? BB[q2] / BN[q2] : gB) * wq + gB * (1 - wq)); }
+  for (var it = 0; it < 2; it++) for (var q3 = 1; q3 < NB - 1; q3++){ CA[q3] = (CA[q3 - 1] + 2 * CA[q3] + CA[q3 + 1]) / 4; CB[q3] = (CB[q3 - 1] + 2 * CB[q3] + CB[q3 + 1]) / 4; }
+  var tgt = function(L){ var w1 = tkSS((L - 0.18) / 0.2), w2 = tkSS((L - 0.5) / 0.2); var C = (0.011 + (0.042 - 0.011) * w1 + (0.032 - 0.042) * w2) * 1.4, H = 80 + (66 - 80) * w1 + (78 - 66) * w2;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
+  var a = [0, 0, 0];
+  for (var p = 0; p < n; p++){
+    var jp = p * 3; tkToOk(img[jp], img[jp + 1], img[jp + 2], a); var f = Math.max(0, Math.min(NB - 1.001, a[0] * NB - 0.5)), f0 = Math.floor(f), ft = f - f0, f1 = Math.min(NB - 1, f0 + 1);
+    var cA = CA[f0] + (CA[f1] - CA[f0]) * ft, cB = CB[f0] + (CB[f1] - CB[f0]) * ft, T = tgt(a[0]);
+    var nA = T[0] + (a[1] - cA) * 0.8, nB = T[1] + (a[2] - cB) * 0.8;
+    var cC = Math.sqrt(cA * cA + cB * cB), pC = Math.sqrt(a[1] * a[1] + a[2] * a[2]), sp = str * (1 - 0.65 * tkSS((pC / Math.max(0.01, cC) - 1.1) / 0.4));   /* 照明より鮮やかな物（ジュース・果物）は弱めに＝色が抜けない */
+    tkFromOk(a[0], a[1] + (nA - a[1]) * sp, a[2] + (nB - a[2]) * sp, a); img[jp] = tkClamp01(a[0]); img[jp + 1] = tkClamp01(a[1]); img[jp + 2] = tkClamp01(a[2]);
+  }
+  return str;
+}
 function tkL6KeepVivid(img, I0, n){
   var a = [0, 0, 0], b = [0, 0, 0];
   for (var p = 0; p < n; p++){
@@ -3127,7 +3167,7 @@ function tkLook6Core(img, n, P, w, h, mode){
     // 全体の鮮やかさ：画素の鮮やかさの中央値どうしで比べる（見本の実測値 mc）
     var mcS = P.l6Custom ? P.l6CustomMC : (TK_L6[li] && TK_L6[li].mc), mcT = 0;
     if (mcS){ var hc = new Float64Array(200), cc = 0; for (var q1 = 0; q1 < n; q1 += 2){ hc[Math.min(199, (Math.sqrt(Ab[q1] * Ab[q1] + Bb[q1] * Bb[q1]) * 1000) | 0)]++; cc++; } var s1 = 0; for (var q2 = 0; q2 < 200; q2++){ s1 += hc[q2]; if (s1 >= cc / 2){ mcT = q2 / 1000; break; } } }
-    var satR6 = (mcS && mcT > 0.004) ? mcS / mcT : null, lut6 = tkL6SmoothLut(person ? M : Object.assign({}, M, { _np: 1, _wp: tkL6WarmKeep(Lb, Ab, Bb, n) }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6);
+    var satR6 = (mcS && mcT > 0.004) ? mcS / mcT : null, lut6 = tkL6SmoothLut(person ? M : Object.assign({}, M, { _np: 1, _wp: tkL6WarmKeep(Lb, Ab, Bb, n), _tg: P._tung || 0 }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6);
     if (person && !P.l6Custom && T.skin){ var aim6 = tkL6SkinAim(img, n, lut6, Wr, T, li); if (aim6) lut6 = tkL6SmoothLut(Object.assign({}, M, { _aim: aim6 }), T, Lb, n, Math.min(1, sL * kS), Math.min(1.2, sC * kS), dk, skn, kS, satR6); }   /* 一度かけた仕上がりの場面から、合う肌を選んで作り直す */
     tkApplyLut3(img, n, lut6, 33);
     var mm0 = (P.l5Master == null ? 75 : P.l5Master) / 100; if (mm0 < 1) for (var q0 = 0; q0 < img.length; q0++) img[q0] = I0[q0] + (img[q0] - I0[q0]) * mm0;
@@ -6151,7 +6191,7 @@ function tkLook2(img, n, P, w, h){
   // 見本1枚に寄せる
   var TK_L6_DEF = { L: 60, C: 60, dark: 40, master: 100, skin: 50, prot: 85, smooth: 25 };
   var L6_GROUPS = ['person', 'plant', 'sea', 'forest', 'object', 'street', 'snow', 'still', 'night', 'evening'];
-  function l6Desc(){ var sz = sizeFor(240); return tkL6Desc(readPixels(sz[0], sz[1]), sz[0] * sz[1], true); }
+  function l6Desc(){ var sz = sizeFor(240), px = readPixels(sz[0], sz[1]), d = tkL6Desc(px, sz[0] * sz[1], true); d.tung = tkL6TungStr(px, sz[0] * sz[1]); return d; }
   function l6Measure(person){
     var sz = sizeFor(240), px = readPixels(sz[0], sz[1]);
     return tkL6Model(px, sz[0] * sz[1], person);
