@@ -456,7 +456,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v118</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v119</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5920,12 +5920,12 @@ function tkLook2(img, n, P, w, h){
     util: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>'
   };
   var TABS = [
-    { key: 'look', label: '仕上げ' },
+    { key: 'look', label: '読み込み' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
     { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
-    { key: 'part', label: '部分', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
-    { key: 'util', label: '便利', chips: [['hist','履歴',['hist']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
+    { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
+    { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
   var CUR = { tab: 'look', chip: { adj: 'fx', light: 'basic', color: 'wb' } };   // 光は「ライト」、色は「カラー」、調整は「効果」から（トリミングは選んだ時だけ）
@@ -6517,7 +6517,7 @@ function tkLook2(img, n, P, w, h){
     Array.prototype.forEach.call(XE.autoSeg.children, function(b){ b.classList.toggle('on', b.dataset.s === AUTO.look); });
     XE.autoHead.textContent = isRef ? '見本ルック：' + REF_NAME[AUTO.look] : 'おまかせ：' + AUTO_NAME[AUTO.look] + (AUTO.notes.length ? '（' + AUTO.notes.join('・') + 'も補正）' : '');
     Object.keys(XE.autoR).forEach(function(k){ var r = XE.autoR[k]; var show = isRef ? (k === 'bright' || k === 'str' || k === 'amt') : (k === 'bright' || k === 'light' || k === 'air' || k === 'blue'); r.row.style.display = show ? '' : 'none'; if (show){ r.i.value = AUTO.macro[k]; r.v.textContent = AUTO.macro[k]; } });
-    if (isRef){ XE.autoAi.hidden = true; XE.autoSt.textContent = (AUTO.ai ? '人物の判定にAIを使用。' : '人物の判定は色から（「部分」でAIを使うと精度が上がります）。') + '色と明るさだけを見本に寄せています。光・ぼかし・粒子は今の設定のまま'; return; }
+    if (isRef){ XE.autoAi.hidden = true; XE.autoSt.textContent = (AUTO.ai ? '人物の判定にAIを使用。' : '人物の判定は色から（「範囲」でAIを使うと精度が上がります）。') + '色と明るさだけを見本に寄せています。光・ぼかし・粒子は今の設定のまま'; return; }
     XE.autoAi.textContent = 'AIで人物・主役も合わせる'; XE.lkSkinBtn.hidden = true;
     var needAi = !REG.ready && AUTO.notes.indexOf('主役') < 0;
     XE.autoAi.hidden = !needAi || AUTO.busy;
@@ -6613,7 +6613,7 @@ function tkLook2(img, n, P, w, h){
     bx.appendChild(l6Slider(A6.person ? '濃い青・背景（肌の範囲の外）' : '濃い青', 'l6DeepBg', 30, '', ''));
     if (A6.person) bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
     bx.appendChild(l6Slider('空の仕上げ（晴れは深い青・曇りは淡く）', 'l6Sky', 100, '', ''));
-    bx.appendChild(xel('div', 'hint', '空が割れる・合わない時は弱めるか0に。空の範囲は「部分 → マスク → ＋ 空」で決めると、その範囲を空として仕上げます。'));
+    bx.appendChild(xel('div', 'hint', '空が割れる・合わない時は弱めるか0に。空の範囲は「範囲 → マスク → ＋ 空」で決めると、その範囲を空として仕上げます。'));
     bx.appendChild(l6Slider('緑を青緑へ（草木を沈める）', 'l6Teal', 40, '', ''));
     bx.appendChild(l6Slider('色を落ち着かせる（赤・橙・黄・緑・赤紫）', 'l6Calm', 50, '', ''));
     if (A6.person){
@@ -6858,7 +6858,7 @@ function tkLook2(img, n, P, w, h){
     var mirror = setInterval(function(){ if (regEls.stat) st.textContent = regEls.stat.textContent; }, 300);
     (REG.ready ? Promise.resolve() : runSegmentation()).then(function(){
       clearInterval(mirror); btn.disabled = false;
-      if (REG.ready){ regOmakase(); st.textContent = '主役を立てました。ずれや強さは「部分」で直せます。'; }
+      if (REG.ready){ regOmakase(); st.textContent = '主役を立てました。ずれや強さは「範囲」で直せます。'; }
       else st.textContent = regEls.stat ? regEls.stat.textContent : '切り分けできませんでした。';
       updateIndicators();
     });
