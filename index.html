@@ -145,6 +145,17 @@
   .l6box[hidden]{display:none}
   .l6own{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0}
   .l6thumb{width:44px; height:44px; object-fit:cover; border-radius:6px}
+  .l6base{margin:2px 0 6px; padding-bottom:6px; border-bottom:1px solid var(--line-soft)}
+  .l6bt{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0 2px}
+  .l6tog{display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 12px 0 4px; border-radius:16px; border:1px solid var(--line); background:var(--surface); color:var(--muted); font:inherit; font-size:12px; cursor:pointer}
+  .l6knob{width:24px; height:24px; border-radius:50%; background:var(--line); transition:transform .15s, background .15s}
+  .l6tog.on{color:var(--ink); border-color:var(--accent)}
+  .l6tog.on .l6knob{background:var(--accent)}
+  .l6tog.on{padding:0 4px 0 12px}
+  .l6tog.on .l6knob{order:2}
+  .l6base .l6bt .rbtn{flex:0 0 auto; width:auto; height:32px; padding:0 14px; margin:0; border-radius:16px; font-size:12px}
+  .l6sel{height:32px; padding:0 28px 0 10px; border-radius:16px; border:1px solid var(--line); background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239AA6AF' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; color:var(--ink); font:inherit; font-size:12px; -webkit-appearance:none; appearance:none; cursor:pointer}
+  .l6bdet{margin:4px 0 2px; padding:4px 10px 6px; border:1px solid var(--line-soft); border-radius:10px}
   .l6sl{margin:8px 2px 4px}
   .l6slh{display:flex; justify-content:space-between; font-size:11px; color:var(--muted)}
   .l6slv{font-variant-numeric:tabular-nums; color:var(--ink)}
@@ -456,7 +467,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v121</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v122</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2900,9 +2911,52 @@ function tkL6Clarity(img, n, w, h, target, amt, WS){
     img[j] = tkClamp01(img[j] * f); img[j + 1] = tkClamp01(img[j + 1] * f); img[j + 2] = tkClamp01(img[j + 2] * f); }
 }
 // 見本1枚に寄せる：なめらか（全体の調整だけ）⇄ 強め（場所ごとに写す）を混ぜ、最後に濃い青
+
+// ベース調整（土台）：色を足す前に、露出 → ハイライト・シャドウ → ホワイトバランスを控えめに整える（自動の値。詳細で手直しできる）
+function tkL6BaseMeasure(px, n, mode, tung){
+  if (!mode) return null;
+  var S = mode === 2 ? { e: 0.9, h: 0.9, w: 0.85 } : mode === 3 ? { e: 0.6, h: 0.6, w: 0 } : mode === 4 ? { e: 0, h: 0, w: 0.5 } : { e: 0.6, h: 0.6, w: 0.5 };
+  var nN = 0, nA = 0, st = Math.max(1, Math.floor(n / 30000)), k = [0, 0, 0], Ls = [], Ys = [], NE = [];
+  var lin = function(v){ return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  for (var i = 0; i < n; i += st){ var r = px[i * 4] / 255, g = px[i * 4 + 1] / 255, b = px[i * 4 + 2] / 255; tkToOk(r, g, b, k); Ls.push(k[0]);
+    var lr = lin(r), lg = lin(g), lb = lin(b); Ys.push(0.2126 * lr + 0.7152 * lg + 0.0722 * lb);
+    var C = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C < 0.045 && k[0] > 0.3 && k[0] < 0.93){ nN++; if (i % (st * 3) === 0 || NE.length < 400) NE.push([lr, lg, lb, 1 - C / 0.045]); } nA++; }
+  Ls.sort(function(a, b){ return a - b; }); Ys.sort(function(a, b){ return a - b; });
+  var q = function(A, p){ return A[Math.min(A.length - 1, Math.floor(A.length * p))]; };
+  var Lm = q(Ls, 0.5), ev = 0;
+  // ① 露出：中央の明るさが「ふつう」の帯（0.45〜0.66）の外にある時だけ、帯の内側へ半分ほど
+  if (Lm < 0.45) ev = 3 * Math.log2((0.45 + 0.06) / Math.max(0.05, Lm));
+  else if (Lm > 0.70 && q(Ls, 0.98) > 0.97) ev = Math.max(-0.4, 3 * Math.log2(0.70 / Lm));   /* 明るい写真は明るさも雰囲気。白が飛びかけている時だけ少し下げる */
+  ev *= S.e; if (Lm < 0.32) ev *= 0.75;   /* とても暗い写真（夜・室内）は暗さの雰囲気を残す */
+  if (ev > 0) ev = Math.min(ev, Math.max(0, Math.min(3 * Math.log2(0.9 / Math.max(0.05, q(Ls, 0.95))), 3 * Math.log2(0.96 / Math.max(0.05, q(Ls, 0.99))))));   /* 小さな白い主役（暗い背景の白い花）も守る */   /* 明るい主役（白い猫・白い服）がもう十分明るい時は上げない＝白の毛並みがつぶれない */
+  if (ev > 0){ var y99 = q(Ys, 0.995); ev = Math.min(ev, Math.max(0, Math.log2(0.97 / Math.max(1e-4, y99))) + 0.35); }   /* 明るい所が飛ばない範囲まで */
+  ev = Math.max(-1, Math.min(1.2, ev));
+  // ② ハイライト・シャドウ（露出のあとの明るさで）
+  var sc = Math.pow(2, ev / 3), p98 = Math.min(1, q(Ls, 0.98) * sc), p10 = q(Ls, 0.10) * sc, hi = 0, sh = 0;
+  if (p98 > 0.92) hi = -Math.min(60, (p98 - 0.92) / 0.07 * 60) * S.h;
+  if (p10 < 0.22) sh = Math.min(45, (0.22 - p10) / 0.16 * 45) * S.h;
+  // ③ ホワイトバランス：色の少ない所の平均が灰色になる 色温度・色かぶり を探して、その一部だけ
+  var best = [0, 0], bv = 1e9, cast0 = 0, kk = [0, 0, 0];
+  var ev2 = function(te, ti){ var kr = 1 + 0.16 * te + 0.06 * ti, kg = 1 - 0.13 * ti, kb = 1 - 0.22 * te + 0.06 * ti, sa = 0, sb = 0, sw = 0;
+    for (var t = 0; t < NE.length; t++){ var e = NE[t], g2 = function(v){ v = Math.min(1, v); return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; };
+      tkToOk(g2(e[0] * kr), g2(e[1] * kg), g2(e[2] * kb), kk); sa += kk[1] * e[3]; sb += kk[2] * e[3]; sw += e[3]; }
+    sa /= Math.max(1e-6, sw); sb /= Math.max(1e-6, sw); return Math.sqrt(sa * sa + sb * sb); };
+  var te = 0, ti = 0;
+  if (NE.length > 50){ cast0 = ev2(0, 0);
+    for (var a = -0.6; a <= 0.601; a += 0.06) for (var c = -0.6; c <= 0.601; c += 0.06){ var v = ev2(a, c); if (v < bv){ bv = v; best = [a, c]; } }
+    var b0 = best.slice(); for (var a2 = b0[0] - 0.05; a2 <= b0[0] + 0.051; a2 += 0.01) for (var c2 = b0[1] - 0.05; c2 <= b0[1] + 0.051; c2 += 0.01){ var v2 = ev2(a2, c2); if (v2 < bv){ bv = v2; best = [a2, c2]; } }
+    var fw = S.w * tkSS((cast0 - 0.008) / 0.012) * tkSS(nN / Math.max(1, nA) / 0.12);   /* 灰色らしい所が少ない写真（青い海・木の机など）は色の手がかりが弱いので控える */   /* ほぼ中立の写真はさわらない */
+    if (tung > 0.3) fw *= 0.3;   /* 電球の琥珀色は残す（あとで琥珀へ整える） */
+    if (Lm < 0.32) fw *= 0.6;   /* 夜・暗い室内の色の空気は残す */
+    te = Math.max(-0.3, Math.min(0.3, best[0] * fw)); ti = Math.max(-0.15, Math.min(0.15, best[1] * fw)); }
+  return { ex: Math.round(ev * 50), hi: Math.round(hi), sh: Math.round(sh), te: Math.round(te * 100), ti: Math.round(ti * 100), m: mode, _c: [Lm, cast0, bv, nN / Math.max(1, nA)] };
+}
+function tkL6Base(img, w, h, B){ if (!B || !w || !h) return; tkBasic(img, w, h, { on: { basic: 1, wb: 1 }, bExp: B.ex, bHi: B.hi, bSh: B.sh, bTemp: B.te, bTint: B.ti }); }
+function tkL6BasePx(px, w, h, B){ if (!B) return px; var n = w * h, f = new Float32Array(n * 3); for (var i = 0; i < n; i++){ f[i * 3] = px[i * 4] / 255; f[i * 3 + 1] = px[i * 4 + 1] / 255; f[i * 3 + 2] = px[i * 4 + 2] / 255; } tkL6Base(f, w, h, B); var o = new Uint8ClampedArray(px.length); for (var j = 0; j < n; j++){ o[j * 4] = f[j * 3] * 255 + 0.5; o[j * 4 + 1] = f[j * 3 + 1] * 255 + 0.5; o[j * 4 + 2] = f[j * 3 + 2] * 255 + 0.5; o[j * 4 + 3] = px[j * 4 + 3]; } return o; }   /* 土台だけをかけた小さな写真（候補選び・採点用） */
+var L6_BASE = { on: 0, mode: 1, open: 0 }; try{ var lb0 = JSON.parse(localStorage.getItem('retouch-l6base') || 'null'); if (lb0) L6_BASE = Object.assign(L6_BASE, lb0, { open: 0 }); }catch(e){}
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
-  var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (mm6 <= 0) return; var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
+  var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (P.l6B) tkL6Base(img, w, h, P.l6B); if (mm6 <= 0) return;   /* 土台はいつも先に（「土台のみ」でも効く） */ var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
   var IT0 = (w && h && !P.l6Person) ? new Float32Array(img) : null;   /* 電球色を整える前の写真（割れ止めの手がかり） */
   var liT = P.l6Idx | 0; if (P.l6V !== 2 && TK_L6_OLD[liT] != null) liT = TK_L6_OLD[liT]; var tg6 = !P.l6Person ? tkL6Tungsten(img, img, n, P.l6Custom ? null : (TK_L6[liT] && TK_L6[liT].m), w, h, (P.l6BlueMode | 0) === 1) : 0; P._tung = tg6;   /* 電球色の写真（人物以外）：仕上げの前に、オレンジを大林さんの暖かい写真の琥珀色へ整える（青くはしない。見本選び・仕上げはこの後） */
   var ISk = (w && h) ? new Float32Array(img) : null;   /* 肌のきめを元のまま残すための元画像 */
@@ -6217,12 +6271,13 @@ function tkLook2(img, n, P, w, h){
   // 見本1枚に寄せる
   var TK_L6_DEF = { L: 60, C: 60, dark: 40, master: 100, skin: 50, prot: 85, smooth: 25 };
   var L6_GROUPS = ['person', 'plant', 'sea', 'forest', 'object', 'street', 'snow', 'still', 'night', 'evening'];
-  function l6Desc(){ var sz = sizeFor(240), px = readPixels(sz[0], sz[1]), d = tkL6Desc(px, sz[0] * sz[1], true); d.tung = tkL6TungStr(px, sz[0] * sz[1]); return d; }
+  function l6Px(w, h){ var px = readPixels(w, h); return (L6_BASE.on && P.l6B) ? tkL6BasePx(px, w, h, P.l6B) : px; }   /* 土台オンの時は、整えた写真を元に見本を選ぶ */
+  function l6Desc(){ var sz = sizeFor(240), px = l6Px(sz[0], sz[1]), d = tkL6Desc(px, sz[0] * sz[1], true); d.tung = tkL6TungStr(px, sz[0] * sz[1]); return d; }
   function l6Measure(person){
-    var sz = sizeFor(240), px = readPixels(sz[0], sz[1]);
+    var sz = sizeFor(240), px = l6Px(sz[0], sz[1]);
     return tkL6Model(px, sz[0] * sz[1], person);
   }
-  var L6_PFORCE = null;   // 人物かどうかを手で決めた時（null＝自動）。写真を変えると自動に戻る
+  var L6_PFORCE = null, L6_BASE_FRESH = false;   // 人物かどうかを手で決めた時（null＝自動）。写真を変えると自動に戻る
   function l6Person(){
     if (REG.ready && REG.det && REG.det.person < 0.45) return false;   /* AIで人が見つからない写真（猫・料理など）は人物にしない。手だけの写真も人として見つかる */
     if (REG.ready && REG.data){ try{ var mw = REG.mw, mh = REG.mh, nn = mw * mh, rp = readPixels(mw, mh), SWm = new Float32Array(nn); for (var i = 0; i < nn; i++) SWm[i] = REG.data[i * RN] / 255; var est = tkSkinFind(rp, nn, SWm, true); return !!(est && est.frac >= 0.01); }catch(e){} }
@@ -6235,6 +6290,9 @@ function tkLook2(img, n, P, w, h){
   function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 2; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Soft == null) q.l6Soft = 0; if (q.l6Clar == null) q.l6Clar = 0; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
   function applyLook6(idx, keep){
     if (!img){ toast('先に写真を選んでください'); return; }
+    var oldB = (AUTO && AUTO.l6 && keep && !L6_BASE_FRESH) ? AUTO.base : null; L6_BASE_FRESH = false;
+    if (L6_BASE.on){ if (oldB) P.l6B = oldB; else { var bsz = sizeFor(240), bpx = readPixels(bsz[0], bsz[1]); P.l6B = tkL6BaseMeasure(bpx, bsz[0] * bsz[1], L6_BASE.mode, tkL6TungStr(bpx, bsz[0] * bsz[1]) || 0); } } else P.l6B = null;
+    var keepB = P.l6B;
     var person = L6_PFORCE != null ? !!L6_PFORCE : l6Person(), T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null, person ? null : l6Desc());
     var L = TK_L6_DEF, old = (AUTO && AUTO.l6) ? AUTO : null;
     if (idx == null && old && keep && old.picked) idx = old.idx;
@@ -6244,13 +6302,13 @@ function tkLook2(img, n, P, w, h){
     if (P.mref && (P.mref.ref2 || P.mMode === 'safe')){ P.on.match = 0; P.mref = null; }
     ['basic', 'wb', 'mix', 'crv', 'cg', 'match'].forEach(syncGroup);
     if (!(old && keep)){ P.l6Mix = 0; P.l6DeepBg = 30; P.l6DeepSk = 0; P.l6Teal = 40; P.l6Calm = 50; P.l6Soft = 0; P.l6Clar = 0; P.l6Sky = 100; }   // 新しくかける時は いつも なめらか0・濃い青は背景30／肌0 から
-    l6Into(P, idx, L); P.lkSkinOff = 0; P.l6Person = person ? 1 : 0; P.l6Custom = null;
+    l6Into(P, idx, L); P.lkSkinOff = 0; P.l6Person = person ? 1 : 0; P.l6Custom = null; P.l6B = keepB;
     var mac = { bright: 0, l5Master: L.master, l6L: L.L, l6C: L.C, l6Dark: L.dark, l3Skin: L.skin, lkProt: L.prot, lkSmooth: L.smooth };
     if (old && keep){ ['l5Master', 'l6L', 'l6C', 'l6Dark', 'l3Skin', 'lkProt', 'lkSmooth'].forEach(function(k){ mac[k] = old.macro[k]; P[k === 'lkSmooth' ? '_x' : k] = old.macro[k]; }); if (old.custom){ P.l6Custom = old.custom; } }
     ['mix', 'mixL', 'mixC'].forEach(function(k){ P[k] = 100; if ($('s-' + k)){ $('s-' + k).value = 100; $('v-' + k).textContent = 100; } });
     P.on.skin = 0;   /* 見本に寄せる時は肌のなめらか処理をかけない（のっぺりの原因） */ setVal('skAmt', 30); setVal('skShift', 0); setVal('skSm', mac.lkSmooth); setVal('skTx', 65); syncGroup('skin');
     AUTO = { kind: 'lk', l3: true, l6: true, rank: tkL6Top(rank, 3), idx: idx, group: TK_L6[idx].g, custom: (old && keep) ? old.custom : null, person: person, look: 'lk', key: 'l6', label: '見本1枚に寄せる', learned: false, macro: mac, notes: [] };
-    AUTO.fullRank = rank; AUTO.picked = !!(old && keep && old.picked); if (old && keep && old.cands){ AUTO.cands = old.cands; } setTimeout(function(){ l6Judge(); }, 60);
+    AUTO.base = keepB; AUTO.baseAuto = (oldB && old && old.baseAuto) || (keepB ? Object.assign({}, keepB) : null); AUTO.fullRank = rank; AUTO.picked = !!(old && keep && old.picked); if (old && keep && old.cands){ AUTO.cands = old.cands; } setTimeout(function(){ l6Judge(); }, 60);
     try{ syncGrade(); drawCurve(); updateExtras(); }catch(e){}
     markPreset('l6'); syncAutoUI(); schedule();
     if (REG.ready){ try{ pushRegions(); }catch(e){} AUTO.ai = true; lkSkinCheck(); }
@@ -6260,7 +6318,7 @@ function tkLook2(img, n, P, w, h){
   function l6Judge(){
     if (!AUTO || !AUTO.l6 || !img) return;
     var A = AUTO, tok = A.judgeTok = (A.judgeTok || 0) + 1;
-    var sz = sizeFor(150), w = sz[0], h = sz[1], src = readPixels(w, h), rank = A.fullRank || [];
+    var sz = sizeFor(150), w = sz[0], h = sz[1], src = readPixels(w, h), rank = A.fullRank || [], srcB = P.l6B ? tkL6BasePx(src, w, h, P.l6B) : src;   /* 土台オン：整えた写真を元の写真として採点 */
     // 候補：写真に近い順の見本（同じ撮影の続きは1つに）＋ 淡い藍の見本（この雰囲気を必ず試す）
     var pool = tkL6Top(rank, 14), seen = {}; pool.forEach(function(i){ seen[i] = 1; });
     var blue = rank.filter(function(r){ var e = TK_L6[r.i]; if (seen[r.i] || !e) return false; if (A.person && e.g !== 'person') return false; var t = tkL6Traits(e.m); return t.deep > 0.6 && (e.mc == null || e.mc < 0.035); }).map(function(r){ return r.i; });
@@ -6270,9 +6328,9 @@ function tkLook2(img, n, P, w, h){
       tkL6Top(deepG.map(function(i){ return { i: i }; }), 5).forEach(function(i){ pool.push(i); }); }
     var base = JSON.parse(JSON.stringify(P)), res = [], k = 0;
     // 元の写真そのものの採点：すでに雰囲気が近いほど、足す量を減らし、変えることを減点する
-    var s0 = tkL6Score(src, src, w, h, A.person), rr = rank.length > 5 ? rank[0].d / Math.max(1e-6, rank[5].d) : 1, near = Math.max(0, Math.min(1, (0.55 - rr) / 0.35));   // 1＝元の写真が見本の1枚とほぼ同じ雰囲気（いちばん近い見本だけ飛び抜けて近い）
+    var s0 = tkL6Score(srcB, srcB, w, h, A.person), rr = rank.length > 5 ? rank[0].d / Math.max(1e-6, rank[5].d) : 1, near = Math.max(0, Math.min(1, (0.55 - rr) / 0.35));   // 1＝元の写真が見本の1枚とほぼ同じ雰囲気（いちばん近い見本だけ飛び抜けて近い）
     var amt = Math.round(100 - 65 * near); base.l5Master = amt; A.autoAmt = amt; A.near = near;
-    { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(src), w, h), 0, 0); res.push({ i: -1, px: src, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
+    { var c0 = document.createElement('canvas'); c0.width = w; c0.height = h; c0.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(srcB), w, h), 0, 0); res.push({ i: -1, px: srcB, s: s0.style + 3 * (1 - near), r: s0, url: c0.toDataURL('image/jpeg', 0.75) }); }
     A.judging = true; A.cands = null; if (XE.l6Box) l6Render();
     var bq = null, bk = 0, rmed0 = null;
     function step(){
@@ -6281,7 +6339,7 @@ function tkLook2(img, n, P, w, h){
       while (k < pool.length && Date.now() - t0 < 60){
         var c = pool[k++], q = JSON.parse(JSON.stringify(base)); q.l6Idx = c; q.l6V = 2; q.l6Custom = null; q.l6BlueMode = 0;
         try{
-          var out = tkProcess(src, w, h, q), sc = tkL6Score(src, out, w, h, A.person);
+          var out = tkProcess(src, w, h, q), sc = tkL6Score(srcB, out, w, h, A.person);
           var cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out), w, h), 0, 0);
           res.push({ i: c, px: out, s: sc.score, r: sc, url: cv.toDataURL('image/jpeg', 0.75) });
         }catch(e){}
@@ -6296,7 +6354,7 @@ function tkLook2(img, n, P, w, h){
       if (!A.person && !bq){ bq = []; var tgJ = (A.fullRank && l6Desc().tung) || 0; res.filter(function(x){ return x.i >= 0; }).slice(0, 2).forEach(function(x){ (tgJ > 0.3 ? [1] : [1, 2, 3]).forEach(function(m){ bq.push({ i: x.i, bm: m }); }); }); }
       while (bq && bk < bq.length && Date.now() - t0 < 60){
         var bc = bq[bk++], qb = JSON.parse(JSON.stringify(base)); qb.l6Idx = bc.i; qb.l6V = 2; qb.l6Custom = null; qb.l6BlueMode = bc.bm;
-        try{ var ob = tkProcess(src, w, h, qb), sb = tkL6Score(src, ob, w, h, A.person); var cvb = document.createElement('canvas'); cvb.width = w; cvb.height = h; cvb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(ob), w, h), 0, 0);
+        try{ var ob = tkProcess(src, w, h, qb), sb = tkL6Score(srcB, ob, w, h, A.person); var cvb = document.createElement('canvas'); cvb.width = w; cvb.height = h; cvb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(ob), w, h), 0, 0);
           var xb = { i: bc.i, bm: bc.bm, px: ob, s: 0, r: sb, url: cvb.toDataURL('image/jpeg', 0.75) }; xb.s = adj(xb) - TK_L6_BLUEPREF; res.push(xb); }catch(e){}
       }
       if (bq && bk < bq.length){ setTimeout(step, 0); return; }
@@ -6562,6 +6620,51 @@ function tkLook2(img, n, P, w, h){
     var BMN = ['', '＋青影', '＋中間', '＋青光'];
     function cn(i, bm){ var e = TK_L6[i], g = TK_L6_GN[e.g].split('・').pop(); return (bm ? ['', '青影', '中間', '青光'][bm] + '・' : '') + g + pos[i] + ' ' + e.d; }   // 候補の短い名前（青の入れ方を先に）
     // 写真の種類：色だけの判定は、オレンジの猫・薄ピンクの花などを人物と間違えることがある → 手で直せる
+    // ベース調整（土台）：オンにすると、整えた写真を元に候補を作り直す
+    (function(){
+      var bb = xel('div', 'l6base'), save = function(){ try{ localStorage.setItem('retouch-l6base', JSON.stringify({ on: L6_BASE.on, mode: L6_BASE.mode })); }catch(e){} };
+      var rebuild = function(){ L6_BASE_FRESH = true; if (AUTO) AUTO.picked = false; applyLook6(null, true); };
+      bb.appendChild(xel('div', 'l5oldh', 'ベース調整（色を足す前に、明るさと色かぶりを整える）'));
+      var top = xel('div', 'l6bt');
+      var tg = xel('button', 'l6tog' + (L6_BASE.on ? ' on' : '')); tg.type = 'button'; tg.setAttribute('role', 'switch'); tg.setAttribute('aria-checked', L6_BASE.on ? 'true' : 'false');
+      tg.appendChild(xel('span', 'l6knob')); tg.appendChild(xel('span', 'l6togt', L6_BASE.on ? 'オン' : 'オフ'));
+      tg.addEventListener('click', function(){ L6_BASE.on = L6_BASE.on ? 0 : 1; save(); rebuild(); });
+      top.appendChild(tg);
+      if (L6_BASE.on){
+        var sel = document.createElement('select'); sel.className = 'l6sel'; sel.setAttribute('aria-label', '整え方');
+        [[1, 'おまかせ'], [3, '明るさだけ'], [4, '色かぶりだけ'], [2, 'しっかり']].forEach(function(o){ var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; if ((L6_BASE.mode | 0) === o[0]) op.selected = true; sel.appendChild(op); });
+        sel.addEventListener('change', function(){ L6_BASE.mode = +sel.value; save(); rebuild(); });
+        top.appendChild(sel);
+        top.appendChild(xbtn(L6_BASE.open ? '詳細を閉じる' : '詳細', 'ghost', function(){ L6_BASE.open = L6_BASE.open ? 0 : 1; l6Render(); }));
+      }
+      bb.appendChild(top);
+      if (!L6_BASE.on){ bb.appendChild(xel('div', 'hint', 'オフ：今まで通り、元の写真から候補を作ります。')); bx.appendChild(bb); return; }
+      var B = P.l6B || { ex: 0, hi: 0, sh: 0, te: 0, ti: 0 };
+      var MH = { 1: '暗さ・白飛び・色かぶりを控えめに', 3: '露出とハイライト・シャドウだけ（色はそのまま）', 4: 'ホワイトバランスだけ（電球の琥珀色は残す）', 2: '中立の近くまで戻してから寄せる' };
+      bb.appendChild(xel('div', 'hint', MH[L6_BASE.mode | 0] + '。整えた写真を元に候補を作り直します。'));
+      if (L6_BASE.open && AUTO){
+        var tmr = null, later = function(){ clearTimeout(tmr); tmr = setTimeout(function(){ if (!AUTO || !AUTO.l6) return; AUTO.base = Object.assign({}, P.l6B); l6Judge(); }, 500); };
+        var bs = function(lab, key, mn, mx, fmt){
+          var row = xel('div', 'l6sl'), hd = xel('div', 'l6slh'), v = xel('span', 'l6slv'), val = B[key] || 0, f = fmt || function(x){ return (x > 0 ? '+' : '') + x; };
+          v.textContent = f(val); hd.appendChild(xel('span', '', lab)); hd.appendChild(v); row.appendChild(hd);
+          var rg = document.createElement('input'); rg.type = 'range'; rg.min = mn; rg.max = mx; rg.value = val;
+          rg.addEventListener('input', function(){ if (!P.l6B) P.l6B = Object.assign({}, B); P.l6B[key] = +rg.value; v.textContent = f(+rg.value); schedule(); });
+          rg.addEventListener('change', later);
+          rg.addEventListener('dblclick', function(){ var d = (AUTO.baseAuto || {})[key] || 0; if (!P.l6B) P.l6B = Object.assign({}, B); P.l6B[key] = d; rg.value = d; v.textContent = f(d); schedule(); later(); });
+          row.appendChild(rg); return row; };
+        var dt = xel('div', 'l6bdet');
+        dt.appendChild(bs('露出', 'ex', -100, 100, function(x){ return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x / 50).toFixed(1) + '段'; }));
+        dt.appendChild(bs('ハイライト', 'hi', -100, 100));
+        dt.appendChild(bs('シャドウ', 'sh', -100, 100));
+        dt.appendChild(bs('色温度（−青 ／ ＋黄）', 'te', -60, 60));
+        dt.appendChild(bs('色かぶり（−緑 ／ ＋赤紫）', 'ti', -40, 40));
+        var rr = xel('div', 'rrow'); rr.appendChild(xbtn('自動の値に戻す', 'ghost', function(){ P.l6B = Object.assign({}, AUTO.baseAuto || B); AUTO.base = Object.assign({}, P.l6B); schedule(); l6Judge(); }));
+        dt.appendChild(rr);
+        dt.appendChild(xel('div', 'hint', '自動で決まった値から手で直せます（ダブルタップで自動の値）。指を離すと、その土台で候補を作り直します。選んだ見本はそのまま。'));
+        bb.appendChild(dt);
+      }
+      bx.appendChild(bb);
+    })();
     bx.appendChild(xel('div', 'l5oldh', '1. 写真の種類' + (L6_PFORCE == null ? '（自動で判定・違う時は押して直す）' : '')));
     var pfr = xel('div', 'rrow');
     [['人物', 1], ['人物でない', 0]].forEach(function(b){ pfr.appendChild(xbtn(b[0], (A6.person ? 1 : 0) === b[1] ? 'pri' : 'ghost', function(){ L6_PFORCE = b[1]; applyLook6(null, false); })); });
@@ -6574,7 +6677,7 @@ function tkLook2(img, n, P, w, h){
       A6.cands.slice(0, showN).forEach(function(c, r){
         var isOn = c.i < 0 ? !!A6.keep : (!A6.custom && !A6.keep && A6.idx === c.i && (P.l6BlueMode | 0) === (c.bm | 0)); var b = xel('button', 'l6cand' + (isOn ? ' on' : '')); b.type = 'button'; b.title = c.i < 0 ? '元のまま' : nm(c.i) + BMN[c.bm | 0];
         var im = document.createElement('img'); im.src = c.url; im.alt = ''; b.appendChild(im);
-        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + (c.i < 0 ? '元のまま（足さない）' : cn(c.i, c.bm | 0))));
+        b.appendChild(xel('span', 'l6cl', (r === 0 ? '★ ' : '') + (c.i < 0 ? (P.l6B ? '土台のみ（色は足さない）' : '元のまま（足さない）') : cn(c.i, c.bm | 0))));
         b.addEventListener('click', function(){ l6Pick(c.i, c.i < 0 ? null : (c.bm | 0)); }); gridC.appendChild(b);
       });
       bx.appendChild(gridC);
