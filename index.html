@@ -314,9 +314,11 @@
   .app:not(.expanded) .panel #g-cg .hint{display:none}
   .cgsel .cgnm{font-size:11px; color:var(--faint); letter-spacing:.06em; min-width:5.5em; text-align:right; white-space:nowrap}
   .cgmain{display:flex; gap:14px; align-items:center}
-  .cgwheel{position:relative; flex:none; width:min(142px,38vw); aspect-ratio:1; touch-action:none; cursor:crosshair}
-  .cgwheel canvas{width:100%; height:100%; display:block; border-radius:50%}
+  .cgwheel{position:relative; flex:none; width:min(160px,42vw); aspect-ratio:1; touch-action:none; cursor:crosshair}
+  .cgwheel canvas{position:absolute; left:9px; top:9px; width:calc(100% - 18px); height:calc(100% - 18px); display:block; border-radius:50%}
   .cgmk{position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%; border:2.5px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4); pointer-events:none}
+  .cgrk{position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.5), 0 1px 4px rgba(0,0,0,.4); pointer-events:none}
+  .cgwheel.grab{cursor:grabbing}
   .cgcol{flex:1; min-width:0; display:flex; flex-direction:column; gap:6px}
   .cgtop{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted)}
   .cgrow input[type=range]{width:100%; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:rgba(255,255,255,.18); outline:none; margin:6px 0 4px}
@@ -467,7 +469,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v122</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v123</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4101,9 +4103,9 @@ function tkLook2(img, n, P, w, h){
   var saving = false;
   $('save').addEventListener('click', function(){ openExport(); });
   // ---- 書き出し画面：サイズ（Instagram／高画質）・フチ（色・線幅・比率）・共有 ----
-  var XP = { base: null, blob: null, gen: 0, timer: null, size: 'ig', color: '#ffffff', width: 0, ratio: 'even', open: false, cs: 'p3', n: 1 };
-  try{ var xs = JSON.parse(localStorage.getItem('retouch-export') || 'null'); if (xs){ ['size', 'color', 'width', 'ratio', 'cs'].forEach(function(k){ if (xs[k] != null) XP[k] = xs[k]; }); } }catch(e){}
-  function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio, cs: XP.cs })); }catch(e){} }
+  var XP = { base: null, blob: null, plain: null, gen: 0, timer: null, size: 'ig', color: '#ffffff', width: 0, ratio: 'even', open: false, cs: 'p3', n: 1, both: 1 };
+  try{ var xs = JSON.parse(localStorage.getItem('retouch-export') || 'null'); if (xs){ ['size', 'color', 'width', 'ratio', 'cs', 'both'].forEach(function(k){ if (xs[k] != null) XP[k] = xs[k]; }); } }catch(e){}
+  function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio, cs: XP.cs, both: XP.both })); }catch(e){} }
   function xpRatios(){ return [['even', '均等', null], ['1:1', '1:1', 1], ['2:3', '2:3', 2 / 3], ['3:2', '3:2', 1.5], ['4:5', '4:5', 0.8], ['3:4', '3:4', 0.75], ['5:4', '5:4', 1.25]]; }
   function xpColors(){ return ['#ffffff', '#d6d6d6', '#8a8a8a', '#4a4a4a', '#000000', '#141414', '#3b302c', '#8b5e43']; }
   function buildExportUI(){
@@ -4146,6 +4148,9 @@ function tkLook2(img, n, P, w, h){
       b.addEventListener('click', function(){ XP.ratio = d[0]; xpChanged(); }); rr.appendChild(b); XE.xpR.push(b);
     });
     s3.appendChild(rr);
+    var sb = sec('フチなしの写真'), seg4 = xel('div', 'seg'); XE.xpB = [];
+    [[1, 'フチなしも一緒に書き出す'], [0, 'フチありだけ']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.both = d[0]; xpChanged(); }); seg4.appendChild(b); XE.xpB.push(b); });
+    sb.appendChild(seg4); sb.appendChild(xel('div', 'hint', 'フチをつけた時だけ、同じ仕上げのフチなし（写真だけ）も2枚目として保存します。'));
     m.querySelector('.xclose').addEventListener('click', closeExport);
     m.querySelector('.xshare').addEventListener('click', xpShare);
     // スポイト：プレビューの写真をタップ
@@ -4162,6 +4167,7 @@ function tkLook2(img, n, P, w, h){
     XE.xpSize.forEach(function(b){ b.classList.toggle('on', b.dataset.m === XP.size); });
     (XE.xpCs || []).forEach(function(b){ b.classList.toggle('on', b.dataset.m === XP.cs); });
     (XE.xpN || []).forEach(function(b){ b.classList.toggle('on', +b.dataset.m === (XP.n || 1)); });
+    (XE.xpB || []).forEach(function(b){ b.classList.toggle('on', +b.dataset.m === (XP.both ? 1 : 0)); });
     XE.xpSw.concat([XE.xpCustom]).forEach(function(b){ b.classList.toggle('on', b.dataset.c === XP.color); });
     if (xpColors().indexOf(XP.color) < 0 && XP.color){ XE.xpCustom.dataset.c = XP.color; XE.xpCustom.style.background = XP.color; XE.xpCustom.hidden = false; XE.xpCustom.classList.add('on'); }
     XE.xpW.value = XP.width; XE.xpWv.textContent = XP.width;
@@ -4187,10 +4193,10 @@ function tkLook2(img, n, P, w, h){
   function closeExport(){ XP.open = false; $('xmodal').hidden = true; XE.xpPicking = false; if (XE.xpPick) XE.xpPick.classList.remove('on'); }
   // 仕上がりの組み立て：写真の周りにフチ。比率を選ぶと、その比率の台紙の中央に写真を置く
   function xpCS(){ return CS_P3 && XP.cs !== 'srgb' ? 'display-p3' : 'srgb'; }
-  function xpCompose(maxOut, base){
-    var b = base || XP.base, pw = b.width, ph = b.height, bw = XP.width / 100 * 0.1 * Math.max(pw, ph);
-    var R = (xpRatios().filter(function(d){ return d[0] === XP.ratio; })[0] || [0, 0, null])[2];
-    var NS = XP.n || 1; if (NS > 1){ var Rs = R && (R === 0.8 || R === 0.75 || R === 1) ? R : 0.8; R = Rs * NS; }   // カルーセル：1枚の比率×枚数
+  function xpCompose(maxOut, base, plain){
+    var b = base || XP.base, pw = b.width, ph = b.height, bw = plain ? 0 : XP.width / 100 * 0.1 * Math.max(pw, ph);
+    var R = plain ? null : (xpRatios().filter(function(d){ return d[0] === XP.ratio; })[0] || [0, 0, null])[2];
+    var NS = plain ? 1 : (XP.n || 1); if (NS > 1){ var Rs = R && (R === 0.8 || R === 0.75 || R === 1) ? R : 0.8; R = Rs * NS; }   // カルーセル：1枚の比率×枚数
     var W = pw + bw * 2, H = ph + bw * 2;
     if (R){ if (W / H > R) H = W / R; else W = H * R; }
     var k = XP.size === 'ig' ? 1080 * NS / W : Math.min(1, 3000 * NS / Math.max(W, H / NS));
@@ -4199,12 +4205,15 @@ function tkLook2(img, n, P, w, h){
     var x = c.getContext('2d', { colorSpace: xpCS() }); x.fillStyle = XP.color; x.fillRect(0, 0, c.width, c.height);
     x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
     var dw = pw * k, dh = ph * k; x.drawImage(b, Math.round((c.width - dw) / 2), Math.round((c.height - dh) / 2), Math.round(dw), Math.round(dh));
-    return { c: c, W: c.width, H: c.height };
+    return { c: c, W: c.width, H: c.height, border: W > pw + 0.5 || H > ph + 0.5 };
   }
+  // フチがある時（線幅か比率の台紙）＝フチなしも一緒に書き出す対象
+  function xpHasBorder(){ if (!XP.base) return false; var pw = XP.base.width, ph = XP.base.height; if (XP.width > 0) return true; var R = (xpRatios().filter(function(d){ return d[0] === XP.ratio; })[0] || [0, 0, null])[2]; if ((XP.n || 1) > 1) return true; return !!R && Math.abs(pw / ph - R) > 0.002; }
+  function xpWantPlain(){ return !!XP.both && (XP.n || 1) <= 1 && xpHasBorder(); }
   // 書き出す1枚を作る（フチ・サイズ・Instagram用の仕上げシャープ・色の範囲）→ JPEG
-  function xpFinal(base){
+  function xpFinal(base, plain){
     return new Promise(function(res){
-      var r = xpCompose(0, base), c = r.c;
+      var r = xpCompose(0, base, plain), c = r.c;
       if (XP.size === 'ig'){
         // Instagram用：縮小で甘くなった輪郭を、画面向けに軽く締める
         var x = c.getContext('2d', { colorSpace: xpCS() }), id = x.getImageData(0, 0, r.W, r.H), d = id.data, n = r.W * r.H, f = new Float32Array(n * 3);
@@ -4213,7 +4222,7 @@ function tkLook2(img, n, P, w, h){
         for (i = 0; i < n; i++){ d[i * 4] = f[i * 3] * 255 + 0.5; d[i * 4 + 1] = f[i * 3 + 1] * 255 + 0.5; d[i * 4 + 2] = f[i * 3 + 2] * 255 + 0.5; }
         x.putImageData(id, 0, 0);
       }
-      var NS = XP.n || 1, q = XP.size === 'ig' ? 0.92 : 0.94;
+      var NS = plain ? 1 : (XP.n || 1), q = XP.size === 'ig' ? 0.92 : 0.94;
       if (NS <= 1){ c.toBlob(function(bl){ res({ blob: bl, W: r.W, H: r.H }); }, 'image/jpeg', q); return; }
       // カルーセル：同じ幅で切り分ける（つなぎ目がずれないよう、幅は整数で割り切る）
       var sw = Math.floor(r.W / NS), parts = [], done = 0;
@@ -4228,43 +4237,44 @@ function tkLook2(img, n, P, w, h){
     if (!XP.base) return;
     var pv = xpCompose(900), cv = $('xcv'); cv.width = pv.W; cv.height = pv.H; cv.getContext('2d', { colorSpace: CS }).drawImage(pv.c, 0, 0);
     if ((XP.n || 1) > 1){ var px2 = cv.getContext('2d', { colorSpace: CS }); px2.save(); px2.strokeStyle = 'rgba(255,255,255,.85)'; px2.setLineDash([6, 6]); px2.lineWidth = 1.5; for (var ci = 1; ci < XP.n; ci++){ var lx = Math.round(pv.W * ci / XP.n) + 0.5; px2.beginPath(); px2.moveTo(lx, 0); px2.lineTo(lx, pv.H); px2.stroke(); } px2.restore(); }
-    XP.blob = null; $('xmodal').classList.remove('ready');
+    XP.blob = null; XP.plain = null; $('xmodal').classList.remove('ready');
     var my = ++XP.gen; clearTimeout(XP.timer);
     XP.timer = setTimeout(function(){
       xpFinal(XP.base).then(function(res){ var bl = res.blob, r = res;
 
         if (my !== XP.gen) return;
-        XP.blob = bl; XP.blobs = res.blobs || null; $('xmodal').classList.add('ready');
+        var wp = xpWantPlain();
+        (wp ? xpFinal(XP.base, true) : Promise.resolve(null)).then(function(rp){ if (my !== XP.gen) return; XP.plain = rp ? rp.blob : null; XP.blob = bl; XP.blobs = res.blobs || null; $('xmodal').classList.add('ready');
         var ar = r.W / r.H, ok = ar >= 0.745 && ar <= 1.92;
         $('xstat').innerHTML = '';
-        $('xstat').appendChild(xel('span', 'num', (XP.blobs ? XP.blobs.length + '枚 ・ 各' : '') + r.W + ' × ' + r.H + 'px ・ ' + Math.round((res.size || bl.size) / 1024) + 'KB ・ ' + (xpCS() === 'display-p3' ? 'P3' : 'sRGB')));
+        $('xstat').appendChild(xel('span', 'num', (XP.blobs ? XP.blobs.length + '枚 ・ 各' : '') + r.W + ' × ' + r.H + 'px ・ ' + Math.round((res.size || bl.size) / 1024) + 'KB ・ ' + (xpCS() === 'display-p3' ? 'P3' : 'sRGB') + (XP.plain ? ' ・ ＋フチなし' : '')));
         if (XP.size === 'ig') $('xstat').appendChild(xel('span', ok ? 'ok' : 'ng', ok ? 'Instagram：そのまま載せられます' : 'Instagram：この比率は切れます（フチの比率を4:5か3:4に）'));
-      });
+        }); });
     }, 160);
   }
   function xpShare(){
     if (!XP.blob){ toast('準備中です。少し待ってからもう一度'); return; }
     try{ autoLearn(); }catch(e){}   // 保存・共有＝これで完成。おまかせからの調整を好みとして学ぶ
-    var name = 'retouch_' + stamp() + (XP.size === 'ig' ? '_ig' : '') + '.jpg', blob = XP.blob;
-    if (XP.blobs && XP.blobs.length > 1){
-      var base = 'retouch_' + stamp() + '_', files = XP.blobs.map(function(b, i){ try{ return new File([b], base + (i + 1) + '.jpg', { type: 'image/jpeg' }); }catch(e){ return null; } });
-      if (downloads){ files.reduce(function(pr, f, i){ return pr.then(function(){ return downloads.save({ filename: base + (i + 1) + '.jpg', data: XP.blobs[i] }); }); }, Promise.resolve()).then(function(){ toast(files.length + '枚を保存しました'); }).catch(function(){ toast('保存できませんでした'); }); return; }
-      if (files[0] && navigator.canShare && navigator.canShare({ files: files })){ navigator.share({ files: files }).then(function(){ toast(files.length + '枚を共有しました'); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); }); return; }
-      XP.blobs.forEach(function(b, i){ var u = URL.createObjectURL(b), a2 = document.createElement('a'); a2.href = u; a2.download = base + (i + 1) + '.jpg'; document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(function(){ URL.revokeObjectURL(u); }, 4000); });
-      toast(files.length + '枚を保存しました'); return;
-    }
+    // 書き出すファイルの一覧（カルーセルは分けた枚数、フチあり＋フチなし は2枚）
+    var st = stamp(), sfx = XP.size === 'ig' ? '_ig' : '', L;
+    if (XP.blobs && XP.blobs.length > 1) L = XP.blobs.map(function(bl, i){ return { blob: bl, name: 'retouch_' + st + '_' + (i + 1) + '.jpg' }; });
+    else { L = [{ blob: XP.blob, name: 'retouch_' + st + sfx + '.jpg' }]; if (XP.plain) L.push({ blob: XP.plain, name: 'retouch_' + st + sfx + '_nofuchi.jpg' }); }
+    var N = L.length, msg = function(v){ return N > 1 ? N + '枚を' + v : v.replace(/^を/, ''); };
+    var done = function(t){ toast(t); closeExport(); };   // 書き出しが終わったら編集画面へ戻る
     if (downloads){
-      downloads.save({ filename: name, data: blob }).then(function(r){ toast(r && r.status === 'delivered' ? '受け渡しました' : '保存しました'); }).catch(function(e){ var c = e && e.code; toast(c === 'declined' ? 'キャンセルしました' : '保存できませんでした'); });
+      L.reduce(function(pr, f){ return pr.then(function(r0){ return downloads.save({ filename: f.name, data: f.blob }).then(function(r1){ return r1 || r0; }); }); }, Promise.resolve(null))
+        .then(function(r){ done(r && r.status === 'delivered' ? msg('受け渡しました') : msg('保存しました')); })
+        .catch(function(e){ var c = e && e.code; toast(c === 'declined' ? 'キャンセルしました' : '保存できませんでした'); });
       return;
     }
-    var file = null; try{ file = new File([blob], name, { type: 'image/jpeg' }); }catch(e){}
-    if (file && navigator.canShare && navigator.canShare({ files: [file] })){
+    var files = L.map(function(f){ try{ return new File([f.blob], f.name, { type: 'image/jpeg' }); }catch(e){ return null; } });
+    if (files.every(Boolean) && navigator.canShare && navigator.canShare({ files: files })){
       // 共有シート：「画像を保存」で写真アプリへ、Instagramを選べばそのまま投稿へ
-      navigator.share({ files: [file] }).then(function(){ toast('共有しました'); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); });
-    } else {
-      var url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function(){ URL.revokeObjectURL(url); }, 4000); toast('保存しました');
+      navigator.share({ files: files }).then(function(){ done(msg('共有しました')); }, function(e){ if (e && e.name !== 'AbortError') toast('共有できませんでした'); });
+      return;
     }
+    L.forEach(function(f){ var u = URL.createObjectURL(f.blob), a2 = document.createElement('a'); a2.href = u; a2.download = f.name; document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(function(){ URL.revokeObjectURL(u); }, 4000); });
+    done(msg('保存しました'));
   }
   function finishSave(blob){
     if (!blob){ endSave(); toast('書き出しに失敗しました'); return; }
@@ -4795,24 +4805,44 @@ function tkLook2(img, n, P, w, h){
       row.appendChild(top); row.appendChild(r); col.appendChild(row); XE.cgRows[d[0]] = { r: r, v: vv, row: row };
     });
     main.appendChild(wbox); main.appendChild(col); wrap.appendChild(main); body.appendChild(wrap);
-    // ホイールの操作：なぞると色相（向き）と強さ（中心からの距離）。ダブルタップで中心に戻す
-    var dragging = false, last = 0;
+    // ホイールの操作（Lightroomと同じ）：
+    //  ・外周のつまみ … 色相だけを回す（強さはそのまま）
+    //  ・中の丸をつかむ … いま選んでいる色相の線の上だけを動く（強さだけ変わる）
+    //  ・それ以外の場所 … 押した所へ（色相と強さ）
+    //  中心に戻すとスナップして軽く振動。ダブルタップで中心に戻す
+    var rk = xel('div', 'cgrk'); wbox.appendChild(rk); XE.cgRk = rk;
+    var dragging = false, last = 0, mode = 'free', snapped = false;
+    function geo(e){ var rc = cv.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2, R = rc.width / 2, dx = e.clientX - cx, dy = cy - e.clientY; return { dx: dx, dy: dy, R: R, d: Math.hypot(dx, dy) / R }; }
+    function snapS(sv){ var inS = sv < 6; if (inS && !snapped) cgHaptic(); snapped = inS; return inS ? 0 : sv; }   /* 中心の近く（強さ6未満）は0へ吸いつく */
     function setFrom(e){
-      var rc = cv.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2, R = rc.width / 2;
-      var dx = e.clientX - cx, dy = cy - e.clientY, a = Math.atan2(dy, dx) * 180 / Math.PI; if (a < 0) a += 360;
-      var d = Math.min(1, Math.hypot(dx, dy) / R);
-      P['cg' + XE.cgSel + 'H'] = Math.round(a) % 360; P['cg' + XE.cgSel + 'S'] = Math.round(d * 100);
+      var g = geo(e), kH = 'cg' + XE.cgSel + 'H', kS = 'cg' + XE.cgSel + 'S';
+      if (mode === 'hue'){ var a = Math.atan2(g.dy, g.dx) * 180 / Math.PI; if (a < 0) a += 360; P[kH] = Math.round(a) % 360; return; }
+      if (mode === 'line'){ var h = (P[kH] || 0) * Math.PI / 180, t = (g.dx * Math.cos(h) + g.dy * Math.sin(h)) / g.R; P[kS] = snapS(Math.round(Math.max(0, Math.min(1, t)) * 100)); return; }
+      var a2 = Math.atan2(g.dy, g.dx) * 180 / Math.PI; if (a2 < 0) a2 += 360; var sv = snapS(Math.round(Math.min(1, g.d) * 100));
+      if (sv > 0) P[kH] = Math.round(a2) % 360; P[kS] = sv;   /* 中心では色相を変えない（選んでいる色相を残す） */
     }
     wbox.addEventListener('pointerdown', function(e){
       if (XE.cgSel === 'x') return;
       e.preventDefault(); wbox.setPointerCapture(e.pointerId);
       var now = Date.now();
-      if (now - last < 320){ P['cg' + XE.cgSel + 'H'] = 0; P['cg' + XE.cgSel + 'S'] = 0; last = 0; afterGrade(true); return; }
-      last = now; dragging = true; setFrom(e); afterGrade(false);
+      if (now - last < 320){ P['cg' + XE.cgSel + 'S'] = 0; last = 0; cgHaptic(); afterGrade(true); return; }
+      last = now; dragging = true;
+      var g = geo(e), h = (P['cg' + XE.cgSel + 'H'] || 0) * Math.PI / 180, sv = (P['cg' + XE.cgSel + 'S'] || 0) / 100;
+      var mx = Math.cos(h) * sv * g.R, my = Math.sin(h) * sv * g.R, near = Math.hypot(g.dx - mx, g.dy - my) < Math.max(16, g.R * 0.2);
+      var kx = Math.cos(h) * (g.R + 6), ky = Math.sin(h) * (g.R + 6), nearK = Math.hypot(g.dx - kx, g.dy - ky) < Math.max(16, g.R * 0.2);
+      mode = nearK ? 'hue' : near ? 'line' : (g.d > 1 ? 'hue' : 'free');   /* 円の外側（外周の帯）は色相だけ */ snapped = sv === 0;
+      wbox.classList.toggle('grab', mode !== 'free');
+      if (mode === 'free'){ setFrom(e); afterGrade(false); }
     });
     wbox.addEventListener('pointermove', function(e){ if (!dragging) return; startSliding(wrap); setFrom(e); afterGrade(false); });
-    function up(){ dragging = false; }
+    function up(){ dragging = false; wbox.classList.remove('grab'); }
     wbox.addEventListener('pointerup', up); wbox.addEventListener('pointercancel', up);
+  }
+  // 軽い振動：Android は vibrate、iPhone（iOS 18以降）は「スイッチ」の切り替えで出る触覚を使う
+  var CG_HAP = null;
+  function cgHaptic(){
+    try{ if (navigator.vibrate && navigator.vibrate(8)) return; }catch(e){}
+    try{ if (!CG_HAP){ CG_HAP = document.createElement('label'); CG_HAP.setAttribute('aria-hidden', 'true'); CG_HAP.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0'; var ip = document.createElement('input'); ip.type = 'checkbox'; ip.setAttribute('switch', ''); ip.tabIndex = -1; CG_HAP.appendChild(ip); document.body.appendChild(CG_HAP); } CG_HAP.click(); }catch(e){}
   }
   function afterGrade(full){ P.on.cg = 1; syncGroup('cg'); clearPresetMark(); syncGrade(); schedule(); }
   var CG_IMG = CG_IMG || { size: 0, data: null };
@@ -4853,8 +4883,9 @@ function tkLook2(img, n, P, w, h){
     if (!isX){
       drawWheel();
       var h = P['cg' + sel + 'H'] || 0, s = (P['cg' + sel + 'S'] || 0) / 100, a = h * Math.PI / 180;
-      XE.cgMk.style.left = (50 + Math.cos(a) * s * 50) + '%'; XE.cgMk.style.top = (50 - Math.sin(a) * s * 50) + '%';
+      XE.cgMk.style.left = 'calc(50% + ' + (Math.cos(a) * s).toFixed(4) + ' * (50% - 9px))'; XE.cgMk.style.top = 'calc(50% - ' + (Math.sin(a) * s).toFixed(4) + ' * (50% - 9px))';
       XE.cgMk.style.background = s ? 'hsl(' + h + ',70%,' + (85 - s * 30) + '%)' : '#fff';
+      if (XE.cgRk){ XE.cgRk.style.left = 'calc(50% + ' + Math.cos(a).toFixed(4) + ' * (50% - 3px))'; XE.cgRk.style.top = 'calc(50% - ' + Math.sin(a).toFixed(4) + ' * (50% - 3px))'; XE.cgRk.style.background = 'hsl(' + h + ',75%,55%)'; }
     }
   }
   // ---- トリミング・回転・傾き補正・反転（表示と書き出しの最後にかける。加工の計算はトリミング前の全体で行う） ----
