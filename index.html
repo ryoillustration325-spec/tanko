@@ -76,7 +76,23 @@
   body.dragging .stage{outline:2px dashed var(--accent); outline-offset:-8px}
   .chip{position:absolute; top:10px; background:rgba(13,15,17,.72); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
     border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:4px 10px; font-size:11px; color:#E6EBEF; display:none}
-  .chip.left{left:10px}
+  .chip.left{left:10px; pointer-events:auto; cursor:pointer}
+  .chip .ax{margin-left:7px; color:rgba(230,235,239,.38)}
+  .chip .ax.out{color:#F0B47E}
+  .chip .axc{display:inline-flex; align-items:center}
+  .axd{display:inline-block; width:8px; height:8px; border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.25); vertical-align:0}
+  .chip .ax.out .axd, .axrow.out .axd{box-shadow:0 0 0 1.5px #F0B47E}
+  .chip .axl{display:inline-block; width:8px; height:1.5px; margin:0 0 3px 4px; background:#F0B47E; vertical-align:middle}
+  .axpane{margin-top:12vh}
+  .axrow{padding:9px 2px; border-bottom:1px solid var(--line-soft)}
+  .axh{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; color:var(--ink)}
+  .axh .num{color:var(--muted); font-size:12px}
+  .axrow.out .axh .num{color:#F0B47E}
+  .axbar{position:relative; height:6px; margin:8px 0 4px; border-radius:3px; background:rgba(255,255,255,.08)}
+  .axband{position:absolute; top:0; bottom:0; border-radius:3px; background:rgba(255,255,255,.28)}
+  .axmk{position:absolute; top:-3px; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px var(--surface)}
+  .axrow.out .axmk{background:#F0B47E}
+  .axr{font-size:10.5px; color:var(--faint)}
   .chip .warn{color:#F0B47E}
   .busy{position:absolute; left:50%; top:10px; transform:translateX(-50%); white-space:nowrap; font-size:11px; color:#E6EBEF; background:rgba(13,15,17,.78);
     border-radius:14px; padding:4px 10px; display:none}
@@ -473,7 +489,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v125</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v126</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2960,6 +2976,46 @@ function tkL6BaseMeasure(px, n, mode, tung){
 function tkL6Base(img, w, h, B){ if (!B || !w || !h) return; tkBasic(img, w, h, { on: { basic: 1, wb: 1 }, bExp: B.ex, bHi: B.hi, bSh: B.sh, bTemp: B.te, bTint: B.ti }); }
 function tkL6BasePx(px, w, h, B){ if (!B) return px; var n = w * h, f = new Float32Array(n * 3); for (var i = 0; i < n; i++){ f[i * 3] = px[i * 4] / 255; f[i * 3 + 1] = px[i * 4 + 1] / 255; f[i * 3 + 2] = px[i * 4 + 2] / 255; } tkL6Base(f, w, h, B); var o = new Uint8ClampedArray(px.length); for (var j = 0; j < n; j++){ o[j * 4] = f[j * 3] * 255 + 0.5; o[j * 4 + 1] = f[j * 3 + 1] * 255 + 0.5; o[j * 4 + 2] = f[j * 3 + 2] * 255 + 0.5; o[j * 4 + 3] = px[j * 4 + 3]; } return o; }   /* 土台だけをかけた小さな写真（候補選び・採点用） */
 var L6_BASE = { on: 0, mode: 1, open: 0 }; try{ var lb0 = JSON.parse(localStorage.getItem('retouch-l6base') || 'null'); if (lb0) L6_BASE = Object.assign(L6_BASE, lb0, { open: 0 }); }catch(e){}
+
+// ---- ギャラリーの軸（見本のばらつき＝許容範囲。写真ごとに外れていないかを見るだけ。自動では直さない） ----
+var TK_AX = null;
+function tkAxRanges(){
+  if (TK_AX) return TK_AX;
+  var P2 = [], P50 = [], P98 = [], MC = [], SH = [], HI = [];
+  TK_L6.forEach(function(e){ if (!e || !e.m || !e.m._q) return; var q = e.m._q; P2.push(q[0]); P50.push(q[3]); P98.push(q[6]); if (e.mc != null) MC.push(e.mc);
+    try{ var cs = tkL6Cast(e.m, 0.25), ch = tkL6Cast(e.m, 0.85); SH.push([cs[0], cs[1]]); HI.push([ch[0], ch[1]]); }catch(x){} });
+  var band = function(A){ var a = A.slice().sort(function(x, y){ return x - y; }); var lo = a[Math.floor(a.length * 0.05)], hi = a[Math.floor(a.length * 0.95)], m = (hi - lo) * 0.1; return [Math.max(0, lo - m), Math.min(1, hi + m)]; };   /* 目安なので緩め：見本の9割が収まる幅＋少しの余裕 */
+  TK_AX = { mid: band(P50), wh: band(P98), bk: band(P2), sat: band(MC), sh: SH, hi: HI };
+  return TK_AX;
+}
+function tkAxHueName(a, b){ var C = Math.sqrt(a * a + b * b); if (C < 0.006) return '無彩'; var h = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360; return h < 40 || h >= 330 ? '赤紫' : h < 100 ? '暖' : h < 160 ? '緑' : h < 210 ? '青緑' : '青藍'; }
+// 色かぶり（a,b）が見本の分布の中か：近くに見本が4枚以上あれば範囲内。同じ色の仲間の見本の9割より強ければ「強すぎ」
+function tkAxCastJudge(c, S){
+  if (!c) return { ok: true, none: true };
+  var C = Math.sqrt(c[0] * c[0] + c[1] * c[1]); if (C < 0.006) return { ok: true, C: C, name: '無彩' };
+  var near = 0, same = [], h = Math.atan2(c[1], c[0]);
+  S.forEach(function(s){ var d = Math.hypot(s[0] - c[0], s[1] - c[1]); if (d < 0.014) near++; var Cs = Math.hypot(s[0], s[1]); if (Cs >= 0.006){ var dh = Math.abs(Math.atan2(s[1], s[0]) - h); if (dh > Math.PI) dh = 2 * Math.PI - dh; if (dh < Math.PI / 6) same.push(Cs); } });
+  same.sort(function(x, y){ return x - y; }); var lim = same.length >= 4 ? same[Math.floor(same.length * 0.9)] : 0;
+  var strong = lim > 0 && C > lim * 1.25 + 0.006, ok = near >= 2 && !strong;   /* 緩め：近くに見本が2枚あれば範囲内、強さは上限の1.25倍まで */
+  return { ok: ok, C: C, name: tkAxHueName(c[0], c[1]), why: ok ? '' : (strong ? '強すぎ' : '見本にない色'), lim: lim };
+}
+function tkAxMeasure(px, n){
+  var st = Math.max(1, Math.floor(n / 40000)), k = [0, 0, 0], H = new Float64Array(256), HC = new Float64Array(200), cnt = 0, sa = 0, sb = 0, sn = 0, ha = 0, hb = 0, hn = 0;
+  for (var i = 0; i < n; i += st){ var j = i * 4; tkToOk(px[j] / 255, px[j + 1] / 255, px[j + 2] / 255, k); var L = k[0], C = Math.sqrt(k[1] * k[1] + k[2] * k[2]);
+    H[Math.max(0, Math.min(255, (L * 255) | 0))]++; HC[Math.min(199, (C * 1000) | 0)]++; cnt++;
+    if (L > 0.12 && L < 0.38 && C < 0.15){ var w0 = 1 - C / 0.15; sa += k[1] * w0; sb += k[2] * w0; sn += w0; }   /* 影：暗い所のうち色の薄い所 */
+    if (L > 0.72 && L < 0.97 && C < 0.12){ var w1 = 1 - C / 0.12; ha += k[1] * w1; hb += k[2] * w1; hn += w1; }   /* 光：明るい所のうち色の薄い所（雲・壁・白い物。青空や花は入れない） */ }
+  var qq = function(p){ var t = p * cnt, s = 0; for (var b = 0; b < 256; b++){ s += H[b]; if (s >= t) return b / 255; } return 1; };
+  var mc = (function(){ var s = 0; for (var b = 0; b < 200; b++){ s += HC[b]; if (s >= cnt / 2) return b / 1000; } return 0.2; })();
+  return { p2: qq(0.02), p50: qq(0.5), p98: qq(0.98), mc: mc, sh: sn > cnt * 0.003 ? [sa / sn, sb / sn] : null, hi: hn > cnt * 0.003 ? [ha / hn, hb / hn] : null };   /* 色の薄い所ほど重く（電球色のように全体が色づいた写真も測れる） */
+}
+function tkAxJudge(M){
+  var R = tkAxRanges(), ar = function(v, b){ return v < b[0] ? -1 : v > b[1] ? 1 : 0; };
+  var J = { mid: ar(M.p50, R.mid), wh: ar(M.p98, R.wh), bk: ar(M.p2, R.bk), sat: ar(M.mc, R.sat), sh: tkAxCastJudge(M.sh, R.sh), hi: tkAxCastJudge(M.hi, R.hi), opp: false };
+  if (M.sh && M.hi && J.sh.C > 0.015 && J.hi.C > 0.015){ var d = Math.abs(Math.atan2(M.sh[1], M.sh[0]) - Math.atan2(M.hi[1], M.hi[0])); if (d > Math.PI) d = 2 * Math.PI - d; J.opp = d > 130 * Math.PI / 180; }   /* 影と光が反対の色（青い影×暖かい光など）＝見本ではほぼない */
+  return J;
+}
+function tkAxDot(c){ if (!c) return 'rgba(255,255,255,.25)'; var o = [0, 0, 0]; tkFromOk(0.72, c[0] * 4, c[1] * 4, o); return 'rgb(' + [o[0], o[1], o[2]].map(function(v){ return Math.round(Math.max(0, Math.min(1, v)) * 255); }).join(',') + ')'; }   /* 点の色：今の色かぶりを4倍にして見やすく */
 function tkLook6(img, n, P, w, h){
   // 全体の量（元の写真をどれだけ残すか）は、濃い青・淡さも含めて最後にまとめて
   var mm6 = (P.l5Master == null ? 100 : P.l5Master) / 100; if (P.l6B) tkL6Base(img, w, h, P.l6B); if (mm6 <= 0) return;   /* 土台はいつも先に（「土台のみ」でも効く） */ var I06 = mm6 < 1 ? new Float32Array(img) : null; P = Object.assign({}, P, { l5Master: 100 });
@@ -4031,6 +4087,7 @@ function tkLook2(img, n, P, w, h){
   var busyExport = false;
   function showBusy(t){ if (busyExport) return; $('busy').textContent = t; $('busy').style.display = 'block'; }
   function hideBusy(){ if (busyExport) return; $('busy').style.display = 'none'; }
+  var AX_LAST = null;
   function updateBadge(out, n){
     var sum = 0, clip = 0;
     for (var i = 0; i < n; i++){
@@ -4040,8 +4097,49 @@ function tkLook2(img, n, P, w, h){
     }
     var cp = clip / n * 100, bd = $('badge');
     bd.textContent = '明るさ ' + Math.round(sum / n / 255 * 100);
+    // ギャラリーの軸：↓低い →範囲内 ↑高い（範囲内は薄く、外れた所だけ橙）。影・光は今の色の点（外れたら橙の縁）
+    try{
+      var M = tkAxMeasure(out, n), J = tkAxJudge(M); AX_LAST = { M: M, J: J };
+      var arw = function(v, lab){ var s = document.createElement('span'); s.className = 'ax' + (v ? ' out' : ''); s.textContent = (lab ? lab + ' ' : '') + (v < 0 ? '↓' : v > 0 ? '↑' : '→'); return s; };
+      bd.appendChild(arw(J.mid, '')); bd.appendChild(arw(J.wh, '白')); bd.appendChild(arw(J.bk, '黒')); bd.appendChild(arw(J.sat, '彩'));
+      var dot = function(c, j, lab){ var s = document.createElement('span'); s.className = 'ax axc' + (j.ok ? '' : ' out'); s.appendChild(document.createTextNode(lab + ' ')); var d = document.createElement('i'); d.className = 'axd'; d.style.background = tkAxDot(c); s.appendChild(d); return s; };
+      bd.appendChild(dot(M.sh, J.sh, '影'));
+      if (J.opp){ var ln = document.createElement('span'); ln.className = 'axl'; bd.appendChild(ln); }
+      bd.appendChild(dot(M.hi, J.hi, '光'));
+    }catch(e){}
     if (cp >= 0.5){ var s = document.createElement('span'); s.className = 'warn'; s.textContent = '  白飛 ' + cp.toFixed(1) + '%'; bd.appendChild(s); }
+    if (AX_OPEN) axRender();
   }
+  // 表示を押すと：各項目の許容範囲（見本の8割の幅）と今の値
+  var AX_OPEN = false;
+  function axRender(){
+    var box = $('axBox'); if (!box || !AX_LAST) return; var M = AX_LAST.M, J = AX_LAST.J, R = tkAxRanges(), body = box.querySelector('.axrows'); body.innerHTML = '';
+    var row = function(lab, v, band, lo, hi, j, fmt){
+      var rw = xel('div', 'axrow' + (j ? ' out' : '')), hd = xel('div', 'axh'); hd.appendChild(xel('span', '', lab)); hd.appendChild(xel('span', 'num', fmt(v) + '  ' + (j < 0 ? '↓ 低い' : j > 0 ? '↑ 高い' : '→ 範囲内'))); rw.appendChild(hd);
+      var bar = xel('div', 'axbar'), bnd = xel('i', 'axband'), mk = xel('i', 'axmk'), p = function(x){ return Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100)); };
+      bnd.style.left = p(band[0]) + '%'; bnd.style.width = (p(band[1]) - p(band[0])) + '%'; mk.style.left = p(v) + '%'; bar.appendChild(bnd); bar.appendChild(mk); rw.appendChild(bar);
+      rw.appendChild(xel('div', 'axr', '範囲 ' + fmt(band[0]) + '〜' + fmt(band[1]))); body.appendChild(rw); };
+    var f2 = function(x){ return (x * 100).toFixed(0); }, f3 = function(x){ return (x * 1000).toFixed(0); };
+    row('明るさ（中央）', M.p50, R.mid, 0, 1, J.mid, f2);
+    row('白（いちばん明るい所）', M.p98, R.wh, 0.5, 1, J.wh, f2);
+    row('黒（いちばん暗い所）', M.p2, R.bk, 0, 0.5, J.bk, f2);
+    row('彩（鮮やかさ）', M.mc, R.sat, 0, 0.08, J.sat, f3);
+    var crow = function(lab, c, j){ var rw = xel('div', 'axrow' + (j.ok ? '' : ' out')), hd = xel('div', 'axh'), l = xel('span', ''), d = xel('i', 'axd'); d.style.background = tkAxDot(c); l.appendChild(document.createTextNode(lab + ' ')); l.appendChild(d); hd.appendChild(l);
+      hd.appendChild(xel('span', 'num', j.none ? '測れる所がない' : (j.name + (j.C >= 0.006 ? '・強さ ' + f3(j.C) : '') + '  ' + (j.ok ? '→ 範囲内' : '× ' + j.why)))); rw.appendChild(hd);
+      if (!j.none && j.lim) rw.appendChild(xel('div', 'axr', '同じ色の見本の上限 ' + f3(j.lim))); body.appendChild(rw); };
+    crow('影の色', M.sh, J.sh); crow('光の色', M.hi, J.hi);
+    var pr = xel('div', 'axrow' + (J.opp ? ' out' : '')), ph = xel('div', 'axh'); ph.appendChild(xel('span', '', '影と光の関係')); ph.appendChild(xel('span', 'num', J.opp ? '× 反対の色（見本ではほぼない）' : '→ 同じか隣の色')); pr.appendChild(ph); body.appendChild(pr);
+  }
+  function axOpen(){
+    var box = $('axBox');
+    if (!box){ box = document.createElement('div'); box.id = 'axBox'; box.className = 'fmodal';
+      box.innerHTML = '<div class="fpane axpane"><div class="fhead"><div class="ftitle">ギャラリーの軸</div><button class="fclose" type="button">閉じる</button></div><div class="axrows"></div><div class="hint">灰色の帯＝見本の写真の9割が収まる幅（少し余裕あり）。方向を見るための目安で、外れても間違いではありません。自動では直しません。</div></div>';
+      document.body.appendChild(box); var cl = function(){ AX_OPEN = false; box.hidden = true; };
+      box.querySelector('.fclose').addEventListener('click', cl); box.addEventListener('click', function(e){ if (e.target === box) cl(); }); }
+    AX_OPEN = true; box.hidden = false; axRender();
+  }
+  $('badge').addEventListener('click', function(e){ e.stopPropagation(); axOpen(); });
+  $('badge').addEventListener('pointerdown', function(e){ e.stopPropagation(); });
 
   // 長押しで元画像
   var cmp = $('cmp');
