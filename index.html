@@ -102,7 +102,7 @@
   .axmk{position:absolute; top:-3px; width:11px; height:11px; margin-left:-5.5px; border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px rgba(13,15,17,.9)}
   .axrow.out .axmk{background:#F0B47E}
   .chip .warn{color:#F0B47E}
-  .busy{position:absolute; left:50%; top:10px; transform:translateX(-50%); white-space:nowrap; font-size:11px; color:#E6EBEF; background:rgba(13,15,17,.78);
+  .busy{position:absolute; right:10px; top:10px; white-space:nowrap; font-size:11px; border:1px solid rgba(255,255,255,.1); line-height:1.55; color:#E6EBEF; background:rgba(13,15,17,.78);
     border-radius:14px; padding:4px 10px; display:none}
   #size{display:none !important}
 
@@ -497,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v130</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v131</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4066,7 +4066,7 @@ function tkLook2(img, n, P, w, h){
     if (!q) return;
     busy = true;
     var myGen = gen;
-    if (kind === 'hi') showBusy('高精細で表示中…');
+    if (kind === 'hi') showBusy('読み込み中…');
     runJob(q.src, q.w, q.h, snap(P)).then(function(out){
       busy = false;
       if (kind === 'hi') hideBusy();
@@ -4093,7 +4093,8 @@ function tkLook2(img, n, P, w, h){
     present();
   }
   var busyExport = false;
-  function showBusy(t){ if (busyExport) return; $('busy').textContent = t; $('busy').style.display = 'block'; }
+  function showBusy(t){ if (busyExport) return; var bz = $('busy'), bd = $('badge'); bz.textContent = t; bz.style.top = ''; bz.style.display = 'block';
+    try{ if (bd && bd.offsetParent && bd.getBoundingClientRect().right + 6 > bz.getBoundingClientRect().left) bz.style.top = '44px'; }catch(e){} }   /* 明るさの表示が長い時（白飛びの警告つき）は、重ならないよう1段下へ */
   function hideBusy(){ if (busyExport) return; $('busy').style.display = 'none'; }
   var AX_LAST = null;
   function updateBadge(out, n){
