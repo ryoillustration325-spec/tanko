@@ -83,16 +83,24 @@
   .axd{display:inline-block; width:8px; height:8px; border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.25); vertical-align:0}
   .chip .ax.out .axd, .axrow.out .axd{box-shadow:0 0 0 1.5px #F0B47E}
   .chip .axl{display:inline-block; width:8px; height:1.5px; margin:0 0 3px 4px; background:#F0B47E; vertical-align:middle}
-  .axpane{margin-top:12vh}
-  .axrow{padding:9px 2px; border-bottom:1px solid var(--line-soft)}
-  .axh{display:flex; justify-content:space-between; gap:8px; font-size:12.5px; color:var(--ink)}
-  .axh .num{color:var(--muted); font-size:12px}
-  .axrow.out .axh .num{color:#F0B47E}
-  .axbar{position:relative; height:6px; margin:8px 0 4px; border-radius:3px; background:rgba(255,255,255,.08)}
-  .axband{position:absolute; top:0; bottom:0; border-radius:3px; background:rgba(255,255,255,.28)}
-  .axmk{position:absolute; top:-3px; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px var(--surface)}
+  .histo{max-height:calc(100% - 60px); overflow:auto}
+  .axsec{margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,.1)}
+  .axtop{display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:10.5px; color:var(--faint); margin-bottom:2px}
+  .axtt{color:var(--muted); font-weight:600; white-space:nowrap}
+  .axlg{display:inline-flex; align-items:center; gap:4px; white-space:nowrap}
+  .axsw{display:inline-block; width:14px; height:5px; border-radius:3px; background:rgba(255,255,255,.3)}
+  .axrow{padding:5px 0 3px}
+  .axh{display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--ink)}
+  .axst{color:var(--faint); font-size:10.5px; white-space:nowrap}
+  .axrow.out .axst{color:#F0B47E}
+  .axline{display:flex; align-items:center; gap:6px; margin-top:4px}
+  .axe{font-size:9.5px; color:var(--faint); width:3.4em; flex:none}
+  .axline .axbar{margin:0 4px}
+  .axe:last-child{text-align:right}
+  .axbar{position:relative; flex:1; height:5px; border-radius:3px; background:rgba(255,255,255,.08)}
+  .axband{position:absolute; top:0; bottom:0; border-radius:3px; background:rgba(255,255,255,.3)}
+  .axmk{position:absolute; top:-3px; width:11px; height:11px; margin-left:-5.5px; border-radius:50%; background:var(--ink); box-shadow:0 0 0 2px rgba(13,15,17,.9)}
   .axrow.out .axmk{background:#F0B47E}
-  .axr{font-size:10.5px; color:var(--faint)}
   .chip .warn{color:#F0B47E}
   .busy{position:absolute; left:50%; top:10px; transform:translateX(-50%); white-space:nowrap; font-size:11px; color:#E6EBEF; background:rgba(13,15,17,.78);
     border-radius:14px; padding:4px 10px; display:none}
@@ -489,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v126</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v127</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4108,38 +4116,27 @@ function tkLook2(img, n, P, w, h){
       bd.appendChild(dot(M.hi, J.hi, '光'));
     }catch(e){}
     if (cp >= 0.5){ var s = document.createElement('span'); s.className = 'warn'; s.textContent = '  白飛 ' + cp.toFixed(1) + '%'; bd.appendChild(s); }
-    if (AX_OPEN) axRender();
+    axRender();
   }
-  // 表示を押すと：各項目の許容範囲（見本の8割の幅）と今の値
-  var AX_OPEN = false;
+  // 表示を押すと（ヒストグラムと同じ欄の下に）：各項目が見本の写真の多くが入る幅のどこにいるか
   function axRender(){
-    var box = $('axBox'); if (!box || !AX_LAST) return; var M = AX_LAST.M, J = AX_LAST.J, R = tkAxRanges(), body = box.querySelector('.axrows'); body.innerHTML = '';
-    var row = function(lab, v, band, lo, hi, j, fmt){
-      var rw = xel('div', 'axrow' + (j ? ' out' : '')), hd = xel('div', 'axh'); hd.appendChild(xel('span', '', lab)); hd.appendChild(xel('span', 'num', fmt(v) + '  ' + (j < 0 ? '↓ 低い' : j > 0 ? '↑ 高い' : '→ 範囲内'))); rw.appendChild(hd);
-      var bar = xel('div', 'axbar'), bnd = xel('i', 'axband'), mk = xel('i', 'axmk'), p = function(x){ return Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100)); };
-      bnd.style.left = p(band[0]) + '%'; bnd.style.width = (p(band[1]) - p(band[0])) + '%'; mk.style.left = p(v) + '%'; bar.appendChild(bnd); bar.appendChild(mk); rw.appendChild(bar);
-      rw.appendChild(xel('div', 'axr', '範囲 ' + fmt(band[0]) + '〜' + fmt(band[1]))); body.appendChild(rw); };
-    var f2 = function(x){ return (x * 100).toFixed(0); }, f3 = function(x){ return (x * 1000).toFixed(0); };
-    row('明るさ（中央）', M.p50, R.mid, 0, 1, J.mid, f2);
-    row('白（いちばん明るい所）', M.p98, R.wh, 0.5, 1, J.wh, f2);
-    row('黒（いちばん暗い所）', M.p2, R.bk, 0, 0.5, J.bk, f2);
-    row('彩（鮮やかさ）', M.mc, R.sat, 0, 0.08, J.sat, f3);
-    var crow = function(lab, c, j){ var rw = xel('div', 'axrow' + (j.ok ? '' : ' out')), hd = xel('div', 'axh'), l = xel('span', ''), d = xel('i', 'axd'); d.style.background = tkAxDot(c); l.appendChild(document.createTextNode(lab + ' ')); l.appendChild(d); hd.appendChild(l);
-      hd.appendChild(xel('span', 'num', j.none ? '測れる所がない' : (j.name + (j.C >= 0.006 ? '・強さ ' + f3(j.C) : '') + '  ' + (j.ok ? '→ 範囲内' : '× ' + j.why)))); rw.appendChild(hd);
-      if (!j.none && j.lim) rw.appendChild(xel('div', 'axr', '同じ色の見本の上限 ' + f3(j.lim))); body.appendChild(rw); };
+    var box = $('histo'); if (!box || box.hidden || !AX_LAST) return; var body = box.querySelector('.axsec'); if (!body) return;
+    var M = AX_LAST.M, J = AX_LAST.J, R = tkAxRanges(); body.innerHTML = '';
+    var hd = xel('div', 'axtop'); hd.appendChild(xel('span', 'axtt', 'ギャラリーの目安')); var lg = xel('span', 'axlg'); lg.appendChild(xel('i', 'axsw')); lg.appendChild(document.createTextNode('＝見本の多くが入る幅')); hd.appendChild(lg); body.appendChild(hd);
+    var row = function(lab, v, band, lo, hi, j, l0, l1, s0, s1){
+      var rw = xel('div', 'axrow' + (j ? ' out' : '')), h = xel('div', 'axh'); h.appendChild(xel('span', '', lab)); h.appendChild(xel('span', 'axst', j < 0 ? s0 : j > 0 ? s1 : 'ちょうどいい')); rw.appendChild(h);
+      var ln = xel('div', 'axline'), bar = xel('div', 'axbar'), bnd = xel('i', 'axband'), mk = xel('i', 'axmk'), p = function(x){ return Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100)); };
+      bnd.style.left = p(band[0]) + '%'; bnd.style.width = Math.max(2, p(band[1]) - p(band[0])) + '%'; mk.style.left = p(v) + '%'; bar.appendChild(bnd); bar.appendChild(mk);
+      ln.appendChild(xel('span', 'axe', l0)); ln.appendChild(bar); ln.appendChild(xel('span', 'axe', l1)); rw.appendChild(ln); body.appendChild(rw); };
+    row('明るさ', M.p50, R.mid, 0, 1, J.mid, '暗い', '明るい', '暗すぎ', '明るすぎ');
+    row('白（いちばん明るい所）', M.p98, R.wh, 0.4, 1, J.wh, 'くすむ', '飛ぶ', 'くすみすぎ', '飛びかけ');
+    row('黒（いちばん暗い所）', M.p2, R.bk, 0, 0.6, J.bk, '締まる', '浮く', '潰れぎみ', '浮きすぎ');
+    row('彩（鮮やかさ）', M.mc, R.sat, 0, 0.1, J.sat, '淡い', '鮮やか', '色が抜けすぎ', '鮮やかすぎ');
+    var crow = function(lab, c, j){ var rw = xel('div', 'axrow' + (j.ok ? '' : ' out')), h = xel('div', 'axh'), l = xel('span', ''), d = xel('i', 'axd'); d.style.background = tkAxDot(c); l.appendChild(document.createTextNode(lab + ' ')); l.appendChild(d); h.appendChild(l);
+      h.appendChild(xel('span', 'axst', j.none ? '測れる所がない' : (j.name === '無彩' ? 'ほぼ無彩色・' : j.name + 'み・') + (j.ok ? 'ちょうどいい' : j.why))); rw.appendChild(h); body.appendChild(rw); };
     crow('影の色', M.sh, J.sh); crow('光の色', M.hi, J.hi);
-    var pr = xel('div', 'axrow' + (J.opp ? ' out' : '')), ph = xel('div', 'axh'); ph.appendChild(xel('span', '', '影と光の関係')); ph.appendChild(xel('span', 'num', J.opp ? '× 反対の色（見本ではほぼない）' : '→ 同じか隣の色')); pr.appendChild(ph); body.appendChild(pr);
+    if (J.opp){ var pr = xel('div', 'axrow out'), ph = xel('div', 'axh'); ph.appendChild(xel('span', '', '影と光')); ph.appendChild(xel('span', 'axst', '反対の色（見本ではほぼない）')); pr.appendChild(ph); body.appendChild(pr); }
   }
-  function axOpen(){
-    var box = $('axBox');
-    if (!box){ box = document.createElement('div'); box.id = 'axBox'; box.className = 'fmodal';
-      box.innerHTML = '<div class="fpane axpane"><div class="fhead"><div class="ftitle">ギャラリーの軸</div><button class="fclose" type="button">閉じる</button></div><div class="axrows"></div><div class="hint">灰色の帯＝見本の写真の9割が収まる幅（少し余裕あり）。方向を見るための目安で、外れても間違いではありません。自動では直しません。</div></div>';
-      document.body.appendChild(box); var cl = function(){ AX_OPEN = false; box.hidden = true; };
-      box.querySelector('.fclose').addEventListener('click', cl); box.addEventListener('click', function(e){ if (e.target === box) cl(); }); }
-    AX_OPEN = true; box.hidden = false; axRender();
-  }
-  $('badge').addEventListener('click', function(e){ e.stopPropagation(); axOpen(); });
-  $('badge').addEventListener('pointerdown', function(e){ e.stopPropagation(); });
 
   // 長押しで元画像
   var cmp = $('cmp');
@@ -5173,14 +5170,14 @@ function tkLook2(img, n, P, w, h){
   }
   function buildHisto(){
     var box = xel('div', 'histo'); box.id = 'histo'; box.hidden = true;
-    box.innerHTML = '<canvas></canvas><div class="hrow"><span class="hlo num"></span><button type="button" class="hclip">写真に色で表示</button><span class="hhi num"></span></div>';
+    box.innerHTML = '<canvas></canvas><div class="hrow"><span class="hlo num"></span><button type="button" class="hclip">写真に色で表示</button><span class="hhi num"></span></div><div class="axsec"></div>';
     $('stage').appendChild(box);
     box.querySelector('.hclip').addEventListener('click', function(e){ e.stopPropagation(); CLIPON = !CLIPON; this.classList.toggle('on', CLIPON); if (last) draw(last); });
     box.addEventListener('pointerdown', function(e){ e.stopPropagation(); }); box.addEventListener('pointerup', function(e){ e.stopPropagation(); });
     var bd = $('badge'); bd.style.cursor = 'pointer'; bd.style.pointerEvents = 'auto';
     bd.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
     bd.addEventListener('pointerup', function(e){ e.stopPropagation(); });
-    bd.addEventListener('click', function(e){ e.stopPropagation(); box.hidden = !box.hidden; if (!box.hidden) drawHisto(); else if (CLIPON){ CLIPON = false; box.querySelector('.hclip').classList.remove('on'); if (last) draw(last); } });
+    bd.addEventListener('click', function(e){ e.stopPropagation(); box.hidden = !box.hidden; if (!box.hidden){ drawHisto(); axRender(); } else if (CLIPON){ CLIPON = false; box.querySelector('.hclip').classList.remove('on'); if (last) draw(last); } });
   }
   function showOriginalPixels(){ fullCtx.putImageData(mkImageData(new Uint8ClampedArray(hi.src), hi.w, hi.h), 0, 0); present(); }
   // トリミング枠
