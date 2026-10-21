@@ -140,7 +140,7 @@
   .tab.on svg{stroke:var(--accent)}
   .tab i{position:absolute; top:9px; right:calc(50% - 16px)}
   .toast{position:fixed; left:50%; top:calc(64px + env(safe-area-inset-top,0px)); transform:translateX(-50%); background:var(--ink); color:var(--bg);
-    padding:9px 16px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:30; max-width:90vw; text-align:center}
+    padding:9px 16px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:30; max-width:calc(100vw - 24px); text-align:center; box-shadow:0 4px 14px rgba(0,0,0,.35)}
   .toast.show{opacity:1}
   /* パネルの中のグループ（カードではなく、区切り線で並べる） */
   .panel .group{background:transparent; border:0; border-radius:0; margin:0; border-bottom:1px solid var(--line-soft)}
@@ -497,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v129</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v130</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -7203,7 +7203,14 @@ function tkLook2(img, n, P, w, h){
   setTimeout(function(){ var on = false; try{ on = localStorage.getItem('retouch-aiauto') === '1'; }catch(e){} if (!on) return; aiCachedCount().then(function(c){ if (c >= 0 && c < aiFiles().length) aiPrepare(true); }); }, 4000);   // 自動準備（ONの時だけ）
 
   var tt = null;
-  function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
+  // メッセージは右上（上の操作ボタンの段）に出す＝左上の明るさ表示・目安の欄・写真と重ならない
+  function toastPlace(t){
+    t.style.top = ''; t.style.bottom = ''; t.style.left = ''; t.style.right = ''; t.style.transform = '';
+    if (window.matchMedia && window.matchMedia('(min-width:900px), (min-width:600px) and (orientation:landscape)').matches) return;
+    var tb = document.querySelector('.topbar'), y = 10; if (tb){ var r = tb.getBoundingClientRect(); y = Math.max(4, r.top + (r.height - 38) / 2); }
+    t.style.top = Math.round(y) + 'px'; t.style.left = 'auto'; t.style.right = '12px'; t.style.transform = 'none';
+  }
+  function toast(msg){ var t = $('toast'); t.textContent = msg; toastPlace(t); t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
 })();
 </script>
 <script>
