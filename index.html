@@ -27,6 +27,10 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0; height:100%; background:var(--bg); overflow:hidden}
+  /* 長押しで文字の選択・コピーのメニューが出ないように（スライダー・トリミング中も）。入力欄だけは選べる */
+  body{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
+  img, canvas{-webkit-touch-callout:none; -webkit-user-drag:none}
+  input[type=text], input[type=number], input[type=search], textarea, [contenteditable]{-webkit-user-select:text; user-select:text; -webkit-touch-callout:default}
   body{background:var(--bg); color:var(--ink); font-family:var(--f-ui); -webkit-font-smoothing:antialiased; line-height:1.55;
     -webkit-tap-highlight-color:transparent; overflow:hidden; overscroll-behavior:none}
   .num{font-family:var(--f-num); font-variant-numeric:tabular-nums}
@@ -469,7 +473,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v124</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v125</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4768,6 +4772,11 @@ function tkLook2(img, n, P, w, h){
   document.addEventListener('input', function(e){ if (slDown && e.target && e.target.type === 'range') startSliding(e.target.closest('.row') || e.target); }, true);
   ['pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(function(t){ document.addEventListener(t, stopSliding, true); });
   window.addEventListener('blur', stopSliding);
+  // 長押しのメニュー（コピー・調べる）と、なぞった時の文字選択を止める（入力欄は除く）
+  (function(){ var editable = function(t){ return t && t.closest && t.closest('input[type=text],input[type=number],input[type=search],textarea,[contenteditable]'); };
+    document.addEventListener('contextmenu', function(e){ if (!editable(e.target)) e.preventDefault(); });
+    document.addEventListener('selectstart', function(e){ if (!editable(e.target)) e.preventDefault(); });
+    document.addEventListener('selectionchange', function(){ var a = document.activeElement; if (editable(a)) return; var sl = window.getSelection && window.getSelection(); if (sl && sl.rangeCount && !sl.isCollapsed) sl.removeAllRanges(); }); })();
   // ---- カラーグレーディング（ホイール＋連動スライダー） ----
   // グループ作成時に呼ばれるので、表は関数で返す（変数だとまだ用意されていない）
   function cgRanges(){ return [['s', 'シャドウ'], ['m', '中間調'], ['h', 'ハイライト'], ['g', '全体'], ['x', '境目と配分']]; }
