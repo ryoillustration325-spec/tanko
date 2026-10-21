@@ -119,7 +119,7 @@
   .topbar,.tabbar{transition:opacity .22s ease}
   .app.immersive .topbar,.app.immersive .tabbar{opacity:0; pointer-events:none}
   .app.immersive .sheet{transform:translateY(105%) !important; opacity:0; pointer-events:none}
-  .app.immersive .chip{opacity:0}
+  .app.immersive .chip,.app.immersive .histo{opacity:0; pointer-events:none}   /* 写真だけの時はヒストグラム・目安も隠す */
   .app.collapsed .grab::before{background:rgba(255,255,255,.5)}
   .sheet .row input[type=range]{background:rgba(255,255,255,.18)}
   .sheet .group.off .gbody{opacity:.5}
@@ -497,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v128</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v129</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
