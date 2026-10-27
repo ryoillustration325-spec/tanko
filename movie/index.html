@@ -37,7 +37,7 @@
   .pill:disabled{opacity:.4}
   .pill input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer; font-size:100px}
   .stage{position:relative; min-height:0; margin:0 12px; border-radius:14px; background:#050607; overflow:hidden; display:flex; align-items:center; justify-content:center}
-  #gl{max-width:100%; max-height:100%; display:block}
+  #gl{width:100%; height:100%; object-fit:contain; display:block}
   .drop{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:24px; color:var(--muted); font-size:13px}
   .drop .mark{width:64px; height:64px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent)}
   .drop[hidden]{display:none}
@@ -87,7 +87,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v2</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v3</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -185,11 +185,11 @@ function pickLook(lk){
 // ---------- 画面の処理（GPU）：色の対応表（3D LUT）＋グロー・ハレーション・にじみ・ミスト・粒子・周辺光量 ----------
 // photo retouch の写真の処理と同じ順・同じ考え方（広がりは画面の長辺に対する割合）
 class Renderer {
-  constructor(canvas){
+  constructor(canvas, opt){
     const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false });
     if (!gl) throw new Error('webgl2');
     this.gl = gl; this.cv = canvas; this.lut = null; this.N = 0; this.fbo = {};
-    this.half = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
+    this.half = !(opt && opt.low) && (!!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float'));   /* プレビューはふつうの精度（軽く・どの端末でも動く）、書き出しだけ高精度 */
     const VS = `#version 300 es
 in vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0., 1.); }`;
     const prog = (fs) => { const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
@@ -238,6 +238,8 @@ void main(){ vec3 c = texture(col, uv).rgb;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && this.half){   /* 高精度の描き込みに対応していない端末は、ふつうの精度で作り直す */
+      gl.deleteTexture(tex); gl.deleteFramebuffer(fb); for (const k in this.fbo){ gl.deleteTexture(this.fbo[k].tex); gl.deleteFramebuffer(this.fbo[k].fb); } this.fbo = {}; this.half = false; return this.target(name, w, h, mip); }
     t = this.fbo[name] = { tex, fb, w, h, lv }; return t;
   }
   draw(pr, tgt, w, h, uni, texs){ const gl = this.gl; gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER, tgt ? tgt.fb : null); gl.viewport(0, 0, w, h);
@@ -276,14 +278,19 @@ void main(){ vec3 c = texture(col, uv).rgb;
 }
 
 let GLR;
-try{ GLR = new Renderer($('gl')); }catch(e){ toast('この端末では画面の処理（WebGL2）が使えません'); console.error(e); }
+try{ GLR = new Renderer($('gl'), { low: true }); }catch(e){ toast('この端末では画面の処理（WebGL2）が使えません'); console.error(e); }
 
 // ---------- プレビュー（再生中は毎フレーム、止まっている時は動かした時だけ描き直す） ----------
-const video = document.createElement('video'); video.muted = true; video.playsInline = true; video.setAttribute('playsinline', ''); video.preload = 'auto'; video.loop = true; video.crossOrigin = 'anonymous';
+const video = document.createElement('video'); video.muted = true; video.playsInline = true; video.setAttribute('playsinline', ''); video.setAttribute('muted', ''); video.preload = 'auto'; video.loop = true;
+// iPhone は画面に置いていない動画のコマを用意しないことがあるので、見えない大きさで画面に置く
+video.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1'; document.body.appendChild(video);
+// 動画のコマはいったん2Dの画面に描いてからGPUへ（iPhoneでは動画を直接GPUへ渡すと黒くなることがある。HDRの動画もここで普通の色に）
+const fcv = document.createElement('canvas'), fctx = fcv.getContext('2d');
 let frameNo = 0, need = false, url = null;
 function fmt(t){ t = Math.max(0, t || 0); return Math.floor(t / 60) + ':' + ('0' + Math.floor(t % 60)).slice(-2); }
-function previewSize(){ const w = video.videoWidth, h = video.videoHeight, m = 1280, k = Math.min(1, m / Math.max(w, h)); return [Math.max(2, Math.round(w * k / 2) * 2), Math.max(2, Math.round(h * k / 2) * 2)]; }
-function paint(){ if (!GLR || !video.videoWidth) return; const [w, h] = previewSize(); try{ GLR.render(video, w, h, S.mix, S.fx, frameNo++); }catch(e){ console.error(e); } $('tm').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration); if (!seeking && video.duration) $('seek').value = Math.round(video.currentTime / video.duration * 1000); }
+// プレビューは軽さ優先：止めている時は長辺720px、再生中は480px（書き出しは元の大きさで処理）
+function previewSize(){ const w = video.videoWidth, h = video.videoHeight, m = video.paused ? 720 : 480, k = Math.min(1, m / Math.max(w, h)); return [Math.max(2, Math.round(w * k / 2) * 2), Math.max(2, Math.round(h * k / 2) * 2)]; }
+function paint(){ if (!GLR || !video.videoWidth) return; const [w, h] = previewSize(); try{ if (fcv.width !== w || fcv.height !== h){ fcv.width = w; fcv.height = h; } fctx.drawImage(video, 0, 0, w, h); GLR.render(fcv, w, h, S.mix, S.fx, frameNo++); }catch(e){ console.error(e); } $('tm').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration); if (!seeking && video.duration) $('seek').value = Math.round(video.currentTime / video.duration * 1000); }
 function redraw(){ if (video.paused){ need = true; requestAnimationFrame(() => { if (need){ need = false; paint(); } }); } }
 function loop(){ if (!video.paused) paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
 let seeking = false;
@@ -295,9 +302,15 @@ video.addEventListener('play', () => { $('playIco').innerHTML = '<path d="M7 5h4
 video.addEventListener('pause', () => { $('playIco').innerHTML = '<path d="M7 5v14l12-7z"/>'; paint(); });
 function openVideo(f){
   if (!f) return; S.file = f; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); video.src = url;
-  video.addEventListener('loadeddata', function once(){ video.removeEventListener('loadeddata', once); $('drop').hidden = true; $('exp').disabled = false; $('autoGo').disabled = false; loadEngine().catch(() => {}); S.vw = video.videoWidth; S.vh = video.videoHeight;
-    $('info').hidden = false; $('info').textContent = S.vw + '×' + S.vh + ' ・ ' + fmt(video.duration); paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); });
-  video.addEventListener('error', function once(){ video.removeEventListener('error', once); toast('この動画は開けませんでした'); });
+  let shown = false;
+  const ready = () => { if (shown || !video.videoWidth) return; shown = true; $('drop').hidden = true; $('exp').disabled = false; $('autoGo').disabled = false; loadEngine().catch(() => {}); S.vw = video.videoWidth; S.vh = video.videoHeight;
+    $('info').hidden = false; $('info').textContent = S.vw + '×' + S.vh + ' ・ ' + fmt(video.duration);
+    // 最初のコマを用意させる（iPhone は一度再生するまでコマを出さないことがある）→ すぐ止めて先頭へ
+    const p = video.play(); if (p && p.then) p.then(() => { video.pause(); video.currentTime = 0.001; }, () => { video.currentTime = 0.001; }); else video.currentTime = 0.001;
+    let tries = 0; const retry = () => { paint(); if (++tries < 12 && video.readyState < 2) setTimeout(retry, 250); }; setTimeout(retry, 200);
+    if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); };
+  video.addEventListener('loadedmetadata', ready, { once: true }); video.addEventListener('loadeddata', () => { ready(); paint(); }, { once: true });
+  video.addEventListener('error', () => toast('この動画は開けませんでした'), { once: true });
   video.load();
 }
 ['file', 'file2'].forEach(id => $(id).addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) openVideo(f); e.target.value = ''; }));
