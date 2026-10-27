@@ -497,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v132</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v133</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4249,6 +4249,50 @@ function tkLook2(img, n, P, w, h){
   function xpSaveSettings(){ try{ localStorage.setItem('retouch-export', JSON.stringify({ size: XP.size, color: XP.color, width: XP.width, ratio: XP.ratio, cs: XP.cs, both: XP.both })); }catch(e){} }
   function xpRatios(){ return [['even', '均等', null], ['1:1', '1:1', 1], ['2:3', '2:3', 2 / 3], ['3:2', '3:2', 1.5], ['4:5', '4:5', 0.8], ['3:4', '3:4', 0.75], ['5:4', '5:4', 1.25]]; }
   function xpColors(){ return ['#ffffff', '#d6d6d6', '#8a8a8a', '#4a4a4a', '#000000', '#141414', '#3b302c', '#8b5e43']; }
+  // ---- 動画用に保存（movie retouch へ）：元の写真と仕上がりの対応から色の対応表（3D LUT・33段）を作り、エフェクトの値と一緒に端末の中へ ----
+  var MR_DB = 'movie-retouch';
+  function mrDB(){ return new Promise(function(res, rej){ try{ var rq = indexedDB.open(MR_DB, 1); rq.onupgradeneeded = function(){ var db = rq.result; if (!db.objectStoreNames.contains('looks')) db.createObjectStore('looks', { keyPath: 'id' }); }; rq.onsuccess = function(){ res(rq.result); }; rq.onerror = function(){ rej(rq.error); }; }catch(e){ rej(e); } }); }
+  // P3の値（画面の色）→ sRGB の値（動画はsRGB／Rec.709）
+  function mrP3toS(d){ var lin = function(v){ v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }, enc = function(v){ v = v < 0 ? 0 : v > 1 ? 1 : v; return (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255; };
+    var o = new Uint8ClampedArray(d.length); for (var i = 0; i < d.length; i += 4){ var r = lin(d[i]), g = lin(d[i + 1]), b = lin(d[i + 2]);
+      o[i] = enc(1.2249 * r - 0.2247 * g); o[i + 1] = enc(-0.042 * r + 1.0419 * g); o[i + 2] = enc(-0.0197 * r - 0.0786 * g + 1.0979 * b); o[i + 3] = 255; } return o; }
+  // 対応表を作る：写真の各画素を表の8つの角へ配り（三線形）、ずれ（仕上がり−元）を平均。写真にない色は、近くのずれをなめらかに広げて埋める
+  function mrFitLut(A, B, N){
+    var S = N - 1, NN = N * N, M = NN * N, acc = new Float64Array(M * 3), ws = new Float64Array(M), n = A.length / 4, st = Math.max(1, Math.floor(n / 400000));
+    for (var p = 0; p < n; p += st){ var i = p * 4, fr = A[i] / 255 * S, fg = A[i + 1] / 255 * S, fb = A[i + 2] / 255 * S, r0 = Math.min(S - 1, fr | 0), g0 = Math.min(S - 1, fg | 0), b0 = Math.min(S - 1, fb | 0), tr = fr - r0, tg = fg - g0, tb = fb - b0;
+      var dr = (B[i] - A[i]) / 255, dg = (B[i + 1] - A[i + 1]) / 255, db = (B[i + 2] - A[i + 2]) / 255;
+      for (var c = 0; c < 8; c++){ var cr = c & 1, cg = (c >> 1) & 1, cb = c >> 2, w = (cr ? tr : 1 - tr) * (cg ? tg : 1 - tg) * (cb ? tb : 1 - tb); if (w < 1e-6) continue; var k = (b0 + cb) * NN + (g0 + cg) * N + (r0 + cr); acc[k * 3] += w * dr; acc[k * 3 + 1] += w * dg; acc[k * 3 + 2] += w * db; ws[k] += w; } }
+    var D = new Float32Array(M * 3), O = new Float32Array(M * 3), cf = new Float32Array(M);
+    for (var k2 = 0; k2 < M; k2++){ if (ws[k2] > 0){ O[k2 * 3] = acc[k2 * 3] / ws[k2]; O[k2 * 3 + 1] = acc[k2 * 3 + 1] / ws[k2]; O[k2 * 3 + 2] = acc[k2 * 3 + 2] / ws[k2]; } cf[k2] = ws[k2] / (ws[k2] + 2); D[k2 * 3] = O[k2 * 3]; D[k2 * 3 + 1] = O[k2 * 3 + 1]; D[k2 * 3 + 2] = O[k2 * 3 + 2]; }
+    var T = new Float32Array(M * 3);
+    for (var it = 0; it < 80; it++){
+      for (var b = 0; b < N; b++) for (var g = 0; g < N; g++) for (var rr = 0; rr < N; rr++){ var k3 = b * NN + g * N + rr, sx = 0, sy = 0, sz = 0, cn = 0;
+        var nb = function(kk){ sx += D[kk * 3]; sy += D[kk * 3 + 1]; sz += D[kk * 3 + 2]; cn++; };
+        if (rr > 0) nb(k3 - 1); if (rr < S) nb(k3 + 1); if (g > 0) nb(k3 - N); if (g < S) nb(k3 + N); if (b > 0) nb(k3 - NN); if (b < S) nb(k3 + NN);
+        var a = cf[k3] * (it < 70 ? 1 : 0.8);   /* 最後の数回だけ、写真のある所も少しならす（ざらつき防止） */
+        T[k3 * 3] = a * O[k3 * 3] + (1 - a) * sx / cn; T[k3 * 3 + 1] = a * O[k3 * 3 + 1] + (1 - a) * sy / cn; T[k3 * 3 + 2] = a * O[k3 * 3 + 2] + (1 - a) * sz / cn; }
+      var sw = D; D = T; T = sw;
+    }
+    var L = new Uint16Array(M * 3);
+    for (var b2 = 0; b2 < N; b2++) for (var g2 = 0; g2 < N; g2++) for (var r2 = 0; r2 < N; r2++){ var k4 = b2 * NN + g2 * N + r2, base = [r2 / S, g2 / S, b2 / S];
+      for (var c2 = 0; c2 < 3; c2++){ var v = base[c2] + D[k4 * 3 + c2]; L[k4 * 3 + c2] = Math.round(Math.max(0, Math.min(1, v)) * 65535); } }
+    return L;   /* 並び：赤がいちばん速く変わる（.cube と同じ） */
+  }
+  function mrSave(){
+    if (!img){ toast('先に写真を選んでください'); return; }
+    var sz = sizeFor(900), w = sz[0], h = sz[1], src = readPixels(w, h), Q = snap(P);
+    Q.lm = []; if (Q.on){ Q.on.reg = 0; ['glow', 'grain', 'skin', 'det', 'fx', 'diff', 'hal', 'mist', 'comp', 'ray', 'lens'].forEach(function(k){ Q.on[k] = 0; }); }   /* 色だけ（エフェクトは動画側でかける） */
+    showBusy('動画用の色を作成中…');
+    runJob(src, w, h, Q).then(function(out){
+      var A = src, B = out; if (CS === 'display-p3'){ A = mrP3toS(src); B = mrP3toS(out); }
+      var lut = mrFitLut(A, B, 33);
+      var on = P.on || {}, fx = { glow: on.glow ? (P.glow || 0) : 0, glowR: P.glowR || 20, thr: P.thr == null ? 70 : P.thr, hal: on.hal ? (P.hal || 0) : 0, diff: on.diff ? (P.diff || 0) : 0, diffR: P.diffR || 8, mist: on.mist ? (P.mist || 0) : 0, comp: on.comp ? (P.comp || 0) : 0, grain: on.grain ? (P.grain || 0) : 0, vgAmt: on.fx ? (P.vgAmt || 0) : 0, vgMid: P.vgMid == null ? 50 : P.vgMid };
+      var tc = document.createElement('canvas'), tw = 240, th = Math.round(240 * view.height / Math.max(1, view.width)); tc.width = tw; tc.height = th; tc.getContext('2d').drawImage(view, 0, 0, tw, th);
+      var d = new Date(), z = function(x){ return (x < 10 ? '0' : '') + x; }, lab = (AUTO && AUTO.l6 && TK_L6[AUTO.idx]) ? (TK_L6_GN[TK_L6[AUTO.idx].g] || '') + ' ' + TK_L6[AUTO.idx].d : '手動の仕上げ';
+      var rec = { id: 'l' + Date.now(), name: (d.getMonth() + 1) + '/' + d.getDate() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes()) + '・' + lab, at: Date.now(), N: 33, lut: lut, fx: fx, thumb: tc.toDataURL('image/jpeg', 0.8) };
+      return mrDB().then(function(db){ return new Promise(function(res, rej){ var t = db.transaction('looks', 'readwrite'); t.objectStore('looks').put(rec); t.oncomplete = res; t.onerror = function(){ rej(t.error); }; }); }).then(function(){ hideBusy(); toast('動画用に保存しました（movie retouch で使えます）'); });
+    }).catch(function(e){ hideBusy(); toast('保存できませんでした'); try{ console.error(e); }catch(x){} });
+  }
   function buildExportUI(){
     var m = xel('div', 'xmodal'); m.id = 'xmodal'; m.hidden = true;
     m.innerHTML = '<div class="xhead"><button type="button" class="xclose" aria-label="閉じる">✕</button><div class="xtitle">書き出し</div><button type="button" class="xshare" aria-label="共有"><svg viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg></button></div>' +
@@ -4289,6 +4333,10 @@ function tkLook2(img, n, P, w, h){
       b.addEventListener('click', function(){ XP.ratio = d[0]; xpChanged(); }); rr.appendChild(b); XE.xpR.push(b);
     });
     s3.appendChild(rr);
+    var smv = sec('動画（movie retouch）'), mvr = xel('div', 'rrow');
+    mvr.appendChild(xbtn('この色を動画用に保存', 'ghost', function(){ mrSave(); }));
+    mvr.appendChild(xbtn('movie retouch を開く', 'ghost', function(){ window.open('./movie/', '_blank'); }));
+    smv.appendChild(mvr); smv.appendChild(xel('div', 'hint', '今の色の仕上げ（見本寄せ・グレーディングなど）と、グロー・ハレーション・ミスト・粒子・周辺光量の値を、動画アプリで使えるように端末の中に保存します。'));
     var sb = sec('フチなしの写真'), seg4 = xel('div', 'seg'); XE.xpB = [];
     [[1, 'フチなしも一緒に書き出す'], [0, 'フチありだけ']].forEach(function(d){ var b = xel('button', '', d[1]); b.type = 'button'; b.dataset.m = d[0]; b.addEventListener('click', function(){ XP.both = d[0]; xpChanged(); }); seg4.appendChild(b); XE.xpB.push(b); });
     sb.appendChild(seg4); sb.appendChild(xel('div', 'hint', 'フチをつけた時だけ、同じ仕上げのフチなし（写真だけ）も2枚目として保存します。'));

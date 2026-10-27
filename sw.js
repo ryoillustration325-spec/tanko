@@ -1,8 +1,8 @@
 // 淡光：オフラインで動かすための保存係。アプリ本体は毎回新しい版を確かめ、AIなどの大きなファイルは一度取れば端末から読む
-const VER = 'tanko-v132';
+const VER = 'tanko-v133';
 const AI = 'tanko-ai-1';   // AI・エンジン（大きなファイル）は版が変わっても消さない＝一度準備すれば再ダウンロード不要
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
-const isBig = p => /\/(m_[a-z0-9]+_\d+\.js|ort[^/]*\.(js|mjs|wasm)|raw\/[a-z]+\.(js|wasm))$/.test(p);   // RAWの現像エンジンも大きなファイルとして保存
+const isBig = p => /\/(m_[a-z0-9]+_\d+\.js|ort[^/]*\.(js|mjs|wasm)|raw\/[a-z]+\.(js|wasm)|movie\/mediabunny[^/]*\.mjs)$/.test(p);   // RAWの現像エンジンも大きなファイルとして保存
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER && k !== AI).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

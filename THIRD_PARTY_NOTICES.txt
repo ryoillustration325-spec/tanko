@@ -51,6 +51,12 @@ This app includes the following third-party software and models.
      zlib (zlib License, Copyright (C) Jean-loup Gailly and Mark Adler)
    This software is based in part on the work of the Independent JPEG Group.
 
+10. Mediabunny v1.62.1  — 動画の読み込み・書き出し（movie retouch、movie/ フォルダ）
+   Copyright (c) Vanilagy and contributors.  https://github.com/Vanilagy/mediabunny
+   License: Mozilla Public License 2.0（全文 / Full text: https://www.mozilla.org/en-US/MPL/2.0/ ）
+   ソースコード / Source code: https://github.com/Vanilagy/mediabunny/tree/v1.62.1
+   変更点 / Modifications: なし（公開されている mediabunny.min.mjs をそのまま同梱）
+
 
 ---------------------------------------------------------------------
 MIT License（MiDaS）

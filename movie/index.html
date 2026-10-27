@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>movie retouch</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0D0F11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="movie retouch">
+<link rel="apple-touch-icon" href="../icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* photo retouch（淡光）と同じ暗い面・同じ色の決まり */
+  :root{
+    --bg:#0D0F11; --surface:#16191C; --surface2:#1E2226; --ink:#E6EBEF; --muted:#9AA6AF; --faint:#6C7880;
+    --accent:#8FB0C4; --warm:#E0A36B; --line:#2A3036; --line-soft:#22272C;
+    --f-ui:"Zen Kaku Gothic New",-apple-system,"Hiragino Sans",system-ui,sans-serif; --f-num:"Inter",-apple-system,system-ui,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%; background:var(--bg); overflow:hidden}
+  body{color:var(--ink); font-family:var(--f-ui); -webkit-font-smoothing:antialiased; line-height:1.55; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent}
+  .num{font-family:var(--f-num); font-variant-numeric:tabular-nums}
+  .app{position:fixed; inset:0; display:grid; grid-template-rows:auto minmax(0,1fr) auto; padding-top:env(safe-area-inset-top,0px)}
+  .top{display:flex; align-items:center; gap:8px; padding:10px 12px}
+  .brand{font-family:var(--f-num); font-weight:600; letter-spacing:.02em; font-size:15px; margin-right:auto}
+  .brand small{display:block; font-family:var(--f-ui); font-weight:400; font-size:10.5px; color:var(--faint); letter-spacing:.06em}
+  .pill{position:relative; display:inline-flex; align-items:center; justify-content:center; height:38px; padding:0 16px; border-radius:19px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit; font-size:13.5px; cursor:pointer; white-space:nowrap; overflow:hidden}
+  .pill.pri{background:var(--accent); color:#0D0F11; border-color:var(--accent); font-weight:600}
+  .pill:disabled{opacity:.4}
+  .pill input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer; font-size:100px}
+  .stage{position:relative; min-height:0; margin:0 12px; border-radius:14px; background:#050607; overflow:hidden; display:flex; align-items:center; justify-content:center}
+  #gl{max-width:100%; max-height:100%; display:block}
+  .drop{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:24px; color:var(--muted); font-size:13px}
+  .drop .mark{width:64px; height:64px; border-radius:50%; border:1.5px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--accent)}
+  .drop[hidden]{display:none}
+  .drop input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer}
+  .chip{position:absolute; top:10px; left:10px; font-size:11px; padding:4px 10px; border-radius:14px; background:rgba(13,15,17,.72); border:1px solid rgba(255,255,255,.1); color:var(--ink); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px)}
+  .chip[hidden]{display:none}
+  .panel{max-height:52vh; overflow:auto; padding:10px 12px calc(14px + env(safe-area-inset-bottom,0px)); -webkit-overflow-scrolling:touch}
+  .transport{display:flex; align-items:center; gap:10px; margin:2px 0 6px}
+  .ib{width:38px; height:38px; flex:none; border-radius:50%; border:1px solid var(--line); background:var(--surface); color:var(--ink); display:inline-flex; align-items:center; justify-content:center; cursor:pointer}
+  .ib svg{width:16px; height:16px; fill:currentColor}
+  .tm{font-size:11.5px; color:var(--muted); min-width:7.5em; text-align:right}
+  input[type=range]{width:100%; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:rgba(255,255,255,.16); outline:none; margin:8px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent); border:3px solid var(--bg); box-shadow:0 0 0 1px var(--line)}
+  .sect{font-size:11px; letter-spacing:.14em; color:var(--faint); margin:14px 2px 6px}
+  .looks{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 6px; scroll-snap-type:x proximity}
+  .look{flex:none; width:96px; scroll-snap-align:start; border:2px solid transparent; border-radius:10px; background:var(--surface2); padding:0; overflow:hidden; color:var(--muted); font:inherit; text-align:left; cursor:pointer; position:relative}
+  .look.on{border-color:var(--accent); color:var(--ink)}
+  .look img,.look .ph{width:100%; height:64px; object-fit:cover; display:block}
+  .look .ph{display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--faint); background:var(--surface)}
+  .look span{display:block; font-size:10px; padding:4px 5px 5px; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
+  .look .del{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; border:0; background:rgba(13,15,17,.75); color:var(--muted); font-size:12px; line-height:20px; padding:0; cursor:pointer}
+  .row{margin:4px 2px}
+  .rowh{display:flex; justify-content:space-between; font-size:12px; color:var(--muted)}
+  .rowh .v{color:var(--ink)}
+  .rrow{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0}
+  .btn{font:inherit; font-size:12px; padding:8px 14px; border-radius:16px; border:1px solid var(--line); background:var(--surface2); color:var(--muted); cursor:pointer}
+  .hint{font-size:11px; color:var(--faint); margin:4px 2px; line-height:1.6}
+  .seg{display:flex; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:3px; gap:3px}
+  .seg button{flex:1; font:inherit; font-size:12px; padding:8px 6px; border-radius:9px; border:0; background:transparent; color:var(--muted); cursor:pointer}
+  .seg button.on{background:var(--surface2); color:var(--ink); box-shadow:0 0 0 1px var(--line)}
+  .modal{position:fixed; inset:0; z-index:20; background:rgba(8,10,12,.78); display:flex; align-items:center; justify-content:center; padding:20px}
+  .modal[hidden]{display:none}
+  .pane{width:min(420px,100%); background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px}
+  .pane h3{margin:0 0 8px; font-size:15px; font-weight:600}
+  .bar{height:6px; border-radius:3px; background:rgba(255,255,255,.08); overflow:hidden; margin:12px 0 6px}
+  .bar i{display:block; height:100%; width:0; background:var(--accent); transition:width .2s}
+  .toast{position:fixed; right:12px; top:calc(12px + env(safe-area-inset-top,0px)); z-index:30; background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:20px; font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:calc(100vw - 24px); box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  .toast.show{opacity:1}
+  @media (min-width:900px){ .app{grid-template-columns:minmax(0,1fr) 360px; grid-template-rows:auto minmax(0,1fr)} .top{grid-column:1 / -1} .stage{margin:0 0 12px 12px} .panel{max-height:none; grid-row:2} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v1</span></small></div>
+    <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
+    <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="gl"></canvas>
+    <div class="chip num" id="info" hidden></div>
+    <label class="drop" id="drop">
+      <span class="mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></span>
+      <span>動画を選んでください</span>
+      <span class="hint">photo retouch で「動画用に保存」した色を、動画にかけて書き出します。動画は端末の中だけで処理されます。</span>
+      <input type="file" id="file2" accept="video/*,.mov,.mp4,.m4v,.webm" aria-label="動画を選ぶ">
+    </label>
+  </div>
+  <div class="panel">
+    <div class="transport">
+      <button class="ib" id="play" type="button" aria-label="再生"><svg viewBox="0 0 24 24" id="playIco"><path d="M7 5v14l12-7z"/></svg></button>
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="再生位置">
+      <span class="tm num" id="tm">0:00 / 0:00</span>
+    </div>
+    <div class="sect">色（photo retouch で保存したもの）</div>
+    <div class="looks" id="looks"></div>
+    <div class="row"><div class="rowh"><span>色の強さ</span><span class="v num" id="v-mix">100</span></div><input type="range" id="s-mix" min="0" max="100" value="100"></div>
+    <div class="sect">エフェクト</div>
+    <div id="fxrows"></div>
+    <div class="rrow"><button class="btn" id="fxReset" type="button">保存した時の値に戻す</button><button class="btn" id="fxZero" type="button">エフェクトをすべて0</button></div>
+    <div class="sect">書き出し</div>
+    <div class="seg" id="segRes"><button type="button" data-v="orig" class="on">元の大きさ</button><button type="button" data-v="1080">1080p まで</button><button type="button" data-v="720">720p まで</button></div>
+    <div class="hint">長い動画や4Kは時間がかかります。iPhoneでは「1080p まで」がおすすめです。</div>
+    <div class="rrow"><button class="btn" id="cube" type="button">この色を .cube（LUT）で書き出す</button><a class="btn" href="../" style="text-decoration:none">photo retouch へ</a></div>
+    <div class="hint">.cube は After Effects・Premiere（Lumetri）などで読み込めます。エフェクトは含まれません。</div>
+  </div>
+</div>
+<div class="modal" id="xm" hidden><div class="pane"><h3 id="xt">書き出し中…</h3><div class="hint" id="xs">準備中</div><div class="bar"><i id="xb"></i></div><div class="rrow" id="xa"><button class="btn" id="xc" type="button">中止</button></div></div></div>
+<div class="toast" id="toast" role="status"></div>
+<script type="module">
+import { Input, Output, Conversion, ALL_FORMATS, BlobSource, BufferTarget, Mp4OutputFormat, WebMOutputFormat, QUALITY_HIGH, canEncodeVideo } from './mediabunny.min.mjs';
+const $ = (id) => document.getElementById(id);
+let tt = 0; function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2400); }
+// 長押しメニュー・文字選択を止める
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ---------- 色（photo retouch が端末の中に保存したもの） ----------
+function db(){ return new Promise((res, rej) => { const rq = indexedDB.open('movie-retouch', 1); rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains('looks')) d.createObjectStore('looks', { keyPath: 'id' }); }; rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); }
+async function loadLooks(){ const d = await db(); return new Promise((res) => { const r = d.transaction('looks').objectStore('looks').getAll(); r.onsuccess = () => res((r.result || []).sort((a, b) => b.at - a.at)); r.onerror = () => res([]); }); }
+async function delLook(id){ const d = await db(); await new Promise((res) => { const t = d.transaction('looks', 'readwrite'); t.objectStore('looks').delete(id); t.oncomplete = res; t.onerror = res; }); }
+
+const FX = [
+  ['glow', 'グロー', 0, 100, 0], ['glowR', 'グローの広がり', 5, 60, 20], ['thr', '光らせる明るさ', 30, 95, 70],
+  ['hal', 'ハレーション', 0, 100, 0], ['diff', '光のにじみ', 0, 100, 0], ['diffR', 'にじみの広がり', 2, 30, 8],
+  ['mist', 'ミスト', 0, 100, 0], ['comp', 'ハイライトの余白', 0, 100, 0], ['grain', '粒子', 0, 100, 0],
+  ['vgAmt', '周辺光量', -100, 100, 0], ['vgMid', '中心の広さ', 0, 100, 50]
+];
+const S = { looks: [], look: null, mix: 100, fx: {}, fx0: {}, res: 'orig', file: null, vw: 0, vh: 0 };
+FX.forEach(f => { S.fx[f[0]] = f[4]; S.fx0[f[0]] = f[4]; });
+
+function buildFx(){
+  const box = $('fxrows'); box.innerHTML = '';
+  FX.forEach(([k, lab, mn, mx]) => {
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = `<div class="rowh"><span>${lab}</span><span class="v num" id="v-${k}"></span></div><input type="range" id="s-${k}" min="${mn}" max="${mx}">`;
+    box.appendChild(row);
+    const r = row.querySelector('input'); r.value = S.fx[k]; row.querySelector('.v').textContent = S.fx[k];
+    r.addEventListener('input', () => { S.fx[k] = +r.value; $('v-' + k).textContent = r.value; redraw(); });
+    r.addEventListener('dblclick', () => { S.fx[k] = S.fx0[k]; r.value = S.fx[k]; $('v-' + k).textContent = S.fx[k]; redraw(); });
+  });
+}
+function syncFx(){ FX.forEach(([k]) => { const r = $('s-' + k); if (r){ r.value = S.fx[k]; $('v-' + k).textContent = S.fx[k]; } }); }
+function renderLooks(){
+  const box = $('looks'); box.innerHTML = '';
+  const mk = (lk) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'look' + ((S.look ? S.look.id : null) === (lk ? lk.id : null) ? ' on' : '');
+    if (lk){ const im = document.createElement('img'); im.src = lk.thumb; im.alt = ''; b.appendChild(im); } else { const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = '色なし'; b.appendChild(ph); }
+    const sp = document.createElement('span'); sp.textContent = lk ? lk.name : '元の色のまま'; b.appendChild(sp);
+    b.addEventListener('click', () => pickLook(lk));
+    if (lk){ const x = document.createElement('button'); x.type = 'button'; x.className = 'del'; x.textContent = '×'; x.setAttribute('aria-label', '削除');
+      x.addEventListener('click', async (e) => { e.stopPropagation(); if (!confirm('「' + lk.name + '」を削除しますか？')) return; await delLook(lk.id); if (S.look && S.look.id === lk.id) pickLook(null); S.looks = await loadLooks(); renderLooks(); }); b.appendChild(x); }
+    box.appendChild(b);
+  };
+  mk(null); S.looks.forEach(mk);
+  if (!S.looks.length){ const h = document.createElement('div'); h.className = 'hint'; h.style.alignSelf = 'center'; h.textContent = 'まだありません。photo retouch の書き出し画面で「この色を動画用に保存」を押すと、ここに並びます。'; box.appendChild(h); }
+}
+function pickLook(lk){
+  S.look = lk; GLR.setLut(lk ? lk.lut : null, lk ? lk.N : 0);
+  if (lk && lk.fx){ FX.forEach(([k, , , , d]) => { const v = lk.fx[k]; S.fx[k] = v == null ? d : Math.round(v); S.fx0[k] = S.fx[k]; }); }
+  else FX.forEach(([k, , , , d]) => { S.fx[k] = d; S.fx0[k] = d; });
+  syncFx(); renderLooks(); redraw();
+}
+
+// ---------- 画面の処理（GPU）：色の対応表（3D LUT）＋グロー・ハレーション・にじみ・ミスト・粒子・周辺光量 ----------
+// photo retouch の写真の処理と同じ順・同じ考え方（広がりは画面の長辺に対する割合）
+class Renderer {
+  constructor(canvas){
+    const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false });
+    if (!gl) throw new Error('webgl2');
+    this.gl = gl; this.cv = canvas; this.lut = null; this.N = 0; this.fbo = {};
+    this.half = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
+    const VS = `#version 300 es
+in vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0., 1.); }`;
+    const prog = (fs) => { const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp sampler3D;\nin vec2 uv; out vec4 o;\n' + fs)); gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); const U = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++){ const a = gl.getActiveUniform(p, i); U[a.name] = gl.getUniformLocation(p, a.name); } return { p, U }; };
+    // 1) 色：対応表を当てて、強さで元と混ぜる
+    this.pColor = prog(`uniform sampler2D src; uniform sampler3D lut; uniform float N, mixA, useLut;
+void main(){ vec3 c = texture(src, vec2(uv.x, 1. - uv.y)).rgb; vec3 l = c; if (useLut > .5){ l = texture(lut, c * ((N - 1.) / N) + .5 / N).rgb; } o = vec4(mix(c, l, mixA), 1.); }`);
+    // 2) 光源の取り出し（にじみ・ハレーション用＝明るさ／グロー用＝明るさの2乗）。色×重み と 重み
+    this.pBright = prog(`uniform sampler2D src; uniform float t0, mode;
+float ss(float x){ x = clamp(x, 0., 1.); return x * x * (3. - 2. * x); }
+void main(){ vec3 c = texture(src, uv).rgb; float y = dot(c, vec3(.2126, .7152, .0722)); float w;
+ if (mode < .5) w = ss((y - (t0 - .05)) / max(.02, 1. - (t0 - .05))); else { float a = ss((y - t0) / max(.02, 1. - t0)); w = a * a; }
+ o = vec4(c * w, w); }`);
+    // 3) ぼかし（縦横に分けたガウス）
+    this.pBlur = prog(`uniform sampler2D src; uniform vec2 dir; uniform float sig, lod;
+void main(){ vec4 s = vec4(0.); float ws = 0.; int R = int(ceil(sig * 2.5)); for (int i = -24; i <= 24; i++){ if (i < -R || i > R) continue; float f = float(i); float w = exp(-.5 * f * f / (sig * sig)); s += textureLod(src, uv + dir * f, lod) * w; ws += w; } o = s / ws; }`);
+    // 4) 仕上げ：ミスト → ハイライトの余白 → にじみ → グロー → ハレーション → 粒子 → 周辺光量
+    this.pComp = prog(`uniform sampler2D col, gA, gB, hA, hB, dA, mA; uniform float kG1, kG2, hk, dop, mo, cp, gr, vg, vgMid, fr, useG, useH, useD, useM; uniform vec2 res;
+float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec3 scr(vec3 a, vec3 b){ return 1. - (1. - a) * (1. - clamp(b, 0., 1.)); }
+void main(){ vec3 c = texture(col, uv).rgb;
+ if (useM > .5) c = mix(c, texture(mA, uv).rgb, mo);
+ if (cp > 0.){ vec3 u = clamp((c - .75) / .25, 0., 1.); c = mix(c, .75 + .25 * u * (1. - .45 * cp * u), step(.75, c)); }
+ if (useD > .5){ vec4 d = texture(dA, uv); if (d.a > 1e-4){ vec3 cc = d.rgb / d.a; float al = min(1., d.a * 1.8) * dop; c = mix(c, c + (cc - c) * al, step(c, cc)); } }
+ if (useG > .5){ c = scr(c, texture(gA, uv).rgb * kG1); c = scr(c, texture(gB, uv).rgb * kG2); }
+ if (useH > .5){ float f = max(0., texture(hA, uv).a - texture(hB, uv).a) * hk; c = scr(c, vec3(f, f * .42, f * .2)); }
+ if (gr > 0.){ vec2 q = uv * res; float y = dot(c, vec3(.2126, .7152, .0722)); float nz = (h12(q + fr * 17.13) + h12(q + fr * 31.7 + 5.1) + h12(q + fr * 7.9 + 11.3) - 1.5) * gr * (.35 + 2.6 * y * (1. - y)); c += nz; }
+ if (vg != 0.){ vec2 p = (uv - .5) * res; float R = length(res) * .5, r0 = R * (.18 + .62 * vgMid), r1 = R * 1.02; float a = clamp((length(p) - r0) / (r1 - r0), 0., 1.) * abs(vg) * .8; c = vg < 0. ? c * (1. - a) : c + a * (1. - c); }
+ o = vec4(clamp(c, 0., 1.), 1.); }`);
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    this.vao = gl.createVertexArray(); gl.bindVertexArray(this.vao); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.src = this.tex(); this.dummy3 = this.tex3(new Float32Array(3 * 8), 2);
+  }
+  tex(){ const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }
+  tex3(data, N){ const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, t); ['TEXTURE_WRAP_S', 'TEXTURE_WRAP_T', 'TEXTURE_WRAP_R'].forEach(k => gl.texParameteri(gl.TEXTURE_3D, gl[k], gl.CLAMP_TO_EDGE)); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, data); return t; }
+  setLut(u16, N){ const gl = this.gl; if (this.lut){ gl.deleteTexture(this.lut); this.lut = null; } if (!u16){ this.N = 0; return; } const f = new Float32Array(u16.length); for (let i = 0; i < u16.length; i++) f[i] = u16[i] / 65535; this.lut = this.tex3(f, N); this.N = N; }
+  target(name, w, h, mip){ // 描き込み先（浮動小数が使えれば半精度＝暗い所の重みが潰れない）
+    const gl = this.gl; let t = this.fbo[name];
+    if (t && t.w === w && t.h === h) return t;
+    if (t){ gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    const lv = mip ? Math.floor(Math.log2(Math.max(w, h))) + 1 : 1;
+    gl.texStorage2D(gl.TEXTURE_2D, lv, this.half ? gl.RGBA16F : gl.RGBA8, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    t = this.fbo[name] = { tex, fb, w, h, lv }; return t;
+  }
+  draw(pr, tgt, w, h, uni, texs){ const gl = this.gl; gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER, tgt ? tgt.fb : null); gl.viewport(0, 0, w, h);
+    let unit = 0; for (const k in texs){ const v = texs[k]; gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(v.is3 ? gl.TEXTURE_3D : gl.TEXTURE_2D, v.t); if (pr.U[k]) gl.uniform1i(pr.U[k], unit); unit++; }
+    for (const k in uni){ if (!pr.U[k]) continue; const v = uni[k]; if (Array.isArray(v)) gl.uniform2f(pr.U[k], v[0], v[1]); else gl.uniform1f(pr.U[k], v); }
+    gl.bindVertexArray(this.vao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+  // 縮小した光源（ミップマップ＝箱で平均＝小さな光が点滅しない）から、目標の広がり（全画面の画素）でぼかす
+  blur(srcT, sigPx, base, name){
+    const lod = Math.max(0, Math.min(srcT.lv - 1, Math.ceil(Math.log2(Math.max(1, sigPx / base / 4)))));
+    const w = Math.max(1, srcT.w >> lod), h = Math.max(1, srcT.h >> lod), sg = Math.max(.6, Math.min(9, sigPx / base / (1 << lod)));
+    const a = this.target(name + 'x', w, h), b = this.target(name + 'y', w, h);
+    this.draw(this.pBlur, a, w, h, { dir: [1 / w, 0], sig: sg, lod: lod }, { src: { t: srcT.tex } });
+    this.draw(this.pBlur, b, w, h, { dir: [0, 1 / h], sig: sg, lod: 0 }, { src: { t: a.tex } });
+    return b;
+  }
+  render(source, W, H, mix, fx, frame){
+    const gl = this.gl, cv = this.cv; if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.src); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    const L = Math.max(W, H), col = this.target('col', W, H, true);
+    this.draw(this.pColor, col, W, H, { N: this.N || 2, mixA: this.lut ? mix / 100 : 0, useLut: this.lut ? 1 : 0 }, { src: { t: this.src }, lut: { t: this.lut || this.dummy3, is3: true } });
+    const doG = fx.glow > 0, doH = fx.hal > 0, doD = fx.diff > 0, doM = fx.mist > 0, t0 = fx.thr / 100;
+    const T = {};
+    if (doG || doH || doD || doM){ gl.bindTexture(gl.TEXTURE_2D, col.tex); gl.generateMipmap(gl.TEXTURE_2D); }
+    const q = 4, qw = Math.max(1, Math.round(W / q)), qh = Math.max(1, Math.round(H / q));
+    if (doH || doD){ const b = this.target('bh', qw, qh, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 0 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
+      if (doD) T.dA = this.blur(b, L * fx.diffR * .0006, q, 'd');
+      if (doH){ const sH = L * fx.glowR * .0007; T.hA = this.blur(b, sH, q, 'h1'); T.hB = this.blur(b, Math.max(1, sH * .3), q, 'h2'); } }
+    if (doG){ const b = this.target('bg', qw, qh, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 1 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
+      const sG = L * fx.glowR * .001; T.gA = this.blur(b, sG, q, 'g1'); T.gB = this.blur(b, sG * 3, q, 'g2'); }
+    if (doM) T.mA = this.blur(col, L * fx.diffR * .0009, 1, 'm');
+    const z = { t: col.tex }, tx = { col: { t: col.tex } };
+    ['gA', 'gB', 'hA', 'hB', 'dA', 'mA'].forEach(k => { tx[k] = T[k] ? { t: T[k].tex } : z; });
+    this.draw(this.pComp, null, W, H, { kG1: fx.glow / 100 * 1.6, kG2: fx.glow / 100 * .5, hk: fx.hal / 100 * 1.6, dop: fx.diff / 100, mo: fx.mist / 100 * .35, cp: fx.comp / 100, gr: fx.grain / 100 * .16, vg: fx.vgAmt / 100, vgMid: fx.vgMid / 100, fr: frame % 997, res: [W, H], useG: doG ? 1 : 0, useH: doH ? 1 : 0, useD: doD ? 1 : 0, useM: doM ? 1 : 0 }, tx);
+  }
+}
+
+let GLR;
+try{ GLR = new Renderer($('gl')); }catch(e){ toast('この端末では画面の処理（WebGL2）が使えません'); console.error(e); }
+
+// ---------- プレビュー（再生中は毎フレーム、止まっている時は動かした時だけ描き直す） ----------
+const video = document.createElement('video'); video.muted = true; video.playsInline = true; video.setAttribute('playsinline', ''); video.preload = 'auto'; video.loop = true; video.crossOrigin = 'anonymous';
+let frameNo = 0, need = false, url = null;
+function fmt(t){ t = Math.max(0, t || 0); return Math.floor(t / 60) + ':' + ('0' + Math.floor(t % 60)).slice(-2); }
+function previewSize(){ const w = video.videoWidth, h = video.videoHeight, m = 1280, k = Math.min(1, m / Math.max(w, h)); return [Math.max(2, Math.round(w * k / 2) * 2), Math.max(2, Math.round(h * k / 2) * 2)]; }
+function paint(){ if (!GLR || !video.videoWidth) return; const [w, h] = previewSize(); try{ GLR.render(video, w, h, S.mix, S.fx, frameNo++); }catch(e){ console.error(e); } $('tm').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration); if (!seeking && video.duration) $('seek').value = Math.round(video.currentTime / video.duration * 1000); }
+function redraw(){ if (video.paused){ need = true; requestAnimationFrame(() => { if (need){ need = false; paint(); } }); } }
+function loop(){ if (!video.paused) paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
+let seeking = false;
+$('seek').addEventListener('input', () => { seeking = true; if (video.duration) video.currentTime = $('seek').value / 1000 * video.duration; });
+$('seek').addEventListener('change', () => { seeking = false; });
+video.addEventListener('seeked', () => paint());
+$('play').addEventListener('click', () => { if (!video.src) return; if (video.paused) video.play(); else video.pause(); });
+video.addEventListener('play', () => { $('playIco').innerHTML = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>'; });
+video.addEventListener('pause', () => { $('playIco').innerHTML = '<path d="M7 5v14l12-7z"/>'; paint(); });
+function openVideo(f){
+  if (!f) return; S.file = f; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); video.src = url;
+  video.addEventListener('loadeddata', function once(){ video.removeEventListener('loadeddata', once); $('drop').hidden = true; $('exp').disabled = false; S.vw = video.videoWidth; S.vh = video.videoHeight;
+    $('info').hidden = false; $('info').textContent = S.vw + '×' + S.vh + ' ・ ' + fmt(video.duration); paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); });
+  video.addEventListener('error', function once(){ video.removeEventListener('error', once); toast('この動画は開けませんでした'); });
+  video.load();
+}
+['file', 'file2'].forEach(id => $(id).addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) openVideo(f); e.target.value = ''; }));
+$('s-mix').addEventListener('input', () => { S.mix = +$('s-mix').value; $('v-mix').textContent = S.mix; redraw(); });
+$('fxReset').addEventListener('click', () => { FX.forEach(([k]) => { S.fx[k] = S.fx0[k]; }); syncFx(); redraw(); });
+$('fxZero').addEventListener('click', () => { FX.forEach(([k, , , , d]) => { S.fx[k] = ['glowR', 'thr', 'diffR', 'vgMid'].includes(k) ? S.fx[k] : 0; }); syncFx(); redraw(); });
+$('segRes').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { S.res = b.dataset.v; $('segRes').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }));
+
+// ---------- .cube（LUT）で書き出し ----------
+$('cube').addEventListener('click', () => {
+  if (!S.look){ toast('先に色を選んでください'); return; }
+  const N = S.look.N, L = S.look.lut; let t = 'TITLE "' + S.look.name.replace(/"/g, '') + '"\nLUT_3D_SIZE ' + N + '\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1 1 1\n';
+  for (let i = 0; i < N * N * N; i++) t += (L[i * 3] / 65535).toFixed(6) + ' ' + (L[i * 3 + 1] / 65535).toFixed(6) + ' ' + (L[i * 3 + 2] / 65535).toFixed(6) + '\n';
+  saveFile(new Blob([t], { type: 'text/plain' }), 'movie-retouch_' + stamp() + '.cube');
+});
+function stamp(){ const d = new Date(), z = (n) => (n < 10 ? '0' : '') + n; return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '_' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()); }
+async function saveFile(blob, name){
+  let file = null; try{ file = new File([blob], name, { type: blob.type }); }catch(e){}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })){ try{ await navigator.share({ files: [file] }); toast('保存しました'); return true; }catch(e){ if (e && e.name === 'AbortError') return false; } }
+  const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); toast('保存しました'); return true;
+}
+
+// ---------- 書き出し（MP4）：1コマずつ同じ処理をかけ、音声はそのまま ----------
+let conv = null;
+$('xc').addEventListener('click', () => { if (conv){ try{ conv.cancel(); }catch(e){} } $('xm').hidden = true; });
+$('exp').addEventListener('click', async () => {
+  if (!S.file) return; video.pause();
+  $('xm').hidden = false; $('xt').textContent = '書き出し中…'; $('xs').textContent = '準備中'; $('xb').style.width = '0%';
+  const xa = $('xa'); xa.innerHTML = ''; const cb = document.createElement('button'); cb.className = 'btn'; cb.type = 'button'; cb.textContent = '中止'; cb.addEventListener('click', () => { if (conv){ try{ conv.cancel(); }catch(e){} } $('xm').hidden = true; }); xa.appendChild(cb);
+  const t0 = Date.now();
+  try{
+    const input = new Input({ source: new BlobSource(S.file), formats: ALL_FORMATS });
+    const vt = await input.getPrimaryVideoTrack(); if (!vt) throw new Error('映像がありません');
+    const rot = await vt.getRotation(), sw = await vt.getSquarePixelWidth(), sh = await vt.getSquarePixelHeight();
+    let W = rot % 180 ? sh : sw, H = rot % 180 ? sw : sh; const cap = S.res === '1080' ? 1920 : S.res === '720' ? 1280 : 1e9, k = Math.min(1, cap / Math.max(W, H));
+    W = Math.max(2, Math.round(W * k / 2) * 2); H = Math.max(2, Math.round(H * k / 2) * 2);
+    let codec = (await canEncodeVideo('avc', { width: W, height: H })) ? 'avc' : (await canEncodeVideo('hevc', { width: W, height: H })) ? 'hevc' : null, webm = false;
+    if (!codec && (await canEncodeVideo('vp9', { width: W, height: H }))){ codec = 'vp9'; webm = true; }   /* MP4（H.264）が作れない環境だけ WebM */
+    if (!codec) throw new Error('この端末では動画の書き出しに対応していません');
+    const ocv = document.createElement('canvas'), R2 = new Renderer(ocv); if (S.look) R2.setLut(S.look.lut, S.look.N);
+    const tmp = new OffscreenCanvas(W, H), tctx = tmp.getContext('2d'); let fn = 0;
+    const output = new Output({ format: webm ? new WebMOutputFormat() : new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
+    conv = await Conversion.init({ input, output, showWarnings: false,
+      video: { width: W, height: H, fit: 'fill', codec, bitrate: Math.round(W * H * 30 * 0.2), forceTranscode: true, processedWidth: W, processedHeight: H,
+        process: (sample) => { sample.draw(tctx, 0, 0, W, H); R2.render(tmp, W, H, S.mix, S.fx, fn++); return ocv; } },
+      audio: {} });
+    if (!conv.isValid) throw new Error('この動画は書き出せません（' + conv.discardedTracks.map(d => d.reason).join(', ') + '）');
+    const dur = await input.computeDuration();
+    conv.onProgress = (p, t) => { $('xb').style.width = Math.round(p * 100) + '%'; const el = (Date.now() - t0) / 1000, rest = p > 0.02 ? el * (1 - p) / p : 0; $('xs').textContent = Math.round(p * 100) + '% ・ ' + fmt(t) + ' / ' + fmt(dur) + (rest ? ' ・ 残り約' + Math.ceil(rest) + '秒' : ''); };
+    await conv.execute(); conv = null;
+    const blob = new Blob([output.target.buffer], { type: webm ? 'video/webm' : 'video/mp4' }), sec = ((Date.now() - t0) / 1000).toFixed(1);
+    $('xt').textContent = '書き出しができました'; $('xs').textContent = W + '×' + H + ' ・ ' + (blob.size / 1048576).toFixed(1) + 'MB ・ ' + sec + '秒'; $('xb').style.width = '100%';
+    xa.innerHTML = ''; const sv = document.createElement('button'); sv.className = 'pill pri'; sv.type = 'button'; sv.textContent = '保存・共有';
+    sv.addEventListener('click', async () => { const ok = await saveFile(blob, 'movie-retouch_' + stamp() + (webm ? '.webm' : '.mp4')); if (ok) $('xm').hidden = true; });   /* 共有シートは指で押した直後しか開けないので、ボタンで */
+    const cl = document.createElement('button'); cl.className = 'btn'; cl.type = 'button'; cl.textContent = '閉じる'; cl.addEventListener('click', () => { $('xm').hidden = true; });
+    xa.appendChild(sv); xa.appendChild(cl);
+    window.__lastExport = { W, H, size: blob.size, sec: +sec, codec }; window.__mrBlob = blob;
+  }catch(e){
+    conv = null; console.error(e); if (e && e.name === 'ConversionCanceledError') return;
+    $('xt').textContent = '書き出せませんでした'; $('xs').textContent = (e && e.message) || String(e); window.__lastExport = { error: String(e && e.message || e) };
+  }
+});
+
+buildFx();
+loadLooks().then(l => { S.looks = l; renderLooks(); }).catch(() => renderLooks());
+window.__mr = { S, pickLook, openVideo, paint };
+</script>
+</body>
+</html>
