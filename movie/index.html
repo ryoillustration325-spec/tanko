@@ -97,7 +97,7 @@
     <label class="drop" id="drop">
       <span class="mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg></span>
       <span>動画を選んでください</span>
-      <span class="hint">photo retouch で「動画用に保存」した色を、動画にかけて書き出します。動画は端末の中だけで処理されます。</span>
+      <span class="hint">動画のコマから見本寄せの色を作り、エフェクトと一緒にかけて書き出します。動画は端末の中だけで処理されます。</span>
       <input type="file" id="file2" accept="video/*,.mov,.mp4,.m4v,.webm" aria-label="動画を選ぶ">
     </label>
   </div>
@@ -113,7 +113,7 @@
     <div class="hint" id="autoHint">止めた所のコマから、photo retouch の「見本1枚に寄せる」と同じ方法で候補を作ります。色は前後のコマも混ぜて作るので、動画全体で安定します。</div>
     <div class="cands" id="cands"></div>
     <div class="rrow" id="autoSaveRow" hidden><button class="btn" id="autoSave" type="button">この色を一覧に保存</button></div>
-    <div class="sect">保存した色（photo retouch・この画面で保存したもの）</div>
+    <div class="sect">保存した色</div>
     <div class="looks" id="looks"></div>
     <div class="row"><div class="rowh"><span>色の強さ</span><span class="v num" id="v-mix">100</span></div><input type="range" id="s-mix" min="0" max="100" value="100"></div>
     <div class="sect">エフェクト</div>
@@ -135,7 +135,7 @@ let tt = 0; function toast(m){ const t = $('toast'); t.textContent = m; t.classL
 // 長押しメニュー・文字選択を止める
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// ---------- 色（photo retouch が端末の中に保存したもの） ----------
+// ---------- 保存した色（端末の中） ----------
 function db(){ return new Promise((res, rej) => { const rq = indexedDB.open('movie-retouch', 1); rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains('looks')) d.createObjectStore('looks', { keyPath: 'id' }); }; rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); }
 async function loadLooks(){ const d = await db(); return new Promise((res) => { const r = d.transaction('looks').objectStore('looks').getAll(); r.onsuccess = () => res((r.result || []).sort((a, b) => b.at - a.at)); r.onerror = () => res([]); }); }
 async function delLook(id){ const d = await db(); await new Promise((res) => { const t = d.transaction('looks', 'readwrite'); t.objectStore('looks').delete(id); t.oncomplete = res; t.onerror = res; }); }
@@ -173,7 +173,7 @@ function renderLooks(){
     box.appendChild(b);
   };
   mk(null); S.looks.forEach(mk);
-  if (!S.looks.length){ const h = document.createElement('div'); h.className = 'hint'; h.style.alignSelf = 'center'; h.textContent = 'まだありません。photo retouch の書き出し画面で「この色を動画用に保存」を押すと、ここに並びます。'; box.appendChild(h); }
+  if (!S.looks.length){ const h = document.createElement('div'); h.className = 'hint'; h.style.alignSelf = 'center'; h.textContent = 'まだありません。自動で作った色を「この色を一覧に保存」すると、ここに並びます。'; box.appendChild(h); }
 }
 function pickLook(lk){
   S.look = lk; GLR.setLut(lk ? lk.lut : null, lk ? lk.N : 0);
@@ -407,7 +407,7 @@ function judge(src, w, h, person){
 }
 const GN = { person: '人物', plant: '植物', sea: '海', object: '空・物', forest: '森', street: '街', snow: '雪', night: '夜', still: '静物', evening: '夕' }, BMN = ['', '青影', '中間', '青光'];
 function candName(c){ const e = TK_L6[c.i]; let k = 0, cnt = 0; TK_L6.forEach((x, j) => { if (x.g === e.g){ cnt++; if (j === c.i) k = cnt; } }); return (c.bm ? BMN[c.bm] + '・' : '') + (GN[e.g] || e.g) + k + ' ' + e.d; }
-// 対応表を作る（photo retouch の「動画用に保存」と同じ：元の色 → 仕上がりの色 の平均のずれ。写真にない色は近くのずれを広げて埋める）
+// 対応表を作る（元の色 → 仕上がりの色 の平均のずれ。写真にない色は近くのずれを広げて埋める）
 function fitLut(pairs, N){
   const S1 = N - 1, NN = N * N, M = NN * N, acc = new Float64Array(M * 3), ws = new Float64Array(M);
   for (const [A, B] of pairs){ const n = A.length / 4, st = Math.max(1, Math.floor(n / 300000));

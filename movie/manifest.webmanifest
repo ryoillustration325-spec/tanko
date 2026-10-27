@@ -1,7 +1,7 @@
 {
   "name": "movie retouch",
   "short_name": "movie retouch",
-  "description": "photo retouch で作った色とエフェクトを、動画にかけて書き出すアプリ。動画は端末の中だけで処理されます。",
+  "description": "見本寄せの色とエフェクトを、動画にかけて書き出すアプリ。動画は端末の中だけで処理されます。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
