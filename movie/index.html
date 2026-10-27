@@ -58,6 +58,11 @@
   .look .ph{display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--faint); background:var(--surface)}
   .look span{display:block; font-size:10px; padding:4px 5px 5px; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
   .look .del{position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%; border:0; background:rgba(13,15,17,.75); color:var(--muted); font-size:12px; line-height:20px; padding:0; cursor:pointer}
+  .cands{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:6px 0}
+  .cand{padding:0; border:2px solid transparent; border-radius:9px; overflow:hidden; background:var(--surface2); color:var(--muted); font:inherit; cursor:pointer; text-align:left}
+  .cand.on{border-color:var(--accent); color:var(--ink)}
+  .cand img{width:100%; aspect-ratio:16/10; object-fit:cover; display:block}
+  .cand span{display:block; font-size:10px; padding:3px 5px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .row{margin:4px 2px}
   .rowh{display:flex; justify-content:space-between; font-size:12px; color:var(--muted)}
   .rowh .v{color:var(--ink)}
@@ -81,7 +86,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v1</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v2</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -101,7 +106,13 @@
       <input type="range" id="seek" min="0" max="1000" value="0" aria-label="再生位置">
       <span class="tm num" id="tm">0:00 / 0:00</span>
     </div>
-    <div class="sect">色（photo retouch で保存したもの）</div>
+    <div class="sect">自動で色を作る（見本に寄せる）</div>
+    <div class="seg" id="segP"><button type="button" data-v="auto" class="on">自動で判定</button><button type="button" data-v="1">人物</button><button type="button" data-v="0">人物でない</button></div>
+    <div class="rrow"><button class="pill" id="autoGo" type="button" disabled style="flex:1">このコマで候補を作る</button></div>
+    <div class="hint" id="autoHint">止めた所のコマから、photo retouch の「見本1枚に寄せる」と同じ方法で候補を作ります。色は前後のコマも混ぜて作るので、動画全体で安定します。</div>
+    <div class="cands" id="cands"></div>
+    <div class="rrow" id="autoSaveRow" hidden><button class="btn" id="autoSave" type="button">この色を一覧に保存</button></div>
+    <div class="sect">保存した色（photo retouch・この画面で保存したもの）</div>
     <div class="looks" id="looks"></div>
     <div class="row"><div class="rowh"><span>色の強さ</span><span class="v num" id="v-mix">100</span></div><input type="range" id="s-mix" min="0" max="100" value="100"></div>
     <div class="sect">エフェクト</div>
@@ -283,7 +294,7 @@ video.addEventListener('play', () => { $('playIco').innerHTML = '<path d="M7 5h4
 video.addEventListener('pause', () => { $('playIco').innerHTML = '<path d="M7 5v14l12-7z"/>'; paint(); });
 function openVideo(f){
   if (!f) return; S.file = f; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); video.src = url;
-  video.addEventListener('loadeddata', function once(){ video.removeEventListener('loadeddata', once); $('drop').hidden = true; $('exp').disabled = false; S.vw = video.videoWidth; S.vh = video.videoHeight;
+  video.addEventListener('loadeddata', function once(){ video.removeEventListener('loadeddata', once); $('drop').hidden = true; $('exp').disabled = false; $('autoGo').disabled = false; loadEngine().catch(() => {}); S.vw = video.videoWidth; S.vh = video.videoHeight;
     $('info').hidden = false; $('info').textContent = S.vw + '×' + S.vh + ' ・ ' + fmt(video.duration); paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); });
   video.addEventListener('error', function once(){ video.removeEventListener('error', once); toast('この動画は開けませんでした'); });
   video.load();
@@ -349,9 +360,111 @@ $('exp').addEventListener('click', async () => {
   }
 });
 
+
+// ---------- photo retouch の仕上げの仕組み（tkcore）をそのまま読み込む（photo 側は変えない） ----------
+const TPL = {"on":{"lm":1,"basic":1,"wb":1,"fx":1,"det":1,"mix":1,"cg":1,"crv":1,"diff":0,"glow":0,"hal":0,"comp":1,"mist":0,"ray":0,"lens":0,"dens":0,"grad":0,"match":0,"skin":0,"reg":0,"bright":0,"tone":0,"split":0,"grain":0,"look2":0,"look3":1},"reg":{"ver":0,"list":[{"ev":0,"sat":0,"temp":0,"tint":0,"hue":0},{"ev":0,"sat":0,"temp":0,"tint":0,"hue":0},{"ev":0,"sat":0,"temp":0,"tint":0,"hue":0},{"ev":0,"sat":0,"temp":0,"tint":0,"hue":0}],"dodge":{"on":0,"x":0.5,"y":0.4,"amt":30,"size":30},"vig":0},"crv":{"rgb":[[0,0],[1,1]],"r":[[0,0],[1,1]],"g":[[0,0],[1,1]],"b":[[0,0],[1,1]]},"lm":[],"geo":{"rot":0,"flip":0,"ang":0,"x":0,"y":0,"w":1,"h":1,"asp":"orig"},"cgsH":0,"cgsS":0,"cgsL":0,"cgmH":0,"cgmS":0,"cgmL":0,"cghH":0,"cghS":0,"cghL":0,"cggH":0,"cggS":0,"cggL":0,"cgBlend":50,"cgBal":0,"cgSkin":0,"dmode":"B","rMode":"beam","rx":0.92,"ry":0.04,"gx0":0.88,"gy0":0.92,"gx1":0.25,"gy1":0.3,"mref":null,"mMode":"part","bExp":0,"bCon":0,"bHi":0,"bSh":0,"bWh":0,"bBl":0,"bTemp":0,"bTint":0,"bVib":0,"bSat":0,"fxTex":0,"fxCla":0,"fxDeh":0,"vgAmt":0,"vgMid":50,"shAmt":0,"shRad":10,"shMask":0,"nrL":0,"nrC":0,"mh0":0,"mh1":0,"mh2":0,"mh3":0,"mh4":0,"mh5":0,"mh6":0,"mh7":0,"ms0":0,"ms1":0,"ms2":0,"ms3":0,"ms4":0,"ms5":0,"ms6":0,"ms7":0,"ml0":0,"ml1":0,"ml2":0,"ml3":0,"ml4":0,"ml5":0,"ml6":0,"ml7":0,"mxSep":0,"cSep":0,"diff":50,"diffR":7,"glow":30,"glowR":12,"thr":64,"hal":10,"comp":30,"mist":8,"rAmt":50,"rWidth":40,"rWarm":55,"rAng":125,"rBars":2,"lCa":35,"lSoft":40,"lVeil":25,"lVig":35,"dens":40,"dskin":70,"dR":50,"dO":30,"dY":50,"dG":60,"dC":50,"dB":50,"dM":50,"gAtemp":40,"gAtint":12,"gAev":5,"gBtemp":-40,"gBtint":-6,"gBev":-12,"mAmt":70,"mLum":25,"skAmt":30,"skShift":0,"skSm":25,"skTx":65,"target":54,"lift":8,"roll":10,"con":-6,"sat":-6,"shb":10,"hiw":8,"grain":10,"mix":100,"mixL":100,"mixC":100,"l6B":null,"l6Mix":0,"l6DeepBg":30,"l6DeepSk":0,"l6Teal":40,"l6Calm":50,"l6Soft":0,"l6Clar":0,"l6Sky":100,"l5Base":0,"l4Mode":0,"l6":1,"l6Idx":368,"l6V":2,"l6L":60,"l6C":60,"l6Dark":40,"l5Master":100,"l3Skin":50,"lkProt":85,"lkAi":1,"lkSkinOff":0,"l6Person":0,"l6Custom":null,"l6BlueMode":0};
+let ENGINE = null;
+function loadEngine(){
+  if (ENGINE) return ENGINE;
+  ENGINE = fetch('../index.html', { cache: 'no-cache' }).then(r => r.text()).then(html => {
+    const doc = new DOMParser().parseFromString(html, 'text/html'), el = doc.getElementById('tkcore');
+    if (!el) throw new Error('engine');
+    const sc = document.createElement('script'); sc.text = el.textContent; document.head.appendChild(sc);
+    if (typeof window.tkProcess !== 'function') throw new Error('engine');
+  });
+  ENGINE.catch(() => { ENGINE = null; });
+  return ENGINE;
+}
+// 今の動画のコマを、長辺 maxL の小さな画像（RGBA）に
+function grabFrame(maxL){ const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, maxL / Math.max(vw, vh)), w = Math.max(2, Math.round(vw * k)), h = Math.max(2, Math.round(vh * k));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(video, 0, 0, w, h); return { px: x.getImageData(0, 0, w, h).data, w, h }; }
+function seekTo(t){ return new Promise(res => { const done = () => { video.removeEventListener('seeked', done); res(); }; video.addEventListener('seeked', done); video.currentTime = Math.max(0, Math.min(video.duration - 0.05, t)); }); }
+// 人物かどうか（photo retouch のAIなしの判定と同じ：肌らしい色が十分にあり、同じ色相の鮮やかな色が多くない）
+function guessPerson(px, n){ const k = [0, 0, 0]; let sk = 0, vivid = 0;
+  for (let i = 0; i < n; i++){ tkToOk(px[i * 4] / 255, px[i * 4 + 1] / 255, px[i * 4 + 2] / 255, k); const C = Math.hypot(k[1], k[2]); if (C < 0.02) continue; const H = (Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360;
+    if (tkHd(H, 50) < 30 && k[0] > 0.45 && k[0] < 0.93){ if (C < 0.085) sk++; else vivid++; } else if (tkHd(H, 30) < 35 && C > 0.09) vivid++; }
+  return sk / n > 0.04 && vivid < sk * 0.6; }
+function tplFor(c, person, amt){ const q = JSON.parse(JSON.stringify(TPL)); q.l6Idx = c.i; q.l6V = 2; q.l6Custom = null; q.l6BlueMode = c.bm | 0; q.l6Person = person ? 1 : 0; q.l5Master = amt; return q; }
+// 候補づくり（photo retouch の l6Judge と同じ考え方：近い見本＋淡い藍・深い緑の見本を実際にかけて採点、青の入れ方も試す、似た仕上がりは並べない）
+function judge(src, w, h, person){
+  const n = w * h, T = tkL6Model(src, n, person), desc = tkL6Desc(src, n, true); desc.tung = tkL6TungStr(src, n);
+  const rank = tkL6Rank(T, person ? 'person' : null, person ? null : desc);
+  const pool = tkL6Top(rank, 14), seen = {}; pool.forEach(i => { seen[i] = 1; });
+  const blue = rank.filter(r => { const e = TK_L6[r.i]; if (seen[r.i] || !e) return false; if (person && e.g !== 'person') return false; const t = tkL6Traits(e.m); return t.deep > 0.6 && (e.mc == null || e.mc < 0.035); }).map(r => r.i);
+  tkL6Top(blue.map(i => ({ i })), 6).forEach(i => pool.push(i));
+  if (!person){ const deepG = rank.filter(r => { const e = TK_L6[r.i]; return e && pool.indexOf(r.i) < 0 && (e.g === 'plant' || e.g === 'forest') && /^深い/.test(e.d); }).map(r => r.i); tkL6Top(deepG.map(i => ({ i })), 5).forEach(i => pool.push(i)); }
+  const rr = rank.length > 5 ? rank[0].d / Math.max(1e-6, rank[5].d) : 1, near = Math.max(0, Math.min(1, (0.55 - rr) / 0.35)), amt = Math.round(100 - 65 * near);
+  const res = []; pool.forEach(i => { const c = { i, bm: 0 }; try{ const out = tkProcess(src, w, h, tplFor(c, person, amt)); c.r = tkL6Score(src, out, w, h, person); c.px = out; res.push(c); }catch(e){} });
+  const rs = res.map(x => x.r.rough).sort((a, b) => a - b), rmed = rs.length ? Math.max(1, rs[rs.length >> 1]) : 1;
+  const adj = (x) => x.r.score + 4 * Math.max(0, x.r.rough / rmed - 1.15) + 8 * near * x.r.dE / 0.05;
+  res.forEach(x => { x.s = adj(x); }); res.sort((a, b) => a.s - b.s);
+  if (!person){ const top2 = res.slice(0, 2); (desc.tung > 0.3 ? [1] : [1, 2, 3]).forEach(m => top2.forEach(x => { const c = { i: x.i, bm: m }; try{ const out = tkProcess(src, w, h, tplFor(c, person, amt)); c.r = tkL6Score(src, out, w, h, person); c.px = out; c.s = adj(c) - TK_L6_BLUEPREF; res.push(c); }catch(e){} })); res.sort((a, b) => a.s - b.s); }
+  const dif = (a, b) => { let sm = 0, cn = 0; for (let t = 0; t < a.length; t += 16){ sm += Math.abs(a[t] - b[t]) + Math.abs(a[t + 1] - b[t + 1]) + Math.abs(a[t + 2] - b[t + 2]); cn += 3; } return sm / cn / 255; };
+  const rest = res.slice(), sel = [rest.shift()];
+  while (rest.length && sel.length < 9){ let bi = -1, bv = 1e9; for (let u = 0; u < rest.length; u++){ let md = 1; for (const v of sel) md = Math.min(md, dif(rest[u].px, v.px)); rest[u]._md = md; const val = rest[u].s + 2.5 * Math.exp(-md / 0.025); if (val < bv){ bv = val; bi = u; } } const pk = rest.splice(bi, 1)[0]; if (pk._md >= 0.008) sel.push(pk); }
+  return { cands: sel, amt, person };
+}
+const GN = { person: '人物', plant: '植物', sea: '海', object: '空・物', forest: '森', street: '街', snow: '雪', night: '夜', still: '静物', evening: '夕' }, BMN = ['', '青影', '中間', '青光'];
+function candName(c){ const e = TK_L6[c.i]; let k = 0, cnt = 0; TK_L6.forEach((x, j) => { if (x.g === e.g){ cnt++; if (j === c.i) k = cnt; } }); return (c.bm ? BMN[c.bm] + '・' : '') + (GN[e.g] || e.g) + k + ' ' + e.d; }
+// 対応表を作る（photo retouch の「動画用に保存」と同じ：元の色 → 仕上がりの色 の平均のずれ。写真にない色は近くのずれを広げて埋める）
+function fitLut(pairs, N){
+  const S1 = N - 1, NN = N * N, M = NN * N, acc = new Float64Array(M * 3), ws = new Float64Array(M);
+  for (const [A, B] of pairs){ const n = A.length / 4, st = Math.max(1, Math.floor(n / 300000));
+    for (let p = 0; p < n; p += st){ const i = p * 4, fr = A[i] / 255 * S1, fg = A[i + 1] / 255 * S1, fb = A[i + 2] / 255 * S1, r0 = Math.min(S1 - 1, fr | 0), g0 = Math.min(S1 - 1, fg | 0), b0 = Math.min(S1 - 1, fb | 0), tr = fr - r0, tg = fg - g0, tb = fb - b0;
+      const dr = (B[i] - A[i]) / 255, dg = (B[i + 1] - A[i + 1]) / 255, db = (B[i + 2] - A[i + 2]) / 255;
+      for (let c = 0; c < 8; c++){ const cr = c & 1, cg = (c >> 1) & 1, cb = c >> 2, w = (cr ? tr : 1 - tr) * (cg ? tg : 1 - tg) * (cb ? tb : 1 - tb); if (w < 1e-6) continue; const k = (b0 + cb) * NN + (g0 + cg) * N + (r0 + cr); acc[k * 3] += w * dr; acc[k * 3 + 1] += w * dg; acc[k * 3 + 2] += w * db; ws[k] += w; } } }
+  let D = new Float32Array(M * 3), T = new Float32Array(M * 3); const O = new Float32Array(M * 3), cf = new Float32Array(M);
+  for (let k = 0; k < M; k++){ if (ws[k] > 0) for (let c = 0; c < 3; c++) O[k * 3 + c] = acc[k * 3 + c] / ws[k]; cf[k] = ws[k] / (ws[k] + 2); for (let c = 0; c < 3; c++) D[k * 3 + c] = O[k * 3 + c]; }
+  for (let it = 0; it < 80; it++){
+    for (let b = 0; b < N; b++) for (let g = 0; g < N; g++) for (let r = 0; r < N; r++){ const k = b * NN + g * N + r; let sx = 0, sy = 0, sz = 0, cn = 0;
+      const nb = (kk) => { sx += D[kk * 3]; sy += D[kk * 3 + 1]; sz += D[kk * 3 + 2]; cn++; };
+      if (r > 0) nb(k - 1); if (r < S1) nb(k + 1); if (g > 0) nb(k - N); if (g < S1) nb(k + N); if (b > 0) nb(k - NN); if (b < S1) nb(k + NN);
+      const a = cf[k] * (it < 70 ? 1 : 0.8); T[k * 3] = a * O[k * 3] + (1 - a) * sx / cn; T[k * 3 + 1] = a * O[k * 3 + 1] + (1 - a) * sy / cn; T[k * 3 + 2] = a * O[k * 3 + 2] + (1 - a) * sz / cn; }
+    const sw = D; D = T; T = sw; }
+  const L = new Uint16Array(M * 3);
+  for (let b = 0; b < N; b++) for (let g = 0; g < N; g++) for (let r = 0; r < N; r++){ const k = b * NN + g * N + r, base = [r / S1, g / S1, b / S1]; for (let c = 0; c < 3; c++) L[k * 3 + c] = Math.round(Math.max(0, Math.min(1, base[c] + D[k * 3 + c])) * 65535); }
+  return L;
+}
+const AUTO = { res: null, pick: null, busy: false, pforce: 'auto', look: null };
+const pxURL = (px, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0); return c.toDataURL('image/jpeg', 0.8); };
+function renderCands(){
+  const box = $('cands'); box.innerHTML = ''; if (!AUTO.res) return;
+  AUTO.res.cands.slice(0, 9).forEach((c, r) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cand' + (AUTO.pick === c ? ' on' : '');
+    const im = document.createElement('img'); im.src = c.url; im.alt = ''; b.appendChild(im); const sp = document.createElement('span'); sp.textContent = (r === 0 ? '★ ' : '') + candName(c); b.appendChild(sp);
+    b.addEventListener('click', () => applyCand(c)); box.appendChild(b); });
+}
+async function makeCands(){
+  if (AUTO.busy || !video.videoWidth) return; AUTO.busy = true; video.pause(); $('autoGo').disabled = true; $('autoGo').textContent = '候補を作成中…';
+  try{
+    await loadEngine(); await new Promise(r => setTimeout(r, 30));
+    const f = grabFrame(150), person = AUTO.pforce === 'auto' ? guessPerson(f.px, f.w * f.h) : AUTO.pforce === '1';
+    const res = judge(f.px, f.w, f.h, person); res.cands.forEach(c => { c.url = pxURL(c.px, f.w, f.h); }); res.t = video.currentTime; AUTO.res = res; AUTO.pick = null;
+    $('autoHint').textContent = (person ? '人物' : '人物でない') + 'として候補を作りました（' + fmt(res.t) + ' のコマ）。押すと動画全体にかかります。';
+    renderCands(); await applyCand(res.cands[0]);
+  }catch(e){ console.error(e); toast('候補を作れませんでした'); }
+  AUTO.busy = false; $('autoGo').disabled = false; $('autoGo').textContent = 'このコマで候補を作る';
+}
+// 候補を選ぶ：今のコマ＋前後のコマ（動画の中から最大5コマ）に同じ仕上げをかけ、その対応から色の表を作る＝動画全体で安定
+async function applyCand(c){
+  if (!c || !AUTO.res) return; AUTO.pick = c; renderCands(); toast('色を作成中…');
+  const t0 = AUTO.res.t, d = video.duration || 0, ts = [t0]; if (d > 1){ [0.15, 0.4, 0.65, 0.9].forEach(p => { const t = d * p; if (Math.abs(t - t0) > d * 0.1) ts.push(t); }); }
+  const pairs = [];
+  for (const t of ts.slice(0, 5)){ if (Math.abs(video.currentTime - t) > 0.01) await seekTo(t); const f = grabFrame(480); const q = tplFor(c, AUTO.res.person, AUTO.res.amt); q.on.comp = 0; const out = tkProcess(f.px, f.w, f.h, q); pairs.push([f.px, out]); await new Promise(r => setTimeout(r, 0)); }
+  await seekTo(t0);
+  const lut = fitLut(pairs, 33), comp = TPL.on && TPL.on.comp ? (TPL.comp || 0) : 0;
+  const f0 = grabFrame(240), q0 = tplFor(c, AUTO.res.person, AUTO.res.amt); const thumb = pxURL(tkProcess(f0.px, f0.w, f0.h, q0), f0.w, f0.h);
+  AUTO.look = { id: 'v' + Date.now(), name: dstr() + '・' + candName(c), at: Date.now(), N: 33, lut, fx: Object.assign({}, S.fx, { comp }), thumb };
+  S.look = AUTO.look; GLR.setLut(lut, 33); if (S.fx.comp !== comp){ S.fx.comp = comp; S.fx0.comp = comp; syncFx(); }
+  $('autoSaveRow').hidden = false; renderLooks(); redraw(); toast('色をかけました');
+}
+function dstr(){ const d = new Date(), z = (n) => (n < 10 ? '0' : '') + n; return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes()); }
+$('autoGo').addEventListener('click', makeCands);
+$('segP').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { AUTO.pforce = b.dataset.v; $('segP').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); if (AUTO.res) makeCands(); }));
+$('autoSave').addEventListener('click', async () => { if (!AUTO.look) return; const lk = Object.assign({}, AUTO.look, { fx: Object.assign({}, S.fx) }); const d = await db(); await new Promise(res => { const t = d.transaction('looks', 'readwrite'); t.objectStore('looks').put(lk); t.oncomplete = res; t.onerror = res; }); S.looks = await loadLooks(); S.look = S.looks.find(x => x.id === lk.id) || lk; renderLooks(); toast('一覧に保存しました'); });
+
 buildFx();
 loadLooks().then(l => { S.looks = l; renderLooks(); }).catch(() => renderLooks());
-window.__mr = { S, pickLook, openVideo, paint };
+window.__mr = { S, pickLook, openVideo, paint, makeCands, AUTO };
 </script>
 </body>
 </html>
