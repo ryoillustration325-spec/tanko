@@ -479,7 +479,7 @@
 </style>
 </head>
 <body>
-<input type="file" id="file" accept="image/*">
+<input type="file" id="file" accept="image/*,.raf,.RAF,.dng,.DNG,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.rw2,.RW2,.orf,.ORF">
 <div class="app" id="app">
   <header class="topbar">
     <label class="tb" for="file" id="change">写真を選ぶ</label>
@@ -492,12 +492,12 @@
   </header>
   <main class="stagewrap"><div class="stage" id="stage">
     <div class="drop" id="drop">
-      <input type="file" id="dropfile" accept="image/*" aria-label="写真を選ぶ">
+      <input type="file" id="dropfile" accept="image/*,.raf,.RAF,.dng,.DNG,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.rw2,.RW2,.orf,.ORF" aria-label="写真を選ぶ">
       <div class="dropbtn" id="dropbtn">
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v131</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v132</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3912,8 +3912,49 @@ function tkLook2(img, n, P, w, h){
       } });
     }).catch(function(){});
   }
+  // ---- RAW（.RAF など）：ブラウザの中で現像して、白飛びに強い「平らな素材」の写真にしてから読み込む（LibRaw） ----
+  var RAW_EXT = /\.(raf|dng|arw|nef|nrw|cr2|cr3|crw|rw2|orf|pef|srw|3fr|iiq|rwl|erf|kdc|mrw|x3f)$/i;
+  function isRawFile(f){ return !!f && (RAW_EXT.test(f.name || '') || /x-(fuji|sony|canon|nikon|adobe-dng|panasonic|olympus|pentax|samsung)|image\/(x-)?dng/i.test(f.type || '')); }
+  function rawDevelop(f){
+    var t0 = Date.now();
+    return f.arrayBuffer().then(function(buf){ return import('./raw/index.js').then(function(mod){
+      var lr = new mod.default();
+      // 半分の大きさで現像（X-S10で約3100×2000px。書き出しの最大3000pxに足りる・速い・メモリが少ない）。色は線形のXYZで受け取り、ここで画面の色域へ
+      return lr.open(new Uint8Array(buf), { halfSize: true, useCameraWb: true, outputBps: 16, noAutoBright: true, gamm: [1, 1], highlight: 2, outputColor: 5, userQual: 3 })
+        .then(function(){ return lr.metadata(); })
+        .then(function(meta){ return lr.imageData().then(function(im){ lr.dispose(); return { im: im, meta: meta }; }); }, function(e){ lr.dispose(); throw e; });
+    }); }).then(function(res){
+      var im = res.im, W0 = im.width, H0 = im.height, D = im.data, k = Math.max(1, Math.ceil(Math.max(W0, H0) / 4000)), W = Math.floor(W0 / k), H = Math.floor(H0 / k), n = W * H;
+      // 縮小（大きすぎる時だけ、k×kの平均）しながら XYZ → 画面の色（P3 か sRGB）の線形の値へ
+      var p3 = CS === 'display-p3', M = p3 ? [2.4934969, -0.9313836, -0.4027108, -0.829489, 1.7626641, 0.0236247, 0.0358458, -0.0761724, 0.9568845] : [3.2404542, -1.5371385, -0.4985314, -0.969266, 1.8760108, 0.041556, 0.0556434, -0.2040259, 1.0572252];
+      var L = new Float32Array(n * 3), Y = new Float32Array(n), inv = 1 / 65535 / (k * k);
+      for (var y = 0; y < H; y++) for (var x = 0; x < W; x++){
+        var X0 = 0, Y0 = 0, Z0 = 0; for (var dy = 0; dy < k; dy++) for (var dx = 0; dx < k; dx++){ var j = ((y * k + dy) * W0 + x * k + dx) * 3; X0 += D[j]; Y0 += D[j + 1]; Z0 += D[j + 2]; }
+        X0 *= inv; Y0 *= inv; Z0 *= inv; var o = (y * W + x) * 3;
+        L[o] = M[0] * X0 + M[1] * Y0 + M[2] * Z0; L[o + 1] = M[3] * X0 + M[4] * Y0 + M[5] * Z0; L[o + 2] = M[6] * X0 + M[7] * Y0 + M[8] * Z0; Y[y * W + x] = Y0;
+      }
+      // 明るさ：中央の明るさを標準へ（暗い写真は上げすぎない）。明るい所は肩でなめらかに丸める＝白飛びしにくい平らな素材
+      var st = Math.max(1, Math.floor(n / 50000)), smp = []; for (var i = 0; i < n; i += st) smp.push(Y[i]); smp.sort(function(a, b){ return a - b; });
+      var q = function(p){ return smp[Math.min(smp.length - 1, Math.floor(smp.length * p))] || 0; }, med = Math.max(1e-5, q(0.5));
+      var g = 0.12 / med; g = Math.max(1, Math.min(med < 0.01 ? 2.5 : 4, g));
+      var KN = 0.6, tone = function(v){ v = v * g - 0.0015; if (v <= 0) return 0; return v <= KN ? v : KN + (1 - KN) * (1 - Math.exp(-(v - KN) / (1 - KN))); };   /* 0.6までは素直、その上は肩でなめらかに丸める＝明るい所を飛ばさず残す（黒はごくわずかに締める） */
+      var LUT = new Uint8ClampedArray(4097); for (var lq = 0; lq <= 4096; lq++){ var v = lq / 4096 * 1.0; v = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; LUT[lq] = Math.round(v * 255); }
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H; var cx = cv.getContext('2d', { colorSpace: CS }), id = cx.createImageData(W, H), d = id.data;
+      for (var p = 0; p < n; p++){ var a = p * 3, b = p * 4; d[b] = LUT[(tone(L[a]) * 4096 + 0.5) | 0]; d[b + 1] = LUT[(tone(L[a + 1]) * 4096 + 0.5) | 0]; d[b + 2] = LUT[(tone(L[a + 2]) * 4096 + 0.5) | 0]; d[b + 3] = 255; }
+      cx.putImageData(id, 0, 0);
+      return new Promise(function(ok){ cv.toBlob(function(bl){ ok({ blob: bl, ms: Date.now() - t0, w: W, h: H, meta: res.meta }); }, 'image/jpeg', 0.96); });
+    });
+  }
   function loadFile(f, opt){
     opt = opt || {};
+    if (isRawFile(f)){
+      showBusy('RAWを現像中…');
+      rawDevelop(f).then(function(r){ hideBusy(); if (!r.blob){ toast('RAWを現像できませんでした'); return; }
+        var nm = (f.name || 'raw').replace(RAW_EXT, '') + '_raw.jpg', nf; try{ nf = new File([r.blob], nm, { type: 'image/jpeg' }); }catch(e){ nf = r.blob; }
+        loadFile(nf, opt); setTimeout(function(){ toast('RAWを現像しました（' + (r.ms / 1000).toFixed(1) + '秒）'); }, 400);
+      }, function(e){ hideBusy(); toast('このRAWは読み込めませんでした'); try{ console.error(e); }catch(x){} });
+      return;
+    }
     if (!f || (f.type && f.type.indexOf('image/') !== 0)){ toast('画像ファイルを選んでください'); return; }
     var url = URL.createObjectURL(f);
     var im = new Image();
