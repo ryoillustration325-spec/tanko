@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v5</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v6</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -283,7 +283,8 @@ let frameNo = 0, need = false, url = null;
 function fmt(t){ t = Math.max(0, t || 0); return Math.floor(t / 60) + ':' + ('0' + Math.floor(t % 60)).slice(-2); }
 // プレビューは軽さ優先：止めている時は長辺720px、再生中は480px（書き出しは元の大きさで処理）
 function previewSize(){ const w = video.videoWidth, h = video.videoHeight, m = video.paused ? (Z.s > 1.2 ? 2560 : 720) : 480, k = Math.min(1, m / Math.max(w, h)); return [Math.max(2, Math.round(w * k / 2) * 2), Math.max(2, Math.round(h * k / 2) * 2)]; }
-function paint(){ if (!GLR || !video.videoWidth) return; const [w, h] = previewSize(); try{ if (fcv.width !== w || fcv.height !== h){ fcv.width = w; fcv.height = h; } fctx.drawImage(video, 0, 0, w, h); GLR.render(fcv, w, h, S.mix, S.fx, frameNo++); }catch(e){ console.error(e); } $('tm').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration); if (!seeking && video.duration) $('seek').value = Math.round(video.currentTime / video.duration * 1000); }
+const FX0 = { glow: 0, glowR: 12, thr: 64, hal: 0, diff: 0, diffR: 8, mist: 0, comp: 0, grain: 0, vgAmt: 0, vgMid: 50 };   // 編集前を見る時（色もエフェクトもなし）
+function paint(){ if (!GLR || !video.videoWidth) return; const [w, h] = previewSize(); try{ if (fcv.width !== w || fcv.height !== h){ fcv.width = w; fcv.height = h; } fctx.drawImage(video, 0, 0, w, h); GLR.render(fcv, w, h, S.orig ? 0 : S.mix, S.orig ? FX0 : S.fx, frameNo++); }catch(e){ console.error(e); } $('tm').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration); if (!seeking && video.duration) $('seek').value = Math.round(video.currentTime / video.duration * 1000); }
 function redraw(){ if (video.paused){ need = true; requestAnimationFrame(() => { if (need){ need = false; paint(); } }); } }
 function loop(){ if (!video.paused) paint(); if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
 let seeking = false;
@@ -506,14 +507,17 @@ const Z = { s: 1, x: 0, y: 0 };
   const clampZ = () => { const r = st.getBoundingClientRect(), mx = (Z.s - 1) * r.width / 2, my = (Z.s - 1) * r.height / 2; Z.x = Math.max(-mx, Math.min(mx, Z.x)); Z.y = Math.max(-my, Math.min(my, Z.y)); };
   const apply = () => { clampZ(); cv.style.transform = Z.s > 1.001 ? 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')' : ''; const zi = $('zinfo'); zi.hidden = Z.s <= 1.01; zi.textContent = '×' + Z.s.toFixed(1) + '　ダブルタップで戻る'; };
   const hiRes = () => { clearTimeout(hiT); hiT = setTimeout(() => { if (video.paused) paint(); }, 150); };
+  // 長押し：押している間だけ編集前（photo と同じ）
+  let lpT = 0; const lpEnd = () => { clearTimeout(lpT); if (S.orig){ S.orig = false; $('zinfo').hidden = Z.s <= 1.01; apply(); paint(); } };
   st.addEventListener('pointerdown', (e) => { if (!video.videoWidth || e.target.closest('label,button,input')) return; try{ st.setPointerCapture(e.pointerId); }catch(x){} pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    clearTimeout(lpT); if (pts.size === 1){ const sx = e.clientX, sy = e.clientY; lpT = setTimeout(() => { const p = pts.get(e.pointerId); if (pts.size === 1 && p && Math.hypot(p.x - sx, p.y - sy) < 10){ S.orig = true; const zi = $('zinfo'); zi.hidden = false; zi.textContent = '編集前'; paint(); } }, 380); } else lpEnd();
     if (pts.size === 2){ const [a, b] = [...pts.values()], r = st.getBoundingClientRect(); pin = { d0: Math.hypot(a.x - b.x, a.y - b.y), s0: Z.s, x0: Z.x, y0: Z.y, mx: (a.x + b.x) / 2 - r.left - r.width / 2, my: (a.y + b.y) / 2 - r.top - r.height / 2 }; drag = null; }
     else if (pts.size === 1){ const now = Date.now(); if (now - lastTap < 300){ Z.s = 1; Z.x = 0; Z.y = 0; apply(); hiRes(); lastTap = 0; return; } lastTap = now; drag = { x: e.clientX, y: e.clientY, x0: Z.x, y0: Z.y }; } });
   st.addEventListener('pointermove', (e) => { if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pin && pts.size >= 2){ const [a, b] = [...pts.values()], r = st.getBoundingClientRect(), d = Math.hypot(a.x - b.x, a.y - b.y), ns = Math.max(1, Math.min(6, pin.s0 * d / Math.max(10, pin.d0)));
       const mx = (a.x + b.x) / 2 - r.left - r.width / 2, my = (a.y + b.y) / 2 - r.top - r.height / 2; Z.x = mx - (pin.mx - pin.x0) * ns / pin.s0; Z.y = my - (pin.my - pin.y0) * ns / pin.s0; Z.s = ns; apply(); }
     else if (drag && Z.s > 1){ Z.x = drag.x0 + e.clientX - drag.x; Z.y = drag.y0 + e.clientY - drag.y; apply(); } });
-  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2 && pin){ pin = null; hiRes(); } if (!pts.size) drag = null; };
+  const up = (e) => { lpEnd(); pts.delete(e.pointerId); if (pts.size < 2 && pin){ pin = null; hiRes(); } if (!pts.size) drag = null; };
   st.addEventListener('pointerup', up); st.addEventListener('pointercancel', up);
   document.addEventListener('gesturestart', (e) => e.preventDefault());   // iPhone の画面全体の拡大を止める（写真だけ拡大）
 })();

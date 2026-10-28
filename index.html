@@ -487,7 +487,7 @@
       <button class="ib" id="undo" type="button" aria-label="取り消し" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
       <button class="ib" id="redo" type="button" aria-label="やり直し" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     </div>
-    <button class="tb" id="cmp" type="button" disabled>元画像</button>
+    <button class="tb" id="cmp" type="button" disabled hidden style="display:none">元画像</button>
     <button class="tb pri" id="save" type="button" disabled>書き出し</button>
   </header>
   <main class="stagewrap"><div class="stage" id="stage">
@@ -497,7 +497,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v134</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v135</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3659,6 +3659,7 @@ function tkLook2(img, n, P, w, h){
     { sect: '便利機能' },
     { key: 'lm', title: 'マスク', sub: '円形・線形・ブラシで決めた範囲だけを調整', sliders: [], custom: buildLmExtra, noToggle: true },
     { key: 'hist', title: '編集履歴', sub: '変えた順に並び、タップでその時点へ', sliders: [], custom: buildHistExtra, noToggle: true },
+    { key: 'cmpv', title: '前後比較', sub: '編集前と、線で左右に分けて比べる', sliders: [], custom: buildCmpExtra, noToggle: true },
     { key: 'clip', title: '設定のコピー', sub: '今の仕上げを次の写真へ／新しい写真の始め方', sliders: [], custom: buildClipExtra, noToggle: true },
     { key: 'aiprep', title: 'AIの準備', sub: 'AIのファイルを先に端末へ入れておく', sliders: [], custom: buildAiExtra, noToggle: true },
     { key: 'feed', title: 'フィード確認', sub: '過去の投稿と並べて、なじむか確かめる', sliders: [], custom: buildFeedExtra, noToggle: true },
@@ -5176,7 +5177,7 @@ function tkLook2(img, n, P, w, h){
     splitui.style.display = 'block'; splitui.style.left = (vr.left - sr.left) + 'px'; splitui.style.top = (vr.top - sr.top) + 'px'; splitui.style.width = vr.width + 'px'; splitui.style.height = vr.height + 'px';
     splitui.querySelector('.sline').style.left = (SPLITX * 100) + '%';
   }
-  function setSplit(on){ SPLIT = !!on; cmp.classList.toggle('on', SPLIT); if (SPLIT) updateOrigCanvas(); present(); toast(SPLIT ? '前後比較：線を左右に動かせます（もう一度タップで終了）' : '前後比較を終了しました'); }
+  function setSplit(on){ SPLIT = !!on; cmp.classList.toggle('on', SPLIT); if (SPLIT) updateOrigCanvas(); present(); toast(SPLIT ? '前後比較：線を左右に動かせます（その他 → 前後比較で終了）' : '前後比較を終了しました'); }
   // ---- 白飛び・黒つぶれの表示とヒストグラム ----
   var CLIPON = false, HISTO = null, clipCv = document.createElement('canvas');
   function clipOverlay(out, w, h){
@@ -5609,6 +5610,11 @@ function tkLook2(img, n, P, w, h){
     if (!PREVSET) return;
     var cur = JSON.parse(snapState()), d = JSON.parse(PREVSET); d.geo = cur.geo; d.lm = cur.lm;
     applyState(JSON.stringify(d)); if (P.on.reg && !REG.ready) runSegmentation(); toast('直前の写真の調整を当てました');
+  }
+  function buildCmpExtra(body){
+    var rr = xel('div', 'rrow'), b = xbtn('前後比較を始める', 'ghost', function(){ if (!hi){ toast('先に写真を選んでください'); return; } setSplit(!SPLIT); b.textContent = SPLIT ? '前後比較を終える' : '前後比較を始める'; });
+    rr.appendChild(b); body.appendChild(rr);
+    body.appendChild(xel('div', 'hint', '写真の上の線を左右に動かして、編集前（左）と編集後（右）を比べます。写真を長押しすると、押している間だけ編集前の写真が見られます。'));
   }
   function buildClipExtra(body){
     var r = xel('div', 'rrow'); r.appendChild(xbtn('今の設定をコピー', 'ghost', copySettings)); r.appendChild(xbtn('貼り付け', null, pasteSettings)); body.appendChild(r);
@@ -6153,7 +6159,7 @@ function tkLook2(img, n, P, w, h){
     { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
     { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
-    { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
+    { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
   var tabbar = $('tabbar'), subtabs = $('subtabs'), panel = $('panel'), pool = $('groups');
   var CUR = { tab: 'look', chip: { adj: 'fx', light: 'basic', color: 'wb' } };   // 光は「ライト」、色は「カラー」、調整は「効果」から（トリミングは選んだ時だけ）
@@ -7054,8 +7060,15 @@ function tkLook2(img, n, P, w, h){
   (function(){
     var appEl = document.getElementById('app'), st = $('stage'), d = null, told = false;
     function editing(){ return !!PICK || REG.tool !== 'off' || REG.pickDodge || CROPMODE || LMEDIT; }
-    st.addEventListener('pointerdown', function(e){ if (!img || editing()) { d = null; return; } d = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+    // 長押し：押している間だけ元の写真（指を離すと戻る）。2本指・動かした時・編集中はしない
+    var lpT = 0, lpOn = false, nPt = 0;
+    function lpEnd(){ clearTimeout(lpT); if (lpOn){ lpOn = false; showOriginal(false); } }
+    st.addEventListener('pointerdown', function(e){ nPt++; if (!img || editing() || nPt > 1 || SPLIT) { d = null; clearTimeout(lpT); if (nPt > 1) lpEnd(); return; } d = { x: e.clientX, y: e.clientY, t: Date.now() };
+      clearTimeout(lpT); lpT = setTimeout(function(){ if (d && !editing() && hi){ lpOn = true; showOriginal(true); } }, 380); });
+    st.addEventListener('pointermove', function(e){ if (d && !lpOn && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) clearTimeout(lpT); });
+    ['pointercancel', 'pointerleave'].forEach(function(ev){ st.addEventListener(ev, function(){ nPt = Math.max(0, nPt - 1); lpEnd(); d = null; }); });
     st.addEventListener('pointerup', function(e){
+      nPt = Math.max(0, nPt - 1); if (lpOn){ lpEnd(); d = null; return; } clearTimeout(lpT);
       if (!d || editing()) return;
       var far = Math.hypot(e.clientX - d.x, e.clientY - d.y), dt = Date.now() - d.t; d = null;
       if (far > 10 || dt > 400) return;
