@@ -87,7 +87,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v3</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v4</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -112,9 +112,6 @@
     <div class="rrow"><button class="pill" id="autoGo" type="button" disabled style="flex:1">このコマで候補を作る</button></div>
     <div class="hint" id="autoHint">止めた所のコマから、photo retouch の「見本1枚に寄せる」と同じ方法で候補を作ります。色は前後のコマも混ぜて作るので、動画全体で安定します。</div>
     <div class="cands" id="cands"></div>
-    <div class="rrow" id="autoSaveRow" hidden><button class="btn" id="autoSave" type="button">この色を一覧に保存</button></div>
-    <div class="sect">保存した色</div>
-    <div class="looks" id="looks"></div>
     <div class="row"><div class="rowh"><span>色の強さ</span><span class="v num" id="v-mix">100</span></div><input type="range" id="s-mix" min="0" max="100" value="100"></div>
     <div class="sect">エフェクト</div>
     <div id="fxrows"></div>
@@ -141,7 +138,7 @@ async function loadLooks(){ const d = await db(); return new Promise((res) => { 
 async function delLook(id){ const d = await db(); await new Promise((res) => { const t = d.transaction('looks', 'readwrite'); t.objectStore('looks').delete(id); t.oncomplete = res; t.onerror = res; }); }
 
 const FX = [
-  ['glow', 'グロー', 0, 100, 0], ['glowR', 'グローの広がり', 5, 60, 20], ['thr', '光らせる明るさ', 30, 95, 70],
+  ['glow', 'グロー', 0, 100, 0], ['glowR', 'グローの広がり', 2, 40, 12], ['thr', '光らせる明るさ', 30, 90, 64],
   ['hal', 'ハレーション', 0, 100, 0], ['diff', '光のにじみ', 0, 100, 0], ['diffR', 'にじみの広がり', 2, 30, 8],
   ['mist', 'ミスト', 0, 100, 0], ['comp', 'ハイライトの余白', 0, 100, 0], ['grain', '粒子', 0, 100, 0],
   ['vgAmt', '周辺光量', -100, 100, 0], ['vgMid', '中心の広さ', 0, 100, 50]
@@ -156,25 +153,12 @@ function buildFx(){
     row.innerHTML = `<div class="rowh"><span>${lab}</span><span class="v num" id="v-${k}"></span></div><input type="range" id="s-${k}" min="${mn}" max="${mx}">`;
     box.appendChild(row);
     const r = row.querySelector('input'); r.value = S.fx[k]; row.querySelector('.v').textContent = S.fx[k];
-    r.addEventListener('input', () => { S.fx[k] = +r.value; $('v-' + k).textContent = r.value; redraw(); });
+    r.addEventListener('input', () => { S.fx[k] = +r.value; $('v-' + k).textContent = r.value; if (k === 'thr') S.thrUser = true; redraw(); });
     r.addEventListener('dblclick', () => { S.fx[k] = S.fx0[k]; r.value = S.fx[k]; $('v-' + k).textContent = S.fx[k]; redraw(); });
   });
 }
 function syncFx(){ FX.forEach(([k]) => { const r = $('s-' + k); if (r){ r.value = S.fx[k]; $('v-' + k).textContent = S.fx[k]; } }); }
-function renderLooks(){
-  const box = $('looks'); box.innerHTML = '';
-  const mk = (lk) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'look' + ((S.look ? S.look.id : null) === (lk ? lk.id : null) ? ' on' : '');
-    if (lk){ const im = document.createElement('img'); im.src = lk.thumb; im.alt = ''; b.appendChild(im); } else { const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = '色なし'; b.appendChild(ph); }
-    const sp = document.createElement('span'); sp.textContent = lk ? lk.name : '元の色のまま'; b.appendChild(sp);
-    b.addEventListener('click', () => pickLook(lk));
-    if (lk){ const x = document.createElement('button'); x.type = 'button'; x.className = 'del'; x.textContent = '×'; x.setAttribute('aria-label', '削除');
-      x.addEventListener('click', async (e) => { e.stopPropagation(); if (!confirm('「' + lk.name + '」を削除しますか？')) return; await delLook(lk.id); if (S.look && S.look.id === lk.id) pickLook(null); S.looks = await loadLooks(); renderLooks(); }); b.appendChild(x); }
-    box.appendChild(b);
-  };
-  mk(null); S.looks.forEach(mk);
-  if (!S.looks.length){ const h = document.createElement('div'); h.className = 'hint'; h.style.alignSelf = 'center'; h.textContent = 'まだありません。自動で作った色を「この色を一覧に保存」すると、ここに並びます。'; box.appendChild(h); }
-}
+function renderLooks(){}   /* 保存した色の一覧は使わない（このアプリだけで色を作る） */
 function pickLook(lk){
   S.look = lk; GLR.setLut(lk ? lk.lut : null, lk ? lk.N : 0);
   if (lk && lk.fx){ FX.forEach(([k, , , , d]) => { const v = lk.fx[k]; S.fx[k] = v == null ? d : Math.round(v); S.fx0[k] = S.fx[k]; }); }
@@ -189,7 +173,9 @@ class Renderer {
     const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true, antialias: false });
     if (!gl) throw new Error('webgl2');
     this.gl = gl; this.cv = canvas; this.lut = null; this.N = 0; this.fbo = {};
-    this.half = !(opt && opt.low) && (!!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float'));   /* プレビューはふつうの精度（軽く・どの端末でも動く）、書き出しだけ高精度 */
+    const ext = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
+    this.half = !(opt && opt.low) && ext;   // 色の画面：プレビューはふつうの精度
+    this.fxHalf = ext;   // 光の成分（グロー・ハレーション・にじみ）はごく薄い値なので、プレビューでも高精度（使えない端末は値を8倍して保存し、あとで戻す）   /* プレビューはふつうの精度（軽く・どの端末でも動く）、書き出しだけ高精度 */
     const VS = `#version 300 es
 in vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0., 1.); }`;
     const prog = (fs) => { const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
@@ -199,24 +185,24 @@ in vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0
     this.pColor = prog(`uniform sampler2D src; uniform sampler3D lut; uniform float N, mixA, useLut;
 void main(){ vec3 c = texture(src, vec2(uv.x, 1. - uv.y)).rgb; vec3 l = c; if (useLut > .5){ l = texture(lut, c * ((N - 1.) / N) + .5 / N).rgb; } o = vec4(mix(c, l, mixA), 1.); }`);
     // 2) 光源の取り出し（にじみ・ハレーション用＝明るさ／グロー用＝明るさの2乗）。色×重み と 重み
-    this.pBright = prog(`uniform sampler2D src; uniform float t0, mode;
+    this.pBright = prog(`uniform sampler2D src; uniform float t0, mode, gs;
 float ss(float x){ x = clamp(x, 0., 1.); return x * x * (3. - 2. * x); }
 void main(){ vec3 c = texture(src, uv).rgb; float y = dot(c, vec3(.2126, .7152, .0722)); float w;
  if (mode < .5) w = ss((y - (t0 - .05)) / max(.02, 1. - (t0 - .05))); else { float a = ss((y - t0) / max(.02, 1. - t0)); w = a * a; }
- o = vec4(c * w, w); }`);
+ o = vec4(c * w, w) * gs; }`);
     // 3) ぼかし（縦横に分けたガウス）
     this.pBlur = prog(`uniform sampler2D src; uniform vec2 dir; uniform float sig, lod;
 void main(){ vec4 s = vec4(0.); float ws = 0.; int R = int(ceil(sig * 2.5)); for (int i = -24; i <= 24; i++){ if (i < -R || i > R) continue; float f = float(i); float w = exp(-.5 * f * f / (sig * sig)); s += textureLod(src, uv + dir * f, lod) * w; ws += w; } o = s / ws; }`);
     // 4) 仕上げ：ミスト → ハイライトの余白 → にじみ → グロー → ハレーション → 粒子 → 周辺光量
-    this.pComp = prog(`uniform sampler2D col, gA, gB, hA, hB, dA, mA; uniform float kG1, kG2, hk, dop, mo, cp, gr, vg, vgMid, fr, useG, useH, useD, useM; uniform vec2 res;
+    this.pComp = prog(`uniform sampler2D col, gA, gB, hA, hB, dA, mA; uniform float ig, kG1, kG2, hk, dop, mo, cp, gr, vg, vgMid, fr, useG, useH, useD, useM; uniform vec2 res;
 float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 scr(vec3 a, vec3 b){ return 1. - (1. - a) * (1. - clamp(b, 0., 1.)); }
 void main(){ vec3 c = texture(col, uv).rgb;
  if (useM > .5) c = mix(c, texture(mA, uv).rgb, mo);
  if (cp > 0.){ vec3 u = clamp((c - .75) / .25, 0., 1.); c = mix(c, .75 + .25 * u * (1. - .45 * cp * u), step(.75, c)); }
- if (useD > .5){ vec4 d = texture(dA, uv); if (d.a > 1e-4){ vec3 cc = d.rgb / d.a; float al = min(1., d.a * 1.8) * dop; c = mix(c, c + (cc - c) * al, step(c, cc)); } }
- if (useG > .5){ c = scr(c, texture(gA, uv).rgb * kG1); c = scr(c, texture(gB, uv).rgb * kG2); }
- if (useH > .5){ float f = max(0., texture(hA, uv).a - texture(hB, uv).a) * hk; c = scr(c, vec3(f, f * .42, f * .2)); }
+ if (useD > .5){ vec4 d = texture(dA, uv) * ig; if (d.a > 1e-4){ vec3 cc = d.rgb / d.a; float al = min(1., d.a * 1.8) * dop; c = mix(c, c + (cc - c) * al, step(c, cc)); } }
+ if (useG > .5){ c = scr(c, texture(gA, uv).rgb * ig * kG1); c = scr(c, texture(gB, uv).rgb * ig * kG2); }
+ if (useH > .5){ float f = max(0., texture(hA, uv).a - texture(hB, uv).a) * ig * hk; c = scr(c, vec3(f, f * .42, f * .2)); }
  if (gr > 0.){ vec2 q = uv * res; float y = dot(c, vec3(.2126, .7152, .0722)); float nz = (h12(q + fr * 17.13) + h12(q + fr * 31.7 + 5.1) + h12(q + fr * 7.9 + 11.3) - 1.5) * gr * (.35 + 2.6 * y * (1. - y)); c += nz; }
  if (vg != 0.){ vec2 p = (uv - .5) * res; float R = length(res) * .5, r0 = R * (.18 + .62 * vgMid), r1 = R * 1.02; float a = clamp((length(p) - r0) / (r1 - r0), 0., 1.) * abs(vg) * .8; c = vg < 0. ? c * (1. - a) : c + a * (1. - c); }
  o = vec4(clamp(c, 0., 1.), 1.); }`);
@@ -228,18 +214,18 @@ void main(){ vec3 c = texture(col, uv).rgb;
   tex3(data, N){ const gl = this.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, t); ['TEXTURE_WRAP_S', 'TEXTURE_WRAP_T', 'TEXTURE_WRAP_R'].forEach(k => gl.texParameteri(gl.TEXTURE_3D, gl[k], gl.CLAMP_TO_EDGE)); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, data); return t; }
   setLut(u16, N){ const gl = this.gl; if (this.lut){ gl.deleteTexture(this.lut); this.lut = null; } if (!u16){ this.N = 0; return; } const f = new Float32Array(u16.length); for (let i = 0; i < u16.length; i++) f[i] = u16[i] / 65535; this.lut = this.tex3(f, N); this.N = N; }
-  target(name, w, h, mip){ // 描き込み先（浮動小数が使えれば半精度＝暗い所の重みが潰れない）
+  target(name, w, h, mip, hp){ // 描き込み先（浮動小数が使えれば半精度＝暗い所の重みが潰れない）
     const gl = this.gl; let t = this.fbo[name];
     if (t && t.w === w && t.h === h) return t;
     if (t){ gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
     const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
     const lv = mip ? Math.floor(Math.log2(Math.max(w, h))) + 1 : 1;
-    gl.texStorage2D(gl.TEXTURE_2D, lv, this.half ? gl.RGBA16F : gl.RGBA8, w, h);
+    const hi = hp ? this.fxHalf : this.half; gl.texStorage2D(gl.TEXTURE_2D, lv, hi ? gl.RGBA16F : gl.RGBA8, w, h);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && this.half){   /* 高精度の描き込みに対応していない端末は、ふつうの精度で作り直す */
-      gl.deleteTexture(tex); gl.deleteFramebuffer(fb); for (const k in this.fbo){ gl.deleteTexture(this.fbo[k].tex); gl.deleteFramebuffer(this.fbo[k].fb); } this.fbo = {}; this.half = false; return this.target(name, w, h, mip); }
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && hi){   /* 高精度の描き込みに対応していない端末は、ふつうの精度で作り直す */
+      gl.deleteTexture(tex); gl.deleteFramebuffer(fb); for (const k in this.fbo){ gl.deleteTexture(this.fbo[k].tex); gl.deleteFramebuffer(this.fbo[k].fb); } this.fbo = {}; this.half = false; this.fxHalf = false; return this.target(name, w, h, mip, hp); }
     t = this.fbo[name] = { tex, fb, w, h, lv }; return t;
   }
   draw(pr, tgt, w, h, uni, texs){ const gl = this.gl; gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER, tgt ? tgt.fb : null); gl.viewport(0, 0, w, h);
@@ -250,7 +236,7 @@ void main(){ vec3 c = texture(col, uv).rgb;
   blur(srcT, sigPx, base, name){
     const lod = Math.max(0, Math.min(srcT.lv - 1, Math.ceil(Math.log2(Math.max(1, sigPx / base / 4)))));
     const w = Math.max(1, srcT.w >> lod), h = Math.max(1, srcT.h >> lod), sg = Math.max(.6, Math.min(9, sigPx / base / (1 << lod)));
-    const a = this.target(name + 'x', w, h), b = this.target(name + 'y', w, h);
+    const a = this.target(name + 'x', w, h, false, true), b = this.target(name + 'y', w, h, false, true);
     this.draw(this.pBlur, a, w, h, { dir: [1 / w, 0], sig: sg, lod: lod }, { src: { t: srcT.tex } });
     this.draw(this.pBlur, b, w, h, { dir: [0, 1 / h], sig: sg, lod: 0 }, { src: { t: a.tex } });
     return b;
@@ -265,15 +251,15 @@ void main(){ vec3 c = texture(col, uv).rgb;
     const T = {};
     if (doG || doH || doD || doM){ gl.bindTexture(gl.TEXTURE_2D, col.tex); gl.generateMipmap(gl.TEXTURE_2D); }
     const q = 4, qw = Math.max(1, Math.round(W / q)), qh = Math.max(1, Math.round(H / q));
-    if (doH || doD){ const b = this.target('bh', qw, qh, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 0 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
+    if (doH || doD){ const b = this.target('bh', qw, qh, true, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 0, gs: this.fxHalf ? 1 : 8 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
       if (doD) T.dA = this.blur(b, L * fx.diffR * .0006, q, 'd');
       if (doH){ const sH = L * fx.glowR * .0007; T.hA = this.blur(b, sH, q, 'h1'); T.hB = this.blur(b, Math.max(1, sH * .3), q, 'h2'); } }
-    if (doG){ const b = this.target('bg', qw, qh, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 1 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
+    if (doG){ const b = this.target('bg', qw, qh, true, true); this.draw(this.pBright, b, qw, qh, { t0, mode: 1, gs: this.fxHalf ? 1 : 8 }, { src: { t: col.tex } }); gl.bindTexture(gl.TEXTURE_2D, b.tex); gl.generateMipmap(gl.TEXTURE_2D);
       const sG = L * fx.glowR * .001; T.gA = this.blur(b, sG, q, 'g1'); T.gB = this.blur(b, sG * 3, q, 'g2'); }
     if (doM) T.mA = this.blur(col, L * fx.diffR * .0009, 1, 'm');
     const z = { t: col.tex }, tx = { col: { t: col.tex } };
     ['gA', 'gB', 'hA', 'hB', 'dA', 'mA'].forEach(k => { tx[k] = T[k] ? { t: T[k].tex } : z; });
-    this.draw(this.pComp, null, W, H, { kG1: fx.glow / 100 * 1.6, kG2: fx.glow / 100 * .5, hk: fx.hal / 100 * 1.6, dop: fx.diff / 100, mo: fx.mist / 100 * .35, cp: fx.comp / 100, gr: fx.grain / 100 * .16, vg: fx.vgAmt / 100, vgMid: fx.vgMid / 100, fr: frame % 997, res: [W, H], useG: doG ? 1 : 0, useH: doH ? 1 : 0, useD: doD ? 1 : 0, useM: doM ? 1 : 0 }, tx);
+    this.draw(this.pComp, null, W, H, { ig: this.fxHalf ? 1 : 1 / 8, kG1: fx.glow / 100 * 1.6, kG2: fx.glow / 100 * .5, hk: fx.hal / 100 * 1.6, dop: fx.diff / 100, mo: fx.mist / 100 * .35, cp: fx.comp / 100, gr: fx.grain / 100 * .16, vg: fx.vgAmt / 100, vgMid: fx.vgMid / 100, fr: frame % 997, res: [W, H], useG: doG ? 1 : 0, useH: doH ? 1 : 0, useD: doD ? 1 : 0, useM: doM ? 1 : 0 }, tx);
   }
 }
 
@@ -300,6 +286,11 @@ video.addEventListener('seeked', () => paint());
 $('play').addEventListener('click', () => { if (!video.src) return; if (video.paused) video.play(); else video.pause(); });
 video.addEventListener('play', () => { $('playIco').innerHTML = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>'; });
 video.addEventListener('pause', () => { $('playIco').innerHTML = '<path d="M7 5v14l12-7z"/>'; paint(); });
+// 光らせる明るさを、この動画のいちばん明るい所に合わせる（動画は写真より明るい所が少なく、そのままだとグローがかからないことがある）
+function fitThr(){ try{ const c = document.createElement('canvas'); c.width = 96; c.height = Math.max(2, Math.round(96 * fcv.height / Math.max(1, fcv.width))); const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(fcv, 0, 0, c.width, c.height);
+  const d = x.getImageData(0, 0, c.width, c.height).data, Y = []; for (let i = 0; i < d.length; i += 4) Y.push((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255); Y.sort((a, b) => a - b);
+  const p97 = Y[Math.floor(Y.length * 0.97)] || 1, t = Math.max(40, Math.min(64, Math.round(p97 * 100 - 22)));
+  if (t !== S.fx.thr && (!S.thrUser)){ S.fx.thr = t; S.fx0.thr = t; syncFx(); redraw(); } }catch(e){} }
 function openVideo(f){
   if (!f) return; S.file = f; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(f); video.src = url;
   let shown = false;
@@ -307,7 +298,7 @@ function openVideo(f){
     $('info').hidden = false; $('info').textContent = S.vw + '×' + S.vh + ' ・ ' + fmt(video.duration);
     // 最初のコマを用意させる（iPhone は一度再生するまでコマを出さないことがある）→ すぐ止めて先頭へ
     const p = video.play(); if (p && p.then) p.then(() => { video.pause(); video.currentTime = 0.001; }, () => { video.currentTime = 0.001; }); else video.currentTime = 0.001;
-    let tries = 0; const retry = () => { paint(); if (++tries < 12 && video.readyState < 2) setTimeout(retry, 250); }; setTimeout(retry, 200);
+    let tries = 0; const retry = () => { paint(); if (++tries < 12 && video.readyState < 2) setTimeout(retry, 250); else fitThr(); }; setTimeout(retry, 200);
     if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); };
   video.addEventListener('loadedmetadata', ready, { once: true }); video.addEventListener('loadeddata', () => { ready(); paint(); }, { once: true });
   video.addEventListener('error', () => toast('この動画は開けませんでした'), { once: true });
@@ -469,15 +460,14 @@ async function applyCand(c){
   const f0 = grabFrame(240), q0 = tplFor(c, AUTO.res.person, AUTO.res.amt); const thumb = pxURL(tkProcess(f0.px, f0.w, f0.h, q0), f0.w, f0.h);
   AUTO.look = { id: 'v' + Date.now(), name: dstr() + '・' + candName(c), at: Date.now(), N: 33, lut, fx: Object.assign({}, S.fx, { comp }), thumb };
   S.look = AUTO.look; GLR.setLut(lut, 33); if (S.fx.comp !== comp){ S.fx.comp = comp; S.fx0.comp = comp; syncFx(); }
-  $('autoSaveRow').hidden = false; renderLooks(); redraw(); toast('色をかけました');
+  redraw(); toast('色をかけました');
 }
 function dstr(){ const d = new Date(), z = (n) => (n < 10 ? '0' : '') + n; return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes()); }
 $('autoGo').addEventListener('click', makeCands);
 $('segP').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { AUTO.pforce = b.dataset.v; $('segP').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); if (AUTO.res) makeCands(); }));
-$('autoSave').addEventListener('click', async () => { if (!AUTO.look) return; const lk = Object.assign({}, AUTO.look, { fx: Object.assign({}, S.fx) }); const d = await db(); await new Promise(res => { const t = d.transaction('looks', 'readwrite'); t.objectStore('looks').put(lk); t.oncomplete = res; t.onerror = res; }); S.looks = await loadLooks(); S.look = S.looks.find(x => x.id === lk.id) || lk; renderLooks(); toast('一覧に保存しました'); });
 
 buildFx();
-loadLooks().then(l => { S.looks = l; renderLooks(); }).catch(() => renderLooks());
+
 window.__mr = { S, pickLook, openVideo, paint, makeCands, AUTO };
 </script>
 </body>
