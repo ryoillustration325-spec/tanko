@@ -1,5 +1,5 @@
 // 淡光：オフラインで動かすための保存係。アプリ本体は毎回新しい版を確かめ、AIなどの大きなファイルは一度取れば端末から読む
-const VER = 'tanko-v139';
+const VER = 'tanko-v140';
 const AI = 'tanko-ai-1';   // AI・エンジン（大きなファイル）は版が変わっても消さない＝一度準備すれば再ダウンロード不要
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 const isBig = p => /\/(m_[a-z0-9]+_\d+\.js|ort[^/]*\.(js|mjs|wasm)|raw\/[a-z]+\.(js|wasm)|movie\/mediabunny[^/]*\.mjs)$/.test(p);   // RAWの現像エンジンも大きなファイルとして保存
