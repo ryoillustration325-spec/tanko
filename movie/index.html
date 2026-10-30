@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v6</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v7</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -397,7 +397,7 @@ function guessPerson(px, n){ const k = [0, 0, 0]; let sk = 0, vivid = 0;
   for (let i = 0; i < n; i++){ tkToOk(px[i * 4] / 255, px[i * 4 + 1] / 255, px[i * 4 + 2] / 255, k); const C = Math.hypot(k[1], k[2]); if (C < 0.02) continue; const H = (Math.atan2(k[2], k[1]) * 180 / Math.PI + 360) % 360;
     if (tkHd(H, 50) < 30 && k[0] > 0.45 && k[0] < 0.93){ if (C < 0.085) sk++; else vivid++; } else if (tkHd(H, 30) < 35 && C > 0.09) vivid++; }
   return sk / n > 0.04 && vivid < sk * 0.6; }
-function tplFor(c, person, amt){ const q = JSON.parse(JSON.stringify(TPL)); if (typeof AUTO !== 'undefined') Object.assign(q, AUTO.adj); q.l6Idx = c.i; q.l6V = 2; q.l6Custom = null; q.l6BlueMode = c.bm | 0; q.l6Person = person ? 1 : 0; q.l5Master = amt; return q; }
+function tplFor(c, person, amt){ const q = JSON.parse(JSON.stringify(TPL)); if (typeof AUTO !== 'undefined') Object.assign(q, AUTO.adj); q.l6Idx = c.i; q.l6V = 3; q.l6Custom = null; q.l6BlueMode = c.bm | 0; q.l6Person = person ? 1 : 0; q.l5Master = amt; return q; }
 // 候補づくり（photo retouch の l6Judge と同じ考え方：近い見本＋淡い藍・深い緑の見本を実際にかけて採点、青の入れ方も試す、似た仕上がりは並べない）
 function judge(src, w, h, person){
   const n = w * h, T = tkL6Model(src, n, person), desc = tkL6Desc(src, n, true); desc.tung = tkL6TungStr(src, n);
