@@ -189,6 +189,8 @@
   .l6slv{font-variant-numeric:tabular-nums; color:var(--ink)}
   .l6sl input[type=range]{width:100%; margin:6px 0 2px; touch-action:pan-y}
   .l6sle{display:flex; justify-content:space-between; font-size:10px; color:var(--faint)}
+  .l6sl input.ctr{background:linear-gradient(90deg,transparent calc(50% - 1px),rgba(255,255,255,.55) calc(50% - 1px),rgba(255,255,255,.55) calc(50% + 1px),transparent calc(50% + 1px)),rgba(255,255,255,.18); -webkit-appearance:none; appearance:none; height:4px; border-radius:2px}
+  .l6sl input.ctr::-webkit-slider-thumb{-webkit-appearance:none; width:28px; height:22px; border-radius:11px; background:#fff; border:0; box-shadow:0 1px 4px rgba(0,0,0,.35)}
   .l6skin{margin:4px 0 6px}
   .l6cands{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin:4px 0 6px}
   .l6cand{padding:0; border:2px solid transparent; border-radius:9px; overflow:hidden; background:var(--surface2); cursor:pointer; display:flex; flex-direction:column; align-items:stretch; font:inherit; color:var(--muted)}
@@ -498,7 +500,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v140</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v141</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -6747,7 +6749,7 @@ function tkLook2(img, n, P, w, h){
       XE.autoAi.textContent = 'AIで人物を見分けて守る';
       XE.lkSkinBtn.hidden = !AUTO.skinManual;
       XE.autoHead.textContent = AUTO.label || '青の光';
-      Object.keys(XE.autoR).forEach(function(k){ var r = XE.autoR[k], show = AUTO.l6 ? /^(bright|l6Amt|l6L|l6C|l6Dark|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l5 ? /^(bright|l5Master|l5Amt|l5Indigo|l5Sat|l5Bg|l5SplitAmt|l4Hue|l4Tone|l4Dark|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l4 ? /^(bright|l4Amt|l4Hue|l4Tone|l4Dark|l4Warm|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l3 ? /^(bright|l3Amt|l3Hue|l3Dark|l3Warm|l3Skin|lkProt|lkSmooth)$/.test(k) : /^(bright|lkAmt|lkProt|lkTint|lkHue|lkBlend|lkCon|lkWarm|lkSkin|lkSmooth)$/.test(k); r.row.style.display = show ? '' : 'none'; if (show){ if (k === 'l6Amt') AUTO.macro.l6Amt = l6AmtOf(); r.i.value = AUTO.macro[k]; r.v.textContent = (k === 'l6Amt' && AUTO.macro[k] > 0 ? '+' : '') + AUTO.macro[k]; } });
+      Object.keys(XE.autoR).forEach(function(k){ var r = XE.autoR[k], show = AUTO.l6 ? /^(bright|l6L|l6C|l6Dark|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l5 ? /^(bright|l5Master|l5Amt|l5Indigo|l5Sat|l5Bg|l5SplitAmt|l4Hue|l4Tone|l4Dark|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l4 ? /^(bright|l4Amt|l4Hue|l4Tone|l4Dark|l4Warm|l3Skin|lkProt|lkSmooth)$/.test(k) : AUTO.l3 ? /^(bright|l3Amt|l3Hue|l3Dark|l3Warm|l3Skin|lkProt|lkSmooth)$/.test(k) : /^(bright|lkAmt|lkProt|lkTint|lkHue|lkBlend|lkCon|lkWarm|lkSkin|lkSmooth)$/.test(k); r.row.style.display = show ? '' : 'none'; if (show){ if (k === 'l6Amt') AUTO.macro.l6Amt = l6AmtOf(); r.i.value = AUTO.macro[k]; r.v.textContent = (k === 'l6Amt' && AUTO.macro[k] > 0 ? '+' : '') + AUTO.macro[k]; } });
       if (!AUTO.busy && AUTO.l6){ XE.autoHead.textContent = '見本1枚に寄せる'; XE.autoSt.textContent = (AUTO.custom ? '読み込んだ写真を見本にしています。' : '') + '見本の「肌・差し色・明るい主役・背景」それぞれの明るさと色のバランスを、この写真に写しています。' + lkSkinNote(); return; }
       if (!AUTO.busy && AUTO.l5){ var bn = (L5_BASE.filter(function(d){ return d[0] === AUTO.base; })[0] || [0, ''])[1]; XE.autoHead.textContent = (AUTO.l5Key === 'l5auto' && !AUTO.l5Manual ? 'おまかせ：' : '') + bn; XE.autoSt.textContent = (AUTO.l5How ? AUTO.l5How + '。' : '') + 'ベース（上の段）と色の組み方（下の段）を選べます。写真を測って、見本との差の分だけ寄せています。' + lkSkinNote(); return; }
       if (!AUTO.busy && AUTO.l3){ XE.autoSt.textContent = lkSkinNote() + (AUTO.l4 ? ({ blue: ' 白まで青（海・空・霧など、空気が主役の写真向き）', neutral: ' 白は中立、影にごく薄い青、中間に少し緑み（室内・逆光の人物向き）', warm: ' 白と中間を暖かく（顔のアップ向き）' })[AUTO.l4] : (P.l3Mode ? ' 明るい所に青、影にオレンジ' : ' 暗め〜中間に青、白はきれいなまま')); return; }
@@ -6901,7 +6903,15 @@ function tkLook2(img, n, P, w, h){
       bx.appendChild(xel('div', 'hint', '青影＝暗い所に藍、中間＝葉や中くらいの明るさを青緑〜藍へ、青光＝明るい所・光を青く。どれも黒は締め、花など暖かい色は青くしません。'));
     }
     bx.appendChild(xel('div', 'l5oldh', (A6.person ? '3' : '4') + '. 調整（ダブルタップで初期値）'));
-    bx.appendChild(l6Slider('かけ方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
+    (function(){   // かけ方（量）：Lightroomのプリセットの量と同じ。0＝候補のまま、−で元の写真へ、＋でさらに強く
+      var row = xel('div', 'l6sl'), hd = xel('div', 'l6slh'), v = xel('span', 'l6slv'), f = function(x){ return (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x); }, val = l6AmtOf();
+      v.textContent = f(val); hd.appendChild(xel('span', '', 'かけ方（量）')); hd.appendChild(v); row.appendChild(hd);
+      var rg = document.createElement('input'); rg.type = 'range'; rg.min = -100; rg.max = 100; rg.value = val; rg.className = 'ctr';
+      rg.addEventListener('input', function(){ l6AmtSet(+rg.value); v.textContent = f(+rg.value); schedule(); });
+      rg.addEventListener('dblclick', function(){ l6AmtSet(0); rg.value = 0; v.textContent = f(0); schedule(); });
+      row.appendChild(rg); var ends = xel('div', 'l6sle'); ends.appendChild(xel('span', '', '元の写真')); ends.appendChild(xel('span', '', '候補のまま')); ends.appendChild(xel('span', '', '強く')); row.appendChild(ends);
+      bx.appendChild(row); })();
+    bx.appendChild(l6Slider('写し方', 'l6Mix', 0, 'なめらか（割れない）', '強め（場所ごとに写す）'));
     try{ var trM = A6.custom || (TK_L6[A6.idx] || TK_L6[0]).m, tr0 = tkL6Traits(trM), lv = function(v){ return v < 0.15 ? 'なし' : v < 0.5 ? '弱' : v < 0.9 ? '中' : '強'; };
       bx.appendChild(xel('div', 'hint', 'この見本の特徴：藍 ' + lv(tr0.deep) + '・青緑 ' + lv(tr0.teal) + '・落ち着き ' + lv(tr0.calm) + '（下の3つは、この強さに合わせてかかります）')); }catch(e){}
     bx.appendChild(l6Slider('やわらかさ（パキッと感を見本へ）', 'l6Clar', 0, '', ''));
