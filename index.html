@@ -498,7 +498,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v138</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v139</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3102,7 +3102,7 @@ function tkL6ToneEnds(img, I0, n, q, amt){
 //   （緑・青は見本の深い緑・空の規則に任せる）
 // 電球色の写真（いちばん明るい所がすでに電球色に染まっている時だけ）：
 //   照明の色かぶり（明るさの帯ごとの平均の色）を、大林さんの暖かい写真32枚（v138：本人の投稿のみ）の実測へ置き換える。
-//   明るい所＝クリームがかった黄（色相84°・濃さ0.032）、中間＝琥珀（69°・0.042）、影＝ほぼ無彩色（95°・0.011）。
+//   明るい所＝クリームがかった黄（色相79°・濃さ0.037）、中間＝琥珀（65°・0.043）、影＝生成りのほぼ無彩色（78°・0.008、TK_L6_TUNG_SH）。
 //   色かぶりより鮮やかな分（ジュース・縞・花）は8割残す＝主役の色は消えない。青は足さない
 function tkL6Tungsten(img, I0, n, MS6, w, h, bm1){
   var st = Math.max(1, Math.floor(n / 40000)), k = [0, 0, 0], hist = new Float64Array(100), cnt = 0;
@@ -3118,7 +3118,9 @@ function tkL6Tungsten(img, I0, n, MS6, w, h, bm1){
   var CA = [], CB = []; for (var q2 = 0; q2 < NB; q2++){ var wq = BN[q2] / (BN[q2] + gN * 0.01); CA.push((BN[q2] ? BA[q2] / BN[q2] : gA) * wq + gA * (1 - wq)); CB.push((BN[q2] ? BB[q2] / BN[q2] : gB) * wq + gB * (1 - wq)); }
   for (var it = 0; it < 2; it++) for (var q3 = 1; q3 < NB - 1; q3++){ CA[q3] = (CA[q3 - 1] + 2 * CA[q3] + CA[q3 + 1]) / 4; CB[q3] = (CB[q3 - 1] + 2 * CB[q3] + CB[q3 + 1]) / 4; }
   var fT = 1; if (MS6){ var sm6 = tkL6Cast(MS6, 0.6), sh6 = tkL6Cast(MS6, 0.85); fT = Math.max(0.3, Math.min(1.7, 1 + (sm6[1] + sh6[1]) / 2 / 0.018)); }   /* 見本の光の温度：暖かい見本ほど琥珀を多く、中立・青い見本ほど電球の色を抜く＝候補ごとに暖かさが変わる */
-  var tgt = function(L){ var w1 = tkSS((L - 0.12) / 0.32), w2 = tkSS((L - 0.5) / 0.2); var cw = (0.0427 + (0.0368 - 0.0427) * w2) * 1.6 * fT, hw = 65 + (79 - 65) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ac = Math.cos(245 * Math.PI / 180) * (bm1 ? 0.012 : 0.028), bc = Math.sin(245 * Math.PI / 180) * (bm1 ? 0.012 : 0.028);   /* 青影も重ねる時は影の藍を控えめに（二重にかけて青い斑にしない） */ var t0a = ac + (aw - ac) * w1, t0b = bc + (bw - bc) * w1; if (MS6){ var sc6 = tkL6Cast(MS6, L), ms6 = 0.25; t0a = t0a * (1 - ms6) + sc6[0] * 1.3 * ms6; t0b = t0b * (1 - ms6) + sc6[1] * 1.3 * ms6; } return [t0a, t0b];   /* 選んだ見本の色かぶりも半分ほど混ぜる＝候補ごとに色味が変わる（暖かい見本は琥珀、中立は生成り、青い見本は青寄り） */   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
+  var TS = TK_L6_TUNG_SH, sbl = TS.blue; if (MS6){ var d6 = tkL6Cast(MS6, 0.12); sbl = Math.max(0, Math.min(1, (d6[0] * Math.cos(245 * Math.PI / 180) + d6[1] * Math.sin(245 * Math.PI / 180)) / 0.012)); }   /* 選んだ見本のいちばん暗い所が藍なら藍を差す（見本の4枚に1枚） */
+  var shA = Math.cos(TS.H * Math.PI / 180) * TS.C, shB = Math.sin(TS.H * Math.PI / 180) * TS.C;
+  var tgt = function(L){ var w1 = tkSS((L - 0.24) / 0.26),   /* 影（〜0.3）は生成り、琥珀は中間から（見本の実測：0.18〜0.32は0.008、0.32〜0.5は0.037） */ w2 = tkSS((L - 0.5) / 0.2); var cw = (0.0427 + (0.0368 - 0.0427) * w2) * 1.6 * fT, hw = 65 + (79 - 65) * w2, aw = Math.cos(hw * Math.PI / 180) * cw, bw = Math.sin(hw * Math.PI / 180) * cw, ic = (bm1 ? 0.012 : 0.028) * sbl * (1 - tkSS((L - 0.1) / 0.15)), ac = shA + Math.cos(245 * Math.PI / 180) * ic, bc = shB + Math.sin(245 * Math.PI / 180) * ic;   /* 影＝生成りのほぼ無彩色（見本の実測）。藍は見本の暗い所が青い時だけ、いちばん暗い所に */   /* 青影も重ねる時は影の藍を控えめに（二重にかけて青い斑にしない） */ var t0a = ac + (aw - ac) * w1, t0b = bc + (bw - bc) * w1; if (MS6){ var sc6 = tkL6Cast(MS6, L), ms6 = 0.25; t0a = t0a * (1 - ms6) + sc6[0] * 1.3 * ms6; t0b = t0b * (1 - ms6) + sc6[1] * 1.3 * ms6; } return [t0a, t0b];   /* 選んだ見本の色かぶりも半分ほど混ぜる＝候補ごとに色味が変わる（暖かい見本は琥珀、中立は生成り、青い見本は青寄り） */   /* 光（中間〜明るい所）は琥珀の暖かさを残し、影だけ藍＝電球の部屋の空気のまま締まる */
     var C = 0, H = 0;   /* 見本の値より少し暖かめ（電球の空気は残す）・色相は黄緑へ転ばない側 */ return [Math.cos(H * Math.PI / 180) * C, Math.sin(H * Math.PI / 180) * C]; };
   var a = [0, 0, 0], VK = null;
   // 照明より鮮やかな物を守る量は、まわりと一続きに（1画素ずつ決めると、毛の縞・じゅうたんの目で「守る所／抜く所」がまだらに割れる）
@@ -3129,6 +3131,7 @@ function tkL6Tungsten(img, I0, n, MS6, w, h, bm1){
     var rA = a[1] - cA, rB = a[2] - cB, cn = Math.max(1e-4, Math.sqrt(cA * cA + cB * cB)), ux = cA / cn, uy = cB / cn, rp = rA * ux + rB * uy, rq = -rA * uy + rB * ux; rq *= 0.35;   /* 照明の色からのずれのうち、色相方向のずれ（橙⇔黄の小さな揺れ）は縮める＝照明を抜いた後にピンク・緑のまだらとして浮かない */
     var nA = T[0] + (rp * ux - rq * uy) * 0.8, nB = T[1] + (rp * uy + rq * ux) * 0.8;
     var cC = Math.sqrt(cA * cA + cB * cB), pC = VK ? VK[p] : Math.sqrt(a[1] * a[1] + a[2] * a[2]), sp = str * (1 - 0.65 * tkSS((pC / Math.max(0.01, cC) - 1.2) / 0.5));   /* 照明より鮮やかな物（ジュース・果物）は弱めに＝色が抜けない */
+    var wsh = 1 - tkSS((a[0] - 0.14) / 0.3); if (wsh > 0) sp = sp + (Math.min(1, sp * 1.8) - sp) * wsh;   /* 影は見本の生成りまで届かせる（弱いままだと電球の茶色が影に残る） */
     tkFromOk(a[0], a[1] + (nA - a[1]) * sp, a[2] + (nB - a[2]) * sp, a); img[jp] = tkClamp01(a[0]); img[jp + 1] = tkClamp01(a[1]); img[jp + 2] = tkClamp01(a[2]);
   }
   return str;
@@ -3252,6 +3255,9 @@ function tkL6BlueLut(mode, amt){
   }
   return LUT;
 }
+// 電球色の写真の影（v139）：大林さんの暖かい写真32枚（本人の投稿のみ）の実測＝影（明るさ0.18〜0.32）はほぼ無彩色の生成り（色相78°・濃さ0.008）。
+//   いちばん暗い所（0.04〜0.18）に青みが入るのは4枚に1枚ほど＝選んだ見本の暗い所が青い時だけ藍を差す
+var TK_L6_TUNG_SH = { H: 78, C: 0.008, blue: 0.24 };
 var TK_L6_FOL = { L: 0.39, H: 149 };   // v138：植物の見本（本人の投稿のみ）の葉の明るさ中央0.39・色相147°（以前の0.40・150°からの差を反映）
 function tkL6Foliage(img, n, amt){
   var o = [0, 0, 0], Ls = [], cnt = 0, tot = 0;
