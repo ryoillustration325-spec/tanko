@@ -386,6 +386,7 @@
   .rbtn.pri{background:var(--accent); color:#0E1418; border-color:transparent}
   .cropdone{position:absolute; top:10px; right:10px; z-index:4; display:none; font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:18px; border:0; background:var(--accent); color:#0E1418; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.4)}
   .app.cropping .cropdone{display:block}
+  .app.cropping .chip, .app.cropping .histo, .app.cropping .busy{display:none !important}   /* トリミング中は明るさ表示なども隠す（枠と重ならない） */
   .app.sliding .cropdone{opacity:0}
   .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
   .asprow::-webkit-scrollbar{display:none}
@@ -497,7 +498,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v135</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v136</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5240,8 +5241,8 @@ function tkLook2(img, n, P, w, h){
     var g = P.geo, L;
     if (CLIVE){ L = { fx: CLIVE.fx, fy: CLIVE.fy, fw: CLIVE.fw, fh: CLIVE.fh, k: CL.k, imgL: CL.imgL, imgT: CL.imgT }; }
     else {
-      var M = 22, aw = W - M * 2, ah = H - M * 2, fa = (g.w * Wf) / (g.h * Hf), fw = Math.min(aw, ah * fa), fh = fw / fa;
-      var fx = (W - fw) / 2, fy = (H - fh) / 2, k = fw / (g.w * Wf);
+      var M = 22, MT = 62, aw = W - M * 2, ah = H - MT - M, fa = (g.w * Wf) / (g.h * Hf), fw = Math.min(aw, ah * fa), fh = fw / fa;   /* 上は右上の「完了」ボタンの分をあける＝枠の角と重ならない */
+      var fx = (W - fw) / 2, fy = MT + (ah - fh) / 2, k = fw / (g.w * Wf);
       L = { fx: fx, fy: fy, fw: fw, fh: fh, k: k, imgL: fx - g.x * Wf * k, imgT: fy - g.y * Hf * k };
     }
     L.Wf = Wf; L.Hf = Hf; L.W = W; L.H = H; CL = L;
