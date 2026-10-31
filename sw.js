@@ -1,5 +1,5 @@
 // 淡光：オフラインで動かすための保存係。アプリ本体は毎回新しい版を確かめ、AIなどの大きなファイルは一度取れば端末から読む
-const VER = 'tanko-v143';
+const VER = 'tanko-v144';
 const AI = 'tanko-ai-1';   // AI・エンジン（大きなファイル）は版が変わっても消さない＝一度準備すれば再ダウンロード不要
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 const isBig = p => /\/(m_[a-z0-9]+_\d+\.js|ort[^/]*\.(js|mjs|wasm)|raw\/[a-z]+\.(js|wasm)|movie\/mediabunny[^/]*\.mjs)$/.test(p);   // RAWの現像エンジンも大きなファイルとして保存
@@ -12,7 +12,8 @@ self.addEventListener('fetch', e => {
   if (isPage){
     // 画面はネット優先（更新を反映）。ただし2.5秒で返ってこなければ保存してある版で開く（通信制限・電波が弱い時も起動できる）
     //   取りに行った最新版は裏で保存を続ける＝次に開いた時に新しい版になる
-    const net = fetch(req.url, { cache: 'no-store', credentials: 'same-origin' }).then(r => { if (r.ok){ const c = r.clone(); caches.open(VER).then(x => x.put(req, c)); } return r; });
+    // 本文を最後まで受け取ってから使う（遅い回線では見出しだけ先に届き、本文の途中で画面が出て、ボタンの仕組み（最後の部分）が読み込まれないまま操作できなくなるため）
+    const net = fetch(req.url, { cache: 'no-store', credentials: 'same-origin' }).then(r => r.ok ? r.blob().then(b => { const full = new Response(b, { status: r.status, statusText: r.statusText, headers: r.headers }); caches.open(VER).then(x => x.put(req, full.clone())); return full; }) : r);
     e.waitUntil(net.catch(() => null));
     const saved = () => caches.match(req).then(r => r || caches.match('./index.html'));
     e.respondWith(new Promise(res => {
