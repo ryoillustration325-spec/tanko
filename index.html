@@ -500,7 +500,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v142</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v143</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3927,6 +3927,10 @@ function tkLook2(img, n, P, w, h){
   // ---- RAW（.RAF など）：ブラウザの中で現像して、白飛びに強い「平らな素材」の写真にしてから読み込む（LibRaw） ----
   var RAW_EXT = /\.(raf|dng|arw|nef|nrw|cr2|cr3|crw|rw2|orf|pef|srw|3fr|iiq|rwl|erf|kdc|mrw|x3f)$/i;
   function isRawFile(f){ return !!f && (RAW_EXT.test(f.name || '') || /x-(fuji|sony|canon|nikon|adobe-dng|panasonic|olympus|pentax|samsung)|image\/(x-)?dng/i.test(f.type || '')); }
+  // RAWの現像エンジン：端末に保存済みか。通信が普通に使える時に一度だけ先に取っておく（通信制限中にRAWを開いて止まらないように）
+  var RAW_FILES = ['raw/index.js', 'raw/worker.js', 'raw/libraw.js', 'raw/libraw.wasm'];
+  function rawReady(){ if (!window.caches) return Promise.resolve(true); return Promise.all(RAW_FILES.map(function(u){ return caches.match(new URL(u, location.href).href); })).then(function(a){ return a.every(Boolean); }).catch(function(){ return true; }); }
+  setTimeout(function(){ var cn = navigator.connection; if (!navigator.onLine || (cn && (cn.saveData || /2g/.test(cn.effectiveType || '')))) return; rawReady().then(function(ok){ if (!ok) RAW_FILES.forEach(function(u){ fetch(u).catch(function(){}); }); }); }, 5000);
   function rawDevelop(f){
     var t0 = Date.now();
     return f.arrayBuffer().then(function(buf){ return import('./raw/index.js').then(function(mod){
@@ -3960,7 +3964,7 @@ function tkLook2(img, n, P, w, h){
   function loadFile(f, opt){
     opt = opt || {};
     if (isRawFile(f)){
-      showBusy('RAWを現像中…');
+      showBusy('RAWを現像中…'); rawReady().then(function(ok){ if (!ok) showBusy('RAWの現像エンジンを準備中（初回だけ・約0.5MB）…'); });
       rawDevelop(f).then(function(r){ hideBusy(); if (!r.blob){ toast('RAWを現像できませんでした'); return; }
         var nm = (f.name || 'raw').replace(RAW_EXT, '') + '_raw.jpg', nf; try{ nf = new File([r.blob], nm, { type: 'image/jpeg' }); }catch(e){ nf = r.blob; }
         loadFile(nf, opt); setTimeout(function(){ toast('RAWを現像しました（' + (r.ms / 1000).toFixed(1) + '秒）'); }, 400);
