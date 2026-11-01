@@ -500,7 +500,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v146</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v147</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -667,9 +667,10 @@ function tkSS(t){ t = tkClamp01(t); return t * t * (3 - 2 * t); }
 
 // P（パラメータ）: 0–100のスライダー値そのまま。on.* でグループのON/OFF
 // 仕上げの強さを「光」と「色」で別々に：該当する項目の量だけを割合で弱める
-var TK_MIXL = ['diff','glow','hal','mist','comp','rAmt','lCa','lSoft','lVeil','lVig'];
-var TK_MIXC = ['lift','roll','con','sat','shb','hiw','dens','grain','skAmt','gAtemp','gBtemp','gAtint','gBtint','gAev','gBev','mAmt'];
+var TK_MIXL = ['comp'];   // v147：ミスト・グロー・粒子など手で入れるエフェクトは、自動タブの強さで弱めない（数値どおりに効く）
+var TK_MIXC = ['lift','roll','con','sat','shb','hiw','dens','skAmt','gAtemp','gBtemp','gAtint','gBtint','gAev','gBev','mAmt'];
 function tkScaleMix(P){
+  if (P.mixOn === 0) return P;   // 自動タブで仕上げを選んでいない（なし・手動）時は、強さのスライダーは効かない
   var l = P.mixL == null ? 100 : P.mixL, c = P.mixC == null ? 100 : P.mixC;
   if (l >= 100 && c >= 100) return P;
   var Q = {}; for (var k in P) Q[k] = P[k];
@@ -781,6 +782,17 @@ function tkProcess(src, w, h, P){
       if (amt <= 0) continue;
       var f = 1 - Math.min(0.8, amt);
       img[i * 3] = dr * f; img[i * 3 + 1] = dg * f; img[i * 3 + 2] = db * f;
+    }
+  }
+
+  // 強さ：元の写真と仕上がりを混ぜる（仕上げ全体の効き具合）。v147：エフェクト（ミスト・グローなど）と粒子の前で混ぜる＝手で入れたエフェクトは強さで弱まらない
+  //   自動タブで仕上げを選んでいない時（mixOn＝0）は混ぜない。光の仕上げ（lkSplit）は強さを色の量だけに効かせるので、ここでは混ぜない
+  if (P.mixOn !== 0 && P.mix != null && P.mix < 100 && !(P.on && P.on.look2 && P.lkSplit)){
+    var mx = Math.max(0, P.mix) / 100;
+    for (i = 0; i < n; i++){
+      img[i * 3] = src[i * 4] / 255 + (img[i * 3] - src[i * 4] / 255) * mx;
+      img[i * 3 + 1] = src[i * 4 + 1] / 255 + (img[i * 3 + 1] - src[i * 4 + 1] / 255) * mx;
+      img[i * 3 + 2] = src[i * 4 + 2] / 255 + (img[i * 3 + 2] - src[i * 4 + 2] / 255) * mx;
     }
   }
 
@@ -925,16 +937,6 @@ function tkProcess(src, w, h, P){
     }
   }
 
-  // 9) 強さ：元の写真と仕上がりを混ぜる（仕上げ全体の効き具合）
-  // 光の仕上げ（lkSplit）は強さを青の光の中で「色の量」だけに効かせるので、ここでは混ぜない（明るさの作りと肌は常に効く）
-  if (P.mix != null && P.mix < 100 && !(P.on && P.on.look2 && P.lkSplit)){
-    var mx = Math.max(0, P.mix) / 100;
-    for (i = 0; i < n; i++){
-      img[i * 3] = src[i * 4] / 255 + (img[i * 3] - src[i * 4] / 255) * mx;
-      img[i * 3 + 1] = src[i * 4 + 1] / 255 + (img[i * 3 + 1] - src[i * 4 + 1] / 255) * mx;
-      img[i * 3 + 2] = src[i * 4 + 2] / 255 + (img[i * 3 + 2] - src[i * 4 + 2] / 255) * mx;
-    }
-  }
 
   // 8bitに戻す時に、目に見えないごく細かい揺らぎ（三角分布のディザ）を混ぜる＝空やグラデーションの縞（トーンジャンプ）を防ぐ
   var out = new Uint8ClampedArray(n * 4), hs = 2166136261;
@@ -3823,7 +3825,7 @@ function tkLook2(img, n, P, w, h){
 
   // プリセット
   var pbox = $('presets');
-  P.mix = 100;
+  P.mix = 100; P.mixOn = 0;   // 最初は仕上げなし（自動タブで選んだ時だけ強さが効く）
   // 見本付きのタイル（見本は写真を読み込んだ時に作る）
   function lookTile(key, label, mine, onClick){
     var c = document.createElement('button'); c.type = 'button'; c.className = 'pchip' + (mine ? ' mine' : ''); c.dataset.p = key;
@@ -3846,7 +3848,8 @@ function tkLook2(img, n, P, w, h){
     Object.keys(o).sort(function(a, b){ return o[b].at - o[a].at; }).forEach(function(nm){ pbox.appendChild(lookTile('my:' + nm, nm, true, function(){ applyMyPre(nm); markPreset('my:' + nm); })); });
   }
   buildLookTiles();
-  function markPreset(key){ Array.prototype.forEach.call(pbox.children, function(c){ c.classList.toggle('on', c.dataset.p === key); }); }
+  function markPreset(key){ Array.prototype.forEach.call(pbox.children, function(c){ c.classList.toggle('on', c.dataset.p === key); }); if (key === 'none') P.mixOn = 0; else if (key && key !== '__none__') P.mixOn = 1; syncMixRows(); }
+  function syncMixRows(){ var on = P.mixOn !== 0; ['s-mix', 's-mixL', 's-mixC'].forEach(function(id){ var e = document.getElementById(id); if (e && e.parentNode) e.parentNode.style.display = on ? '' : 'none'; }); }
   function clearPresetMark(){ markPreset('__none__'); }
   var KEEP_ON = { bright: 1, tone: 1, split: 1, grain: 1, reg: 1, match: 1, basic: 1, wb: 1, mix: 1, crv: 1, cg: 1, fx: 1, det: 1, lm: 1 };
   // 基本補正の値は、仕上げ（プリセット）を選んでも消さない
@@ -3928,7 +3931,7 @@ function tkLook2(img, n, P, w, h){
       var ph = r[0], st = r[1]; if (!ph || !ph.blob || img) return;
       SESS.restoring = true;
       loadFile(ph.blob, { restore: st && st.s, keep: true, onDone: function(){
-        SESS.restoring = false;
+        SESS.restoring = false; l6Revive();
         var d = new Date(ph.at || Date.now());
         toast('前回の編集を開きました（' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2) + '）');
       } });
@@ -4228,7 +4231,7 @@ function tkLook2(img, n, P, w, h){
   // すべて初期値へ（調整・仕上げ・強さ・部分調整・トリミング・マスク）
   function fullReset(){
     try{ AUTO_APPLYING = false; autoOff(); }catch(e){}
-    P.on.look2 = 0; P.on.look3 = 0; P.l6 = 0; P.l6Custom = null; LAST_FULL = false;
+    P.on.look2 = 0; P.on.look3 = 0; P.l6 = 0; P.l6Custom = null; P.mixOn = 0; LAST_FULL = false;
     Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); });
     P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw();
     ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); });
@@ -6493,6 +6496,17 @@ function tkLook2(img, n, P, w, h){
     var M = l5Measure(); return M.skin > 0.03 && sk / nn > 0.04 && vivid < sk * 0.6;
   }
   function l6Into(q, idx, L){ q.on.look2 = 0; q.on.look3 = 1; q.l5Base = 0; q.l4Mode = 0; q.l6 = 1; q.l6Idx = idx; q.l6V = 3; if (q.l6Mix == null) q.l6Mix = 0; if (q.l6DeepBg == null) q.l6DeepBg = q.l6Deep != null ? q.l6Deep : 30; if (q.l6DeepSk == null) q.l6DeepSk = 0; if (q.l6Teal == null) q.l6Teal = 40; if (q.l6Soft == null) q.l6Soft = 0; if (q.l6Clar == null) q.l6Clar = 0; if (q.l6Calm == null) q.l6Calm = 50; q.l6L = L.L; q.l6C = L.C; q.l6Dark = L.dark; q.l5Master = L.master; q.l3Skin = L.skin; q.lkProt = L.prot; q.lkAi = 1; }
+  // v147：前回の編集の続き（開き直し）で、見本寄せのパネルも戻す。写真の設定（P）は一切変えず、パネルの状態だけ作り直す
+  function l6Revive(){
+    if (AUTO || !img || !P.on || !P.on.look3 || !P.l6) return;
+    try{
+      var person = !!P.l6Person, T = l6Measure(person), rank = tkL6Rank(T, person ? 'person' : null, person ? null : l6Desc()), idx = tkL6Idx(P), L = TK_L6_DEF;
+      if (!TK_L6[idx]) return; P.l6Idx = idx; P.l6V = 3;
+      var mac = { bright: 0, l5Master: P.l5Master == null ? L.master : P.l5Master, l6L: P.l6L == null ? L.L : P.l6L, l6C: P.l6C == null ? L.C : P.l6C, l6Dark: P.l6Dark == null ? L.dark : P.l6Dark, l3Skin: P.l3Skin == null ? L.skin : P.l3Skin, lkProt: P.lkProt == null ? L.prot : P.lkProt, lkSmooth: P._x == null ? L.smooth : P._x };
+      AUTO = { kind: 'lk', l3: true, l6: true, rank: tkL6Top(rank, 3), idx: idx, group: TK_L6[idx].g, custom: P.l6Custom || null, person: person, look: 'lk', key: 'l6', label: '見本1枚に寄せる', learned: false, macro: mac, notes: [], picked: true, keep: P.l5Master === 0, fullRank: rank, base: P.l6B || null, baseAuto: P.l6B ? Object.assign({}, P.l6B) : null };
+      markPreset('l6'); syncAutoUI(); setTimeout(function(){ l6Judge(); }, 60);
+    }catch(e){ AUTO = null; }
+  }
   function applyLook6(idx, keep){
     if (!img){ toast('先に写真を選んでください'); return; }
     var oldB = (AUTO && AUTO.l6 && keep && !L6_BASE_FRESH) ? AUTO.base : null; L6_BASE_FRESH = false;
@@ -7046,6 +7060,7 @@ function tkLook2(img, n, P, w, h){
       r2.querySelector('label').addEventListener('dblclick', function(){ P[d[0]] = 100; $('s-' + d[0]).value = 100; $('v-' + d[0]).textContent = 100; schedule(); });
     });
     var ai = document.createElement('button'); ai.type = 'button'; ai.className = 'rbtn aibtn'; ai.id = 'aiBtn'; ai.textContent = 'AIで主役を立てる';
+    syncMixRows();
     ai.addEventListener('click', aiSubject); looksPanel.appendChild(ai);
     var st = document.createElement('div'); st.className = 'rstat'; st.id = 'aiStat'; st.textContent = '主役を明るく、手前と奥を控えめに。写真ごとにAIが見分けます（端末の中で処理）。'; looksPanel.appendChild(st);
     var lr = document.createElement('div'); lr.className = 'lookrow';
@@ -7264,7 +7279,7 @@ function tkLook2(img, n, P, w, h){
     P.reg.ver = ver;
     GROUPS.forEach(function(g){ (g.sliders || []).forEach(function(s){ if (P[s[0]] != null) setVal(s[0], P[s[0]]); }); });
     Object.keys(P.on).forEach(function(k){ syncGroup(k); });
-    $('s-mix').value = P.mix; $('v-mix').textContent = P.mix;
+    $('s-mix').value = P.mix; $('v-mix').textContent = P.mix; syncMixRows();
     ['mixL', 'mixC'].forEach(function(k){ var v = P[k] == null ? 100 : P[k]; P[k] = v; $('s-' + k).value = v; $('v-' + k).textContent = v; });
     setMode(P.dmode || 'B'); updateRegUI(); updateExtras(); markPreset('__none__');
     schedule(); restoring = false; updateHistBtns();
