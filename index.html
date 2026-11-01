@@ -392,6 +392,16 @@
   .rbtn.pri{background:var(--accent); color:#0E1418; border-color:transparent}
   .cropdone{position:absolute; top:10px; right:10px; z-index:4; display:none; font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:18px; border:0; background:var(--accent); color:#0E1418; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.4)}
   .app.cropping .cropdone{display:block}
+  /* v158：特定のモード（トリミング・光源の選択・光の位置・マスク・部分のブラシ）の間は、完了（右上）とそのモードの操作だけ押せる */
+  .modedone{position:absolute; top:10px; right:10px; z-index:6; display:none; font:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:18px; border:0; background:var(--accent); color:#0E1418; cursor:pointer}
+  .app.modal:not(.cropping) .modedone{display:block}
+  .app.modal .busy{display:none !important}
+  .app.modal .topbar > *,.app.modal .tabbar,.app.modal #subtabs{pointer-events:none; opacity:.35}
+  .app.modal #panel > :not(.modalok){pointer-events:none; opacity:.35}
+  .app.modal.mlimit #panel .modalok{pointer-events:none}
+  .app.modal.mlimit #panel .modalok :not(.modalkeep):not(.modalkeep *):not(:has(.modalkeep)){opacity:.4}
+  .app.modal.mlimit #panel .modalkeep{pointer-events:auto; opacity:1}
+  .app.modal.raydrag .modedone,.app.sliding .modedone{opacity:0}
   .app.cropping .chip, .app.cropping .histo, .app.cropping .busy{display:none !important}   /* トリミング中は明るさ表示なども隠す（枠と重ならない） */
   .app.sliding .cropdone{opacity:0}
   .asprow{display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none}
@@ -504,7 +514,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v157</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v158</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5080,7 +5090,7 @@ function tkLook2(img, n, P, w, h){
     });
     body.appendChild(seg);
     XE.crPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'cross'); }); body.appendChild(XE.crPick);
-    var lt = xel('div', 'lptools'); lt.style.display = 'none';
+    var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
     var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
     var rw = xel('div', 'rrow'); rw.appendChild(xbtn('残す光だけ選ぶ', 'ghost', function(){ lpAll(true); LP.brush = 'on'; updateExtras(); toast('全部外しました。残したい光をタップ／なぞってください'); })); rw.appendChild(xbtn('全部外す', 'ghost', function(){ lpAll(true); })); rw.appendChild(xbtn('全部戻す', 'ghost', function(){ lpAll(false); LP.brush = 'off'; updateExtras(); })); lt.appendChild(rw);
     body.appendChild(lt);
@@ -5095,7 +5105,7 @@ function tkLook2(img, n, P, w, h){
     });
     body.appendChild(seg);
     XE.anPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'ana'); }); body.appendChild(XE.anPick);
-    var lt = xel('div', 'lptools'); lt.style.display = 'none';
+    var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
     var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
     var rw = xel('div', 'rrow'); rw.appendChild(xbtn('残す光だけ選ぶ', 'ghost', function(){ lpAll(true); LP.brush = 'on'; updateExtras(); toast('全部外しました。残したい光をタップ／なぞってください'); })); rw.appendChild(xbtn('全部外す', 'ghost', function(){ lpAll(true); })); rw.appendChild(xbtn('全部戻す', 'ghost', function(){ lpAll(false); LP.brush = 'off'; updateExtras(); })); lt.appendChild(rw);
     body.appendChild(lt);
@@ -5574,7 +5584,6 @@ function tkLook2(img, n, P, w, h){
     // 確定・キャンセル（トリミング画面を閉じる。タブを切り替えても確定になる）
     var fin = xel('div', 'rrow geofin');
     fin.appendChild(xbtn('キャンセル', 'ghost', cropCancel));
-    var ok = xbtn('✓ 完了', null, cropDone); ok.classList.add('pri'); fin.appendChild(ok);
     body.appendChild(fin);
     var asp = xel('div', 'asprow'); XE.aspBtns = [];
     aspects().forEach(function(a){
@@ -6275,7 +6284,9 @@ function tkLook2(img, n, P, w, h){
     if (kind === 'lp'){
       var same = PICK === 'lp' && LP.fx === fx; PICK = same ? null : 'lp'; LP.fx = same ? null : fx;
       if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。なぞると まとめて外せます。重なった所は2本指で拡大' : '光源が見つかりませんでした（光の範囲を右へ）'); }
-      document.body.classList.toggle('picking', !!PICK); updateExtras(); applyVZ(); drawGuide(); schedule(); return;
+      document.body.classList.toggle('picking', !!PICK); updateExtras(); applyVZ(); drawGuide(); schedule(); modeSync();
+      if (PICK){ var tl = XE[fx === 'cross' ? 'crTools' : 'anTools']; if (tl) setTimeout(function(){ panel.scrollTo({ top: panel.scrollTop + tl.getBoundingClientRect().top - panel.getBoundingClientRect().top - 8, behavior: 'smooth' }); }, 50); }   // 外す操作の欄を見える所へ
+      return;
     }
     PICK = PICK === kind ? null : kind;
     if (PICK === 'grad' && !P.on.grad){ P.on.grad = 1; syncGroup('grad'); }
@@ -6406,8 +6417,8 @@ function tkLook2(img, n, P, w, h){
     try{ syncGeo(); present(); }catch(e){}
     try{ lmSync(); }catch(e){}
     [['crTools', 'cross'], ['anTools', 'ana']].forEach(function(d){ var el = XE[d[0]]; if (!el) return; el.style.display = PICK === 'lp' && LP.fx === d[1] ? '' : 'none'; Array.prototype.forEach.call(el.querySelector('.seg').children, function(b){ b.classList.toggle('on', b.dataset.m === (LP.brush || 'off')); }); });
-    if (XE.crPick){ XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
-    if (XE.anPick){ XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
+    if (XE.crPick){ XE.crPick.style.display = PICK === 'lp' && LP.fx === 'cross' ? 'none' : ''; XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
+    if (XE.anPick){ XE.anPick.style.display = PICK === 'lp' && LP.fx === 'ana' ? 'none' : ''; XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
     if (XE.anaSeg) Array.prototype.forEach.call(XE.anaSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.anColor || 'orange')); });
     if (XE.raySeg){
@@ -7079,6 +7090,25 @@ function tkLook2(img, n, P, w, h){
   }
   // 濃い青・肌の範囲（マスク）を、見本1枚に寄せるのパネルの中で直す
   var L6EDIT = false;
+  // ---- モード中の操作の固定（v158）：いま何のモードか・押してよい欄・完了でどう抜けるか ----
+  function modeNow(){
+    if (CROPMODE) return { k: 'crop', ok: 'g-geo', done: function(){ cropDone(); } };
+    if (PICK === 'lp') return { k: 'lp', ok: LP.fx === 'cross' ? 'g-cross' : 'g-ana', limit: true, done: function(){ startPick('lp', LP.fx); toast('光源の選択を終えました'); } };
+    if (PICK === 'ray' || PICK === 'grad') return { k: 'pick', ok: PICK === 'ray' ? 'g-ray' : 'g-grad', done: function(){ PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); drawGuide(); } };
+    if (LMEDIT && L6EDIT) return { k: 'l6skin', ok: null, okEl: looksPanel, done: function(){ l6SkinEdit(false); } };
+    if (LMEDIT) return { k: 'mask', ok: 'g-lm', done: function(){ showTab('part', 'reg'); toast('マスクの編集を終えました'); } };
+    if (REG.tool !== 'off' || REG.pickDodge) return { k: 'reg', ok: 'g-reg', done: function(){ REG.tool = 'off'; REG.pickDodge = false; document.body.classList.remove('brushing'); updateRegUI(); drawOverlay(); } };
+    return null;
+  }
+  var MODE = null, modeBtn = null;
+  function modeSync(){
+    var m = modeNow(), app = document.getElementById('app'), key = m ? m.k + ':' + (m.ok || '') : '';
+    if (!modeBtn){ modeBtn = xel('button', 'modedone', '✓ 完了'); modeBtn.type = 'button'; modeBtn.addEventListener('click', function(e){ e.stopPropagation(); var mm = modeNow(); if (mm) mm.done(); setTimeout(modeSync, 0); }); $('stage').appendChild(modeBtn); }
+    Array.prototype.forEach.call(panel.children, function(c){ var ok = m && ((m.ok && c.id === m.ok) || (m.okEl && c === m.okEl)); c.classList.toggle('modalok', !!ok); });
+    app.classList.toggle('modal', !!m); app.classList.toggle('mlimit', !!(m && m.limit));
+    MODE = key;
+  }
+  setInterval(modeSync, 200);
   function l6SkinMask(){
     var m = null, idx = -1; (P.lm || []).forEach(function(x, i){ if (x.l6skin){ m = x; idx = i; } });
     if (!m){ m = { type: 'skin', l6skin: 1, strokes: [], feather: 30, inv: 0, adj: {} }; P.lm = P.lm || []; P.lm.push(m); idx = P.lm.length - 1; P.on.lm = 1; }
