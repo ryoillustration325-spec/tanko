@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v154</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v155</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1935,8 +1935,9 @@ function tkLightPeaks(Y, sw, sh, rng, MX, EX){
 // 手で外した光源（写真の上の位置 0〜1）の近くの光は使わない。外しても次の光が繰り上がらない（数を減らすための操作）
 function tkPeakEx(out, sw, sh, EX){
   if (!EX || !EX.length) return out;
-  var rr = 0.022 * Math.max(sw, sh);
-  return out.filter(function(p){ var x = (p.i % sw) + 0.5, y = ((p.i / sw) | 0) + 0.5; for (var k = 0; k < EX.length; k++){ var dx = x - EX[k][0] * sw, dy = y - EX[k][1] * sh; if (dx * dx + dy * dy < rr * rr) return false; } return true; });
+  var rr = 0.022 * Math.max(sw, sh), drop = {};   // 外した点ごとに、いちばん近い光1つだけを外す（近くに残したい光があっても消えない）
+  EX.forEach(function(e){ var bi = -1, bd = rr * rr; out.forEach(function(p, k){ if (drop[k]) return; var dx = (p.i % sw) + 0.5 - e[0] * sw, dy = ((p.i / sw) | 0) + 0.5 - e[1] * sh, d = dx * dx + dy * dy; if (d < bd){ bd = d; bi = k; } }); if (bi >= 0) drop[bi] = 1; });
+  return out.filter(function(p, k){ return !drop[k]; });
 }
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
@@ -5079,6 +5080,11 @@ function tkLook2(img, n, P, w, h){
     });
     body.appendChild(seg);
     XE.crPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'cross'); }); body.appendChild(XE.crPick);
+    var lt = xel('div', 'lptools'); lt.style.display = 'none';
+    var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
+    var rw = xel('div', 'rrow'); rw.appendChild(xbtn('残す光だけ選ぶ', 'ghost', function(){ lpAll(true); LP.brush = 'on'; updateExtras(); toast('全部外しました。残したい光をタップ／なぞってください'); })); rw.appendChild(xbtn('全部外す', 'ghost', function(){ lpAll(true); })); rw.appendChild(xbtn('全部戻す', 'ghost', function(){ lpAll(false); LP.brush = 'off'; updateExtras(); })); lt.appendChild(rw);
+    body.appendChild(lt);
+    XE.crTools = lt;
   }
   function buildAnaExtra(body){
     var seg = xel('div', 'seg'); XE.anaSeg = seg;
@@ -5089,6 +5095,11 @@ function tkLook2(img, n, P, w, h){
     });
     body.appendChild(seg);
     XE.anPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'ana'); }); body.appendChild(XE.anPick);
+    var lt = xel('div', 'lptools'); lt.style.display = 'none';
+    var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
+    var rw = xel('div', 'rrow'); rw.appendChild(xbtn('残す光だけ選ぶ', 'ghost', function(){ lpAll(true); LP.brush = 'on'; updateExtras(); toast('全部外しました。残したい光をタップ／なぞってください'); })); rw.appendChild(xbtn('全部外す', 'ghost', function(){ lpAll(true); })); rw.appendChild(xbtn('全部戻す', 'ghost', function(){ lpAll(false); LP.brush = 'off'; updateExtras(); })); lt.appendChild(rw);
+    body.appendChild(lt);
+    XE.anTools = lt;
   }
   function buildRayExtra(body){
     var seg = xel('div', 'seg'); XE.raySeg = seg;
@@ -6243,7 +6254,9 @@ function tkLook2(img, n, P, w, h){
   // ---- 写真の上での位置指定（グラデーションの線・光の位置） ----
   var gde = $('gde'), gctx = gde.getContext('2d', { colorSpace: CS }), pickStart = null, guideTimer = null;
   // 光源の印（ラインフレア・クロス）：エフェクトをかける直前の写真から、いま選ばれている光源を求めて印を出す。印をタップで外す／戻す
-  var LP = { fx: null, list: [] };
+  var LP = { fx: null, list: [], brush: 'off', drag: null };
+  function lpSave(){ var key = LP.fx === 'cross' ? 'crEx' : 'anEx'; P[key] = LP.list.filter(function(p){ return p.off; }).map(function(p){ return [Math.round(p.u * 10000) / 10000, Math.round(p.v * 10000) / 10000]; }); clearPresetMark(); updateExtras(); schedule(); }
+  function lpAll(off){ if (PICK !== 'lp') return; LP.list.forEach(function(p){ p.off = off; }); lpSave(); drawGuide(); }
   function lpCompute(){
     if (!hi || !LP.fx) { LP.list = []; return; }
     var Q = JSON.parse(JSON.stringify(P)); ['ana', 'cross', 'ray', 'lens', 'grain'].forEach(function(k){ Q.on[k] = 0; });
@@ -6252,14 +6265,14 @@ function tkLook2(img, n, P, w, h){
     for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++){ var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 4, r0 = out[q] / 255, g0 = out[q + 1] / 255, b0 = out[q + 2] / 255, k = y * sw + x; Y[k] = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0; MX[k] = Math.max(r0, g0, b0); }
     var cr = LP.fx === 'cross', rng = ((cr ? P.crRange : P.anRange) == null ? 30 : (cr ? P.crRange : P.anRange)) / 100, ex = (cr ? P.crEx : P.anEx) || [];
     var all = tkLightPeaks(Y, sw, sh, rng, MX, null), rr = 0.022;
-    LP.list = all.map(function(p){ var u = ((p.i % sw) + 0.5) / sw, v = (((p.i / sw) | 0) + 0.5) / sh, off = ex.some(function(e){ var dx = (u - e[0]) * sw, dy = (v - e[1]) * sh; return dx * dx + dy * dy < Math.pow(rr * Math.max(sw, sh), 2); }); return { u: u, v: v, w: p.w, off: off }; });
-    ex.forEach(function(e){ if (!LP.list.some(function(p){ return Math.abs(p.u - e[0]) < 0.003 && Math.abs(p.v - e[1]) < 0.003; })) LP.list.push({ u: e[0], v: e[1], w: 0.5, off: true }); });
+    LP.list = all.map(function(p){ var u = ((p.i % sw) + 0.5) / sw, v = (((p.i / sw) | 0) + 0.5) / sh, off = false; return { u: u, v: v, w: p.w, off: off, i: p.i }; });
+    var kept = tkPeakEx(all, sw, sh, ex), keptI = {}; kept.forEach(function(p){ keptI[p.i] = 1; }); LP.list.forEach(function(q){ q.off = !keptI[q.i]; });
   }
   function startPick(kind, fx){
     if (!img){ toast('先に写真を選んでください'); return; }
     if (kind === 'lp'){
       var same = PICK === 'lp' && LP.fx === fx; PICK = same ? null : 'lp'; LP.fx = same ? null : fx;
-      if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。タップで外す／もう一度タップで戻す' : '光源が見つかりませんでした（光の範囲を右へ）'); }
+      if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。なぞると まとめて外せます（タップで1つずつ）' : '光源が見つかりませんでした（光の範囲を右へ）'); }
       document.body.classList.toggle('picking', !!PICK); updateExtras(); drawGuide(); schedule(); return;
     }
     PICK = PICK === kind ? null : kind;
@@ -6293,6 +6306,7 @@ function tkLook2(img, n, P, w, h){
       LP.list.forEach(function(p){ var x = p.u * W, y = p.v * H, rr = (7 + p.w * 7) * dpr;
         gctx.beginPath(); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = p.off ? 'rgba(255,255,255,.45)' : 'rgba(255,255,255,.95)'; gctx.stroke();
         if (p.off){ gctx.beginPath(); gctx.moveTo(x - rr * 0.6, y - rr * 0.6); gctx.lineTo(x + rr * 0.6, y + rr * 0.6); gctx.moveTo(x + rr * 0.6, y - rr * 0.6); gctx.lineTo(x - rr * 0.6, y + rr * 0.6); gctx.stroke(); } });
+      if (LP.brushAt){ gctx.beginPath(); gctx.setLineDash([4 * dpr, 4 * dpr]); gctx.strokeStyle = (LP.brush || 'off') === 'off' ? 'rgba(240,140,120,.95)' : 'rgba(160,220,170,.95)'; gctx.arc(LP.brushAt.u * W, LP.brushAt.v * H, LP.brushAt.r * W, 0, Math.PI * 2); gctx.stroke(); gctx.setLineDash([]); }
       gctx.strokeStyle = 'rgba(255,255,255,.95)';
     } else if (kind === 'ray'){
       var sx = P.rx * W, sy = P.ry * H;
@@ -6331,14 +6345,23 @@ function tkLook2(img, n, P, w, h){
   }
   view.addEventListener('pointerdown', function(e){
     if (!PICK) return;
-    if (PICK === 'lp'){ e.preventDefault(); e.stopImmediatePropagation(); lpTap(e); return; }
+    if (PICK === 'lp'){ e.preventDefault(); e.stopImmediatePropagation(); try{ view.setPointerCapture(e.pointerId); }catch(x){} LP.drag = { x: e.clientX, y: e.clientY, moved: false, e0: e }; return; }
     e.preventDefault(); e.stopImmediatePropagation();
     try{ view.setPointerCapture(e.pointerId); }catch(x){}
     pickStart = pickPt(e); document.getElementById('app').classList.add('raydrag'); pickApply(pickStart, null, false);
   }, true);
-  view.addEventListener('pointermove', function(e){ if (!PICK || !pickStart) return; e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), false); }, true);
+  function lpBrush(e){
+    var pt = pickPt(e), R = 30, hit = false, off = (LP.brush || 'off') === 'off';
+    LP.list.forEach(function(p){ var dx = (p.u - pt.u) * pt.rc.width, dy = (p.v - pt.v) * pt.rc.height; if (dx * dx + dy * dy < R * R && p.off !== off){ p.off = off; hit = true; } });
+    LP.brushAt = { u: pt.u, v: pt.v, r: R / pt.rc.width }; drawGuide(); return hit;
+  }
+  view.addEventListener('pointermove', function(e){
+    if (PICK === 'lp' && LP.drag){ e.stopImmediatePropagation();
+      if (!LP.drag.moved && Math.hypot(e.clientX - LP.drag.x, e.clientY - LP.drag.y) > 8){ LP.drag.moved = true; document.getElementById('app').classList.add('raydrag'); lpBrush(LP.drag.e0); }
+      if (LP.drag.moved) lpBrush(e); return; }
+    if (!PICK || !pickStart) return; e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), false); }, true);
   function pickEnd(e){
-    if (PICK === 'lp'){ e.stopImmediatePropagation(); return; }
+    if (PICK === 'lp'){ e.stopImmediatePropagation(); var dg = LP.drag; LP.drag = null; LP.brushAt = null; document.getElementById('app').classList.remove('raydrag'); if (dg){ if (dg.moved){ lpSave(); drawGuide(); } else lpTap(e); } return; }
     if (!PICK || !pickStart) return;
     e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), true);
     var kind = PICK; pickStart = null; PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); flashGuide(kind); clearPresetMark();
@@ -6355,6 +6378,7 @@ function tkLook2(img, n, P, w, h){
     try{ syncGrade(); }catch(e){}
     try{ syncGeo(); present(); }catch(e){}
     try{ lmSync(); }catch(e){}
+    [['crTools', 'cross'], ['anTools', 'ana']].forEach(function(d){ var el = XE[d[0]]; if (!el) return; el.style.display = PICK === 'lp' && LP.fx === d[1] ? '' : 'none'; Array.prototype.forEach.call(el.querySelector('.seg').children, function(b){ b.classList.toggle('on', b.dataset.m === (LP.brush || 'off')); }); });
     if (XE.crPick){ XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
     if (XE.anPick){ XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
