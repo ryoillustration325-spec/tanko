@@ -514,7 +514,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v158</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v159</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -883,7 +883,25 @@ function tkProcess(src, w, h, P){
   }
 
   // 5) 光のにじみ＝輪郭ソフト（比較（明）：明部の光が暗い隣へだけ漏れる。芯はそのまま）
-  if (doDiff){
+  if (doDiff && P.diffType === 'white'){
+    // ホワイトミスト（v159）：光が画面全体に散る＝光の周りにやわらかなにじみ（明るい所にも重なる）＋全体に薄い白のベール（黒が浮き、コントラストが下がる）
+    var DW = tkRowReader(tkBlurGrid(HS, sD * 2.6), w), dw = P.diff / 100, mr = 0, mg = 0, mb = 0;
+    for (i = 0; i < n; i++){ mr += img[i * 3]; mg += img[i * 3 + 1]; mb += img[i * 3 + 2]; }
+    mr /= n; mg /= n; mb /= n; var mY = 0.2126 * mr + 0.7152 * mg + 0.0722 * mb;
+    var vc = [0.55 + 0.45 * mr, 0.55 + 0.45 * mg, 0.55 + 0.45 * mb], vk = dw * (0.2 + 0.22 * mY);   // ベールの色＝写真の平均の色を白へ寄せたもの。明るい写真ほど濃い
+    for (y = 0; y < h; y++){
+      var rw = DW(y);
+      for (x = 0; x < w; x++){
+        p4 = x * 4; i = y * w + x; var sw2 = rw[p4 + 3], aw = Math.min(1, sw2 * 2) * dw * 1.1;
+        for (c = 0; c < 3; c++){
+          var v0 = img[i * 3 + c];
+          if (sw2 > 1e-4){ var lc = Math.min(1, rw[p4 + c] / sw2) * Math.min(1, sw2 * 3); v0 = 1 - (1 - v0) * (1 - lc * aw); }   // にじみ（スクリーン：芯の上にも少し乗って柔らかく）
+          img[i * 3 + c] = v0 + (vc[c] - v0) * vk * (1 - 0.4 * v0);   // ベール：暗い所ほど持ち上がる
+        }
+      }
+    }
+  }
+  if (doDiff && P.diffType !== 'white'){
     var DR = tkRowReader(tkBlurGrid(HS, sD), w);
     var dop = P.diff / 100;
     for (y = 0; y < h; y++){
@@ -3805,7 +3823,7 @@ function tkLook2(img, n, P, w, h){
     { key: 'crv', title: 'トーンカーブ', sub: '点を動かして明るさと色を細かく', sliders: [], custom: buildCurveExtra,
       hint: '線をタップで点を追加、点をドラッグで移動、点をダブルタップで削除。RGBは全体、赤・緑・青は色ごと。' },
     { sect: '光（Lightroomにできない部分）' },
-    { key: 'diff', title: 'ミスト（輪郭ソフト）', sub: '明部の光が暗い隣へ漏れる。芯はくっきり',
+    { key: 'diff', title: 'ミスト（輪郭ソフト）', sub: 'ブラック＝光の縁だけにじむ／ホワイト＝全体がふんわり淡く', custom: buildDiffExtra,
       sliders: [['diff','強さ',0,100,50],['diffR','広がり',1,20,7]],
       hint: '人物の輪郭・窓枠・逆光の縁がふんわりします。画面全体はぼかしません。' },
     { key: 'glow', title: 'グロー', sub: '周りより明るい所（きらめき・光源）から光の輪',
@@ -3911,7 +3929,7 @@ function tkLook2(img, n, P, w, h){
   function cgReset(){ ['s','m','h','g'].forEach(function(r){ P['cg' + r + 'H'] = 0; P['cg' + r + 'S'] = 0; P['cg' + r + 'L'] = 0; }); P.cgBlend = 50; P.cgBal = 0; P.cgSkin = 0; }
   P.cgSkin = 0;
   P.dmode = 'B';
-  P.anColor = 'orange'; P.crPts = 4; P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null; P.mMode = 'part';
+  P.diffType = 'black'; P.anColor = 'orange'; P.crPts = 4; P.rMode = 'beam'; P.rx = 0.92; P.ry = 0.04; P.gx0 = 0.88; P.gy0 = 0.92; P.gx1 = 0.25; P.gy1 = 0.3; P.mref = null; P.mMode = 'part';
   var PICK = null, FEED = [], FEEDPOS = 0, XE = {};
   GROUPS.forEach(function(g){ if (!g.key || g.noToggle) return; P.on[g.key] = OFF_KEYS[g.key] ? 0 : 1; g.sliders.forEach(function(s){ P[s[0]] = s[4]; DEFAULTS[s[0]] = s[4]; if (MANUAL_FX[g.key]) MANUAL_FX_KEYS[s[0]] = 1; }); });
 
@@ -5081,6 +5099,16 @@ function tkLook2(img, n, P, w, h){
   function xbtn(txt, cls, fn){ var b = xel('button', 'rbtn' + (cls ? ' ' + cls : ''), txt); b.type = 'button'; b.addEventListener('click', fn); return b; }
   function rowOf(key){ var r = document.getElementById('s-' + key); return r ? r.closest('.row') : null; }
   // ---- 光の差し込み ----
+  function buildDiffExtra(body){
+    var seg = xel('div', 'seg'); XE.diffSeg = seg;
+    [['black','ブラックミスト'],['white','ホワイトミスト']].forEach(function(m){
+      var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0];
+      b.addEventListener('click', function(){ P.diffType = m[0]; if (!P.on.diff){ P.on.diff = 1; syncGroup('diff'); } updateExtras(); clearPresetMark(); schedule(); });
+      seg.appendChild(b);
+    });
+    body.appendChild(seg);
+    XE.diffNote = xel('div', 'hint', ''); body.appendChild(XE.diffNote);
+  }
   function buildCrossExtra(body){
     var seg = xel('div', 'seg'); XE.crossSeg = seg;
     [[4,'4本'],[6,'6本'],[8,'8本']].forEach(function(m){
@@ -6419,6 +6447,7 @@ function tkLook2(img, n, P, w, h){
     [['crTools', 'cross'], ['anTools', 'ana']].forEach(function(d){ var el = XE[d[0]]; if (!el) return; el.style.display = PICK === 'lp' && LP.fx === d[1] ? '' : 'none'; Array.prototype.forEach.call(el.querySelector('.seg').children, function(b){ b.classList.toggle('on', b.dataset.m === (LP.brush || 'off')); }); });
     if (XE.crPick){ XE.crPick.style.display = PICK === 'lp' && LP.fx === 'cross' ? 'none' : ''; XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
     if (XE.anPick){ XE.anPick.style.display = PICK === 'lp' && LP.fx === 'ana' ? 'none' : ''; XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
+    if (XE.diffSeg){ Array.prototype.forEach.call(XE.diffSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.diffType || 'black')); }); XE.diffNote.textContent = P.diffType === 'white' ? '光のまわりが柔らかくにじみ、画面全体に薄い白のベール。黒が浮いてコントラストが下がる（淡い仕上がり）。' : '明るい光の縁だけが暗い隣へにじむ。黒は沈んだまま・コントラストはほぼそのまま。'; }
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
     if (XE.anaSeg) Array.prototype.forEach.call(XE.anaSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.anColor || 'orange')); });
     if (XE.raySeg){
