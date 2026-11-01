@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v156</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v157</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5317,8 +5317,9 @@ function tkLook2(img, n, P, w, h){
   var VZ = { s: 1, x: 0, y: 0 };
   function applyVZ(){
     var t = VZ.s === 1 && !VZ.x && !VZ.y ? '' : 'translate(' + VZ.x + 'px,' + VZ.y + 'px) scale(' + VZ.s + ')';
-    ['view', 'ovl', 'gde'].forEach(function(id){ var e = $(id); if (e){ e.style.transformOrigin = '50% 50%'; e.style.transform = t; } });
-    if (typeof PICK !== 'undefined' && PICK === 'lp'){ clearTimeout(applyVZ.t); applyVZ.t = setTimeout(function(){ drawGuide(); }, 60); }
+    var lpOn = typeof PICK !== 'undefined' && PICK === 'lp';
+    ['view', 'ovl', 'gde'].forEach(function(id){ var e = $(id); if (e){ e.style.transformOrigin = '50% 50%'; e.style.transform = (id === 'gde' && lpOn) ? '' : t; } });
+    if (lpOn && !applyVZ.raf){ applyVZ.raf = requestAnimationFrame(function(){ applyVZ.raf = 0; drawGuide(); }); }   // 光源の印は拡大せずに描き直す＝丸の大きさ・線がいつも同じでくっきり
   }
   function clampVZ(){
     var r = view.getBoundingClientRect(), w = r.width / VZ.s, h = r.height / VZ.s;
@@ -6274,7 +6275,7 @@ function tkLook2(img, n, P, w, h){
     if (kind === 'lp'){
       var same = PICK === 'lp' && LP.fx === fx; PICK = same ? null : 'lp'; LP.fx = same ? null : fx;
       if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。なぞると まとめて外せます。重なった所は2本指で拡大' : '光源が見つかりませんでした（光の範囲を右へ）'); }
-      document.body.classList.toggle('picking', !!PICK); updateExtras(); drawGuide(); schedule(); return;
+      document.body.classList.toggle('picking', !!PICK); updateExtras(); applyVZ(); drawGuide(); schedule(); return;
     }
     PICK = PICK === kind ? null : kind;
     if (PICK === 'grad' && !P.on.grad){ P.on.grad = 1; syncGroup('grad'); }
@@ -6284,10 +6285,10 @@ function tkLook2(img, n, P, w, h){
     updateExtras(); drawGuide(); schedule();
   }
   function placeGuide(){
-    var dpr = Math.min(2, window.devicePixelRatio || 1);
-    gde.style.left = view.offsetLeft + 'px'; gde.style.top = view.offsetTop + 'px';
-    gde.style.width = view.offsetWidth + 'px'; gde.style.height = view.offsetHeight + 'px';
-    gde.width = Math.max(1, Math.round(view.offsetWidth * dpr)); gde.height = Math.max(1, Math.round(view.offsetHeight * dpr));
+    var dpr = Math.min(2, window.devicePixelRatio || 1), st = $('stage'), lp = PICK === 'lp';
+    var L0 = lp ? 0 : view.offsetLeft, T0 = lp ? 0 : view.offsetTop, W0 = lp ? st.clientWidth : view.offsetWidth, H0 = lp ? st.clientHeight : view.offsetHeight;
+    gde.style.left = L0 + 'px'; gde.style.top = T0 + 'px'; gde.style.width = W0 + 'px'; gde.style.height = H0 + 'px';
+    var cw = Math.max(1, Math.round(W0 * dpr)), ch = Math.max(1, Math.round(H0 * dpr)); if (gde.width !== cw) gde.width = cw; if (gde.height !== ch) gde.height = ch;
     return dpr;
   }
   function drawGuide(keep){
@@ -6305,17 +6306,19 @@ function tkLook2(img, n, P, w, h){
       [[x0, y0, '#E0A36B'], [x1, y1, '#8FB0C4']].forEach(function(p){ gctx.beginPath(); gctx.fillStyle = p[2]; gctx.arc(p[0], p[1], 7 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke(); });
     } else if (kind === 'lp'){
       // 画面の上で近い光（30px以内）は1つの丸にまとめる。拡大すると離れて別々の丸になる
-      var zs = (typeof VZ !== 'undefined' && VZ) ? VZ.s : 1, gap = 26 * dpr / zs, G = [];
-      LP.list.forEach(function(p){ var x = p.u * W, y = p.v * H, g = null;
+      var zs = (typeof VZ !== 'undefined' && VZ) ? VZ.s : 1, zx = (typeof VZ !== 'undefined' && VZ) ? VZ.x : 0, zy = (typeof VZ !== 'undefined' && VZ) ? VZ.y : 0, gap = 26 * dpr, G = [];
+      var vw = view.offsetWidth * dpr, vh = view.offsetHeight * dpr, ox = view.offsetLeft * dpr, oy = view.offsetTop * dpr;
+      var toX = function(u){ return ox + (u * vw - vw / 2) * zs + vw / 2 + zx * dpr; }, toY = function(v){ return oy + (v * vh - vh / 2) * zs + vh / 2 + zy * dpr; };
+      LP.list.forEach(function(p){ var x = toX(p.u), y = toY(p.v), g = null;
         for (var gi = 0; gi < G.length; gi++){ var q = G[gi]; if (Math.hypot(q.x - x, q.y - y) < gap){ g = q; break; } }
         if (g){ g.m.push(p); var nn = g.m.length; g.x += (x - g.x) / nn; g.y += (y - g.y) / nn; g.w = Math.max(g.w, p.w); } else G.push({ x: x, y: y, w: p.w, m: [p] }); });
-      LP.groups = G.map(function(g){ return { u: g.x / W, v: g.y / H, m: g.m }; });
-      G.forEach(function(g){ var n = g.m.length, on = g.m.filter(function(p){ return !p.off; }).length, rr = (6 + g.w * 5 + (n > 1 ? 4 : 0)) * dpr / zs, x = g.x, y = g.y;
-        gctx.beginPath(); gctx.lineWidth = 2 * dpr / Math.sqrt(zs); gctx.setLineDash(on && on < n ? [3 * dpr / zs, 3 * dpr / zs] : []); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = on ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)'; gctx.stroke(); gctx.setLineDash([]);
+      LP.groups = G.map(function(g){ return { u: ((g.x - ox - zx * dpr - vw / 2) / zs + vw / 2) / vw, v: ((g.y - oy - zy * dpr - vh / 2) / zs + vh / 2) / vh, m: g.m }; });
+      G.forEach(function(g){ var n = g.m.length, on = g.m.filter(function(p){ return !p.off; }).length, rr = (6 + g.w * 5 + (n > 1 ? 4 : 0)) * dpr, x = g.x, y = g.y;
+        gctx.beginPath(); gctx.lineWidth = 1.5 * dpr; gctx.setLineDash(on && on < n ? [3 * dpr, 3 * dpr] : []); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = on ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)'; gctx.stroke(); gctx.setLineDash([]);
         if (!on){ gctx.beginPath(); gctx.moveTo(x - rr * 0.6, y - rr * 0.6); gctx.lineTo(x + rr * 0.6, y + rr * 0.6); gctx.moveTo(x + rr * 0.6, y - rr * 0.6); gctx.lineTo(x - rr * 0.6, y + rr * 0.6); gctx.stroke(); }
-        if (n > 1){ gctx.save(); gctx.shadowBlur = 0; gctx.font = '600 ' + Math.round(11 * dpr / zs) + 'px -apple-system,sans-serif'; var t = String(n), tw = gctx.measureText(t).width, bx = x + rr * 0.75, by = y - rr * 0.75, br = Math.max(tw / 2 + 4 * dpr / zs, 8 * dpr / zs);
+        if (n > 1){ gctx.save(); gctx.shadowBlur = 0; gctx.font = '600 ' + Math.round(11 * dpr) + 'px -apple-system,sans-serif'; var t = String(n), tw = gctx.measureText(t).width, bx = x + rr * 0.75, by = y - rr * 0.75, br = Math.max(tw / 2 + 4 * dpr, 8 * dpr);
           gctx.beginPath(); gctx.arc(bx, by, br, 0, Math.PI * 2); gctx.fillStyle = on ? 'rgba(143,176,196,.95)' : 'rgba(90,96,102,.95)'; gctx.fill(); gctx.fillStyle = '#0E1418'; gctx.textAlign = 'center'; gctx.textBaseline = 'middle'; gctx.fillText(t, bx, by + 0.5); gctx.restore(); } });
-      if (LP.brushAt){ gctx.beginPath(); gctx.setLineDash([4 * dpr, 4 * dpr]); gctx.strokeStyle = (LP.brush || 'off') === 'off' ? 'rgba(240,140,120,.95)' : 'rgba(160,220,170,.95)'; gctx.arc(LP.brushAt.u * W, LP.brushAt.v * H, LP.brushAt.r * W, 0, Math.PI * 2); gctx.stroke(); gctx.setLineDash([]); }
+      if (LP.brushAt){ gctx.beginPath(); gctx.setLineDash([4 * dpr, 4 * dpr]); gctx.strokeStyle = (LP.brush || 'off') === 'off' ? 'rgba(240,140,120,.95)' : 'rgba(160,220,170,.95)'; gctx.arc(toX(LP.brushAt.u), toY(LP.brushAt.v), 30 * dpr, 0, Math.PI * 2); gctx.stroke(); gctx.setLineDash([]); }
       gctx.strokeStyle = 'rgba(255,255,255,.95)';
     } else if (kind === 'ray'){
       var sx = P.rx * W, sy = P.ry * H;
