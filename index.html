@@ -57,7 +57,7 @@
   #stage{touch-action:none}
   #view{will-change:transform}
   .stage{position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:#08090A}
-  .app:not(.immersive):not(.cropping) .stage{align-items:flex-start}   /* v148：写真は上に寄せ、明るさの表示を写真の上に重ねる（下のパネルに隠れる所を減らす）。写真だけの表示の時は中央 */
+  .app:not(.immersive):not(.cropping):not(.collapsed) .stage{align-items:flex-start}   /* v148：写真は上に寄せ、明るさの表示を写真の上に重ねる（下のパネルに隠れる所を減らす）。写真だけの表示・パネルを下げた時は中央（明るさの表示の下） */
   .stage canvas{display:block; max-width:100%; max-height:100%; width:auto; height:auto}
   /* 写真の選択：写真を置く場所のどこを押しても選択（透明な入力欄を全面に重ね、指で直接押す形。プログラムから押すと白いちらつきが出るため使わない）。
      iPhoneの選択メニューは押した指の位置に出る（iOSの仕様） */
@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v148</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v149</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
