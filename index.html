@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v151</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v152</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1905,12 +1905,34 @@ function tkRays(img, w, h, P){
     }
   }
 }
+// 光源（ラインフレア・クロス共通）：光の芯（まわり7×7でいちばん明るい点）を選ぶ。
+//   光の範囲 0〜0.5＝いちばん強い光から数えて1〜60個だけ（0でいちばん強い光1つ）、0.5〜1＝明るさのしきい値で弱い光まで
+function tkLightPeaks(Y, sw, sh, rng){
+  var sn = sw * sh, i, hist = new Float64Array(256), r2 = Math.max(0, (rng - 0.5) / 0.5), cnt = rng < 0.5 ? Math.round(1 + Math.pow(rng / 0.5, 2) * 59) : 0;
+  for (i = 0; i < sn; i++) hist[Math.min(255, (Y[i] * 255) | 0)]++;
+  var top = sn * (0.002 + 0.035 * r2 * r2), acc = 0, th = 1; for (var b2 = 255; b2 >= 0; b2--){ acc += hist[b2]; if (acc >= top){ th = b2 / 255; break; } }
+  th = Math.max(th, 0.55 - 0.25 * r2); var thHi = th; th = Math.min(th, 0.35);   // 強い順に数える時のために、まず低めのしきい値で光の芯を全部集める
+  var LM = tkBlur1(Y, sw, sh, Math.max(3, Math.max(sw, sh) * 0.02)), out = [];
+  for (i = 0; i < sn; i++){
+    if (Y[i] <= th) continue;
+    var wv = tkSS((Y[i] - th) / Math.max(0.04, (1 - th) * 0.6)) * (0.2 + 0.8 * tkSS((Y[i] - LM[i] - 0.04) / 0.2)); if (wv <= 0.002) continue;
+    var ix = i % sw, iy = (i / sw) | 0, pk = true;
+    for (var oy = -3; oy <= 3 && pk; oy++) for (var ox = -3; ox <= 3; ox++){ var xx = ix + ox, yy = iy + oy; if (xx < 0 || yy < 0 || xx >= sw || yy >= sh || (!ox && !oy)) continue; var yv = Y[yy * sw + xx]; if (yv > Y[i] || (yv === Y[i] && (oy < 0 || (oy === 0 && ox < 0)))){ pk = false; break; } }
+    if (pk) out.push({ i: i, w: wv, y: Y[i], s: Y[i] * (0.4 + 0.6 * tkSS((Y[i] - LM[i]) / 0.3)) });
+  }
+  out.sort(function(a, b){ return b.s - a.s; });
+  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return out; }   // 選んだ光ははっきり（強い光ほど強く）
+  // 0.3から右：強い順の25個（左側の続き）＋明るさのしきい値を超える光。しきい値より下の光は弱めに＝バーを右へ動かすほど必ず増える
+  var thw = function(y){ return tkSS((y - thHi) / Math.max(0.04, (1 - thHi) * 0.6)); };
+  var s1 = out.length ? out[0].s : 1; out = out.filter(function(p, k){ return k < 60 || p.y > thHi; }); out.forEach(function(p, k){ if (k < 60) p.w = Math.max(thw(p.y), 0.85 * Math.pow(p.s / s1, 1.5)); });
+  return out;
+}
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
 //   光源ごとに平行な線になり、強い光ほど長く明るい。芯は白寄り、外は色（フィルターの色と光源の色を混ぜる）
 var TK_ANA_COL = { orange: [1, 0.42, 0.12], blue: [0.22, 0.55, 1], yellow: [1, 0.8, 0.28], white: [1, 0.97, 0.94] };
 function tkAnamorph(img, w, h, P){
-  var amt = (P.anAmt == null ? 50 : P.anAmt) / 100, rng = (P.anRange == null ? 35 : P.anRange) / 100, len = (P.anLen == null ? 55 : P.anLen) / 100,
+  var amt = (P.anAmt == null ? 50 : P.anAmt) / 100, rng = (P.anRange == null ? 30 : P.anRange) / 100, len = (P.anLen == null ? 55 : P.anLen) / 100,
       soft = (P.anSoft == null ? 30 : P.anSoft) / 100, tint = (P.anTint == null ? 20 : P.anTint) / 100, fc = TK_ANA_COL[P.anColor] || TK_ANA_COL.orange;
   if (amt <= 0) return;
   var sc = Math.min(1, 720 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc)), sn = sw * sh, i, x, y;
@@ -1920,23 +1942,9 @@ function tkAnamorph(img, w, h, P){
     var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 3, k = y * sw + x;
     R[k] = img[q]; G[k] = img[q + 1]; B[k] = img[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
-  // 2) 光源：明るさの上位（範囲で 0.3%〜15%）かつ周りより明るい所。範囲を「全て」にするほど弱い光まで
-  var hist = new Float64Array(256); for (i = 0; i < sn; i++) hist[Math.min(255, (Y[i] * 255) | 0)]++;
-  var top = sn * (0.002 + 0.035 * rng * rng), acc = 0, th = 1; for (var b2 = 255; b2 >= 0; b2--){ acc += hist[b2]; if (acc >= top){ th = b2 / 255; break; } }
-  th = Math.max(th, 0.55 - 0.25 * rng);
-  var LM = tkBlur1(Y, sw, sh, Math.max(3, Math.max(sw, sh) * 0.02));
-  var S = new Float32Array(sn * 3), any = false;
-  for (i = 0; i < sn; i++){
-    var wv = tkSS((Y[i] - th) / Math.max(0.04, (1 - th) * 0.6)); if (wv <= 0) continue;
-    wv *= 0.2 + 0.8 * tkSS((Y[i] - LM[i] - 0.04) / 0.2);   // 広い明るい面（空・白い壁）からは出しにくく、点の光から
-    if (wv <= 0.002) continue;
-    // 光の芯（まわり7×7でいちばん明るい所）だけを光源に＝大きな看板でも線は数本。光の大きさではなく明るさで線の強さが決まる
-    var ix = i % sw, iy = (i / sw) | 0, pk = true;
-    for (var oy = -3; oy <= 3 && pk; oy++) for (var ox = -3; ox <= 3; ox++){ var xx = ix + ox, yy = iy + oy; if (xx < 0 || yy < 0 || xx >= sw || yy >= sh || (!ox && !oy)) continue; var yv = Y[yy * sw + xx]; if (yv > Y[i] || (yv === Y[i] && (oy < 0 || (oy === 0 && ox < 0)))){ pk = false; break; } }
-    if (!pk) continue; any = true;
-    var cm = Math.max(1e-4, Math.max(R[i], G[i], B[i]));
-    for (var c = 0; c < 3; c++){ var src = [R[i], G[i], B[i]][c] / cm; S[i * 3 + c] = wv * (fc[c] * (1 - tint) + src * tint); }
-  }
+  // 2) 光源（tkLightPeaks）
+  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng), any = PK.length > 0;
+  PK.forEach(function(p){ var i2 = p.i, cm = Math.max(1e-4, Math.max(R[i2], G[i2], B[i2])), s3 = [R[i2] / cm, G[i2] / cm, B[i2] / cm]; for (var c = 0; c < 3; c++) S[i2 * 3 + c] = p.w * (fc[c] * (1 - tint) + s3[c] * tint); });
   if (!any) return;
   // 3) 線の向きに回した画像へ
   var an = (P.anAng || 0) * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an), cx = sw / 2, cy = sh / 2;
@@ -1981,7 +1989,7 @@ function tkAnamorph(img, w, h, P){
 // ---------- クロスフィルター：強い光の芯から、4・6・8本の光の筋（光芒）。ラインフレアと同じ光源の選び方 ----------
 //   筋の向きごとに「回した小さな画像の上で両側へ指数で減るぼかし」をかけて足す。虹色＝色ごとに筋の長さと太さを少し変える（先ほど色が分かれる）
 function tkCross(img, w, h, P){
-  var amt = (P.crAmt == null ? 50 : P.crAmt) / 100, rng = (P.crRange == null ? 35 : P.crRange) / 100, len = (P.crLen == null ? 40 : P.crLen) / 100,
+  var amt = (P.crAmt == null ? 50 : P.crAmt) / 100, rng = (P.crRange == null ? 30 : P.crRange) / 100, len = (P.crLen == null ? 40 : P.crLen) / 100,
       soft = (P.crSoft == null ? 20 : P.crSoft) / 100, rain = (P.crRain == null ? 40 : P.crRain) / 100, tint = (P.crTint == null ? 50 : P.crTint) / 100, pts = P.crPts === 6 || P.crPts === 8 ? P.crPts : 4;
   if (amt <= 0) return;
   var sc = Math.min(1, 640 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc)), sn = sw * sh, i, x, y;
@@ -1990,19 +1998,8 @@ function tkCross(img, w, h, P){
     var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 3, k = y * sw + x;
     R[k] = img[q]; G[k] = img[q + 1]; B[k] = img[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
-  var hist = new Float64Array(256); for (i = 0; i < sn; i++) hist[Math.min(255, (Y[i] * 255) | 0)]++;
-  var top = sn * (0.002 + 0.035 * rng * rng), acc = 0, th = 1; for (var b2 = 255; b2 >= 0; b2--){ acc += hist[b2]; if (acc >= top){ th = b2 / 255; break; } }
-  th = Math.max(th, 0.55 - 0.25 * rng);
-  var LM = tkBlur1(Y, sw, sh, Math.max(3, Math.max(sw, sh) * 0.02)), S = new Float32Array(sn * 3), any = false;
-  for (i = 0; i < sn; i++){
-    var wv = tkSS((Y[i] - th) / Math.max(0.04, (1 - th) * 0.6)); if (wv <= 0) continue;
-    wv *= 0.2 + 0.8 * tkSS((Y[i] - LM[i] - 0.04) / 0.2); if (wv <= 0.002) continue;
-    var ix = i % sw, iy = (i / sw) | 0, pk = true;
-    for (var oy = -3; oy <= 3 && pk; oy++) for (var ox = -3; ox <= 3; ox++){ var xx = ix + ox, yy = iy + oy; if (xx < 0 || yy < 0 || xx >= sw || yy >= sh || (!ox && !oy)) continue; var yv = Y[yy * sw + xx]; if (yv > Y[i] || (yv === Y[i] && (oy < 0 || (oy === 0 && ox < 0)))){ pk = false; break; } }
-    if (!pk) continue; any = true;
-    var cm = Math.max(1e-4, Math.max(R[i], G[i], B[i])), sc3 = [R[i] / cm, G[i] / cm, B[i] / cm];
-    for (var c = 0; c < 3; c++) S[i * 3 + c] = wv * (1 - tint + sc3[c] * tint);
-  }
+  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng), any = PK.length > 0;
+  PK.forEach(function(p){ var i2 = p.i, cm = Math.max(1e-4, Math.max(R[i2], G[i2], B[i2])), s3 = [R[i2] / cm, G[i2] / cm, B[i2] / cm]; for (var c = 0; c < 3; c++) S[i2 * 3 + c] = p.w * (1 - tint + s3[c] * tint); });
   if (!any) return;
   var diag = Math.sqrt(sw * sw + sh * sh), L1 = (0.015 + 0.25 * len * len) * diag, sg1 = 0.5 + soft * 1.8, sg2 = 2 + soft * 8;
   var CL = [1 + 0.25 * rain, 1, 1 - 0.3 * rain], CW = [1 + 0.5 * rain, 1, 1 - 0.2 * rain];   // 虹色：赤は長く太く、青は短く細く＝先ほど暖かく、縁に色
@@ -3794,11 +3791,11 @@ function tkLook2(img, n, P, w, h){
       sliders: [['hal','強さ',0,100,10]],
       hint: '芯は白のまま、外へ広がった光だけに色が付きます。映画っぽさの決め手。' },
     { key: 'ana', title: 'ラインフレア', sub: 'アナモルフィック風：強い光から長い光の線', custom: buildAnaExtra,
-      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,35],['anLen','長さ',0,100,55],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20]],
-      hint: '光の範囲を右へ動かすほど、弱い光からも線が出ます。角度0で水平、90で垂直。' },
+      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,30],['anLen','長さ',0,100,55],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20]],
+      hint: '光の範囲を左端にすると、いちばん強い光1つだけ。右へ動かすほど、弱い光からも線が出ます。角度0で水平、90で垂直。' },
     { key: 'cross', title: 'クロスフィルター', sub: '強い光から4・6・8本の光の筋', custom: buildCrossExtra,
-      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,35],['crLen','長さ',0,100,40],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
-      hint: '光の範囲を右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
+      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
+      hint: '光の範囲を左端にすると、いちばん強い光1つだけがクロスします。右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
     { key: 'comp', title: 'ハイライト余白', sub: '白を少し沈めて、光を足しても飛ばさない',
       sliders: [['comp','量',0,100,30]],
       hint: '明るい写真ほど上げると安全。左上に「白飛」が出たら上げてください。' },
@@ -3901,7 +3898,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['強い光だけ', '全ての光'], crRange: ['強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
