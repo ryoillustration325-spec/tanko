@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v153</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v154</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1907,7 +1907,7 @@ function tkRays(img, w, h, P){
 }
 // 光源（ラインフレア・クロス共通）：光の芯（まわり7×7でいちばん明るい点）を選ぶ。
 //   光の範囲 0〜0.5＝いちばん強い光から数えて1〜60個だけ（0でいちばん強い光1つ）、0.5〜1＝明るさのしきい値で弱い光まで
-function tkLightPeaks(Y, sw, sh, rng, MX){
+function tkLightPeaks(Y, sw, sh, rng, MX, EX){
   var sn = sw * sh, i, hist = new Float64Array(256), r2 = Math.max(0, (rng - 0.5) / 0.5), cnt = rng < 0.5 ? Math.round(1 + Math.pow(rng / 0.5, 2) * 59) : 0;
   for (i = 0; i < sn; i++) hist[Math.min(255, (Y[i] * 255) | 0)]++;
   var top = sn * (0.002 + 0.035 * r2 * r2), acc = 0, th = 1; for (var b2 = 255; b2 >= 0; b2--){ acc += hist[b2]; if (acc >= top){ th = b2 / 255; break; } }
@@ -1925,11 +1925,18 @@ function tkLightPeaks(Y, sw, sh, rng, MX){
     if (pk && li >= 0.32 * (1 - r2)) out.push({ i: i, w: wv, y: Y[i], s: Y[i] * (0.4 + 0.6 * tkSS((Y[i] - LM[i]) / 0.3)) * li });   // 光らしさが低い点（白い物）は数に入れない。右端ほどゆるく
   }
   out.sort(function(a, b){ return b.s - a.s; });
-  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return out; }   // 選んだ光ははっきり（強い光ほど強く）
+  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return tkPeakEx(out, sw, sh, EX); }   // 選んだ光ははっきり（強い光ほど強く）
   // 0.3から右：強い順の25個（左側の続き）＋明るさのしきい値を超える光。しきい値より下の光は弱めに＝バーを右へ動かすほど必ず増える
   var thw = function(y){ return tkSS((y - thHi) / Math.max(0.04, (1 - thHi) * 0.6)); };
   var s1 = out.length ? out[0].s : 1; out = out.filter(function(p, k){ return k < 60 || (p.y > thHi && p.s > s1 * 0.08); }); out.forEach(function(p, k){ if (k < 60) p.w = Math.max(thw(p.y), 0.85 * Math.pow(p.s / s1, 1.5)); });
+  out = tkPeakEx(out, sw, sh, EX);
   return out;
+}
+// 手で外した光源（写真の上の位置 0〜1）の近くの光は使わない。外しても次の光が繰り上がらない（数を減らすための操作）
+function tkPeakEx(out, sw, sh, EX){
+  if (!EX || !EX.length) return out;
+  var rr = 0.022 * Math.max(sw, sh);
+  return out.filter(function(p){ var x = (p.i % sw) + 0.5, y = ((p.i / sw) | 0) + 0.5; for (var k = 0; k < EX.length; k++){ var dx = x - EX[k][0] * sw, dy = y - EX[k][1] * sh; if (dx * dx + dy * dy < rr * rr) return false; } return true; });
 }
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
@@ -1948,7 +1955,7 @@ function tkAnamorph(img, w, h, P){
   }
   // 2) 光源（tkLightPeaks）
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
-  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX), any = PK.length > 0;
+  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX, P.anEx), any = PK.length > 0;
   PK.forEach(function(p){ var i2 = p.i, cm = Math.max(1e-4, Math.max(R[i2], G[i2], B[i2])), s3 = [R[i2] / cm, G[i2] / cm, B[i2] / cm]; for (var c = 0; c < 3; c++) S[i2 * 3 + c] = p.w * (fc[c] * (1 - tint) + s3[c] * tint); });
   if (!any) return;
   // 3) 線の向きに回した画像へ
@@ -2004,7 +2011,7 @@ function tkCross(img, w, h, P){
     R[k] = img[q]; G[k] = img[q + 1]; B[k] = img[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
-  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX), any = PK.length > 0;
+  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx), any = PK.length > 0;
   PK.forEach(function(p){ var i2 = p.i, cm = Math.max(1e-4, Math.max(R[i2], G[i2], B[i2])), s3 = [R[i2] / cm, G[i2] / cm, B[i2] / cm]; for (var c = 0; c < 3; c++) S[i2 * 3 + c] = p.w * (1 - tint + s3[c] * tint); });
   if (!any) return;
   var diag = Math.sqrt(sw * sw + sh * sh), L1 = (0.015 + 0.25 * len * len) * diag, sg1 = 0.5 + soft * 1.8, sg2 = 2 + soft * 8;
@@ -4386,7 +4393,7 @@ function tkLook2(img, n, P, w, h){
   // すべて初期値へ（調整・仕上げ・強さ・部分調整・トリミング・マスク）
   function fullReset(){
     try{ AUTO_APPLYING = false; autoOff(); }catch(e){}
-    P.on.look2 = 0; P.on.look3 = 0; P.l6 = 0; P.l6Custom = null; P.mixOn = 0; LAST_FULL = false;
+    P.on.look2 = 0; P.on.look3 = 0; P.l6 = 0; P.l6Custom = null; P.mixOn = 0; P.crEx = []; P.anEx = []; LAST_FULL = false;
     Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); });
     P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw();
     ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); });
@@ -5071,6 +5078,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    XE.crPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'cross'); }); body.appendChild(XE.crPick);
   }
   function buildAnaExtra(body){
     var seg = xel('div', 'seg'); XE.anaSeg = seg;
@@ -5080,6 +5088,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    XE.anPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'ana'); }); body.appendChild(XE.anPick);
   }
   function buildRayExtra(body){
     var seg = xel('div', 'seg'); XE.raySeg = seg;
@@ -6233,8 +6242,26 @@ function tkLook2(img, n, P, w, h){
   }
   // ---- 写真の上での位置指定（グラデーションの線・光の位置） ----
   var gde = $('gde'), gctx = gde.getContext('2d', { colorSpace: CS }), pickStart = null, guideTimer = null;
-  function startPick(kind){
+  // 光源の印（ラインフレア・クロス）：エフェクトをかける直前の写真から、いま選ばれている光源を求めて印を出す。印をタップで外す／戻す
+  var LP = { fx: null, list: [] };
+  function lpCompute(){
+    if (!hi || !LP.fx) { LP.list = []; return; }
+    var Q = JSON.parse(JSON.stringify(P)); ['ana', 'cross', 'ray', 'lens', 'grain'].forEach(function(k){ Q.on[k] = 0; });
+    var out = tkProcess(hi.src, hi.w, hi.h, Q), w = hi.w, h = hi.h, sc = Math.min(1, 640 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc));
+    var Y = new Float32Array(sw * sh), MX = new Float32Array(sw * sh);
+    for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++){ var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 4, r0 = out[q] / 255, g0 = out[q + 1] / 255, b0 = out[q + 2] / 255, k = y * sw + x; Y[k] = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0; MX[k] = Math.max(r0, g0, b0); }
+    var cr = LP.fx === 'cross', rng = ((cr ? P.crRange : P.anRange) == null ? 30 : (cr ? P.crRange : P.anRange)) / 100, ex = (cr ? P.crEx : P.anEx) || [];
+    var all = tkLightPeaks(Y, sw, sh, rng, MX, null), rr = 0.022;
+    LP.list = all.map(function(p){ var u = ((p.i % sw) + 0.5) / sw, v = (((p.i / sw) | 0) + 0.5) / sh, off = ex.some(function(e){ var dx = (u - e[0]) * sw, dy = (v - e[1]) * sh; return dx * dx + dy * dy < Math.pow(rr * Math.max(sw, sh), 2); }); return { u: u, v: v, w: p.w, off: off }; });
+    ex.forEach(function(e){ if (!LP.list.some(function(p){ return Math.abs(p.u - e[0]) < 0.003 && Math.abs(p.v - e[1]) < 0.003; })) LP.list.push({ u: e[0], v: e[1], w: 0.5, off: true }); });
+  }
+  function startPick(kind, fx){
     if (!img){ toast('先に写真を選んでください'); return; }
+    if (kind === 'lp'){
+      var same = PICK === 'lp' && LP.fx === fx; PICK = same ? null : 'lp'; LP.fx = same ? null : fx;
+      if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。タップで外す／もう一度タップで戻す' : '光源が見つかりませんでした（光の範囲を右へ）'); }
+      document.body.classList.toggle('picking', !!PICK); updateExtras(); drawGuide(); schedule(); return;
+    }
     PICK = PICK === kind ? null : kind;
     if (PICK === 'grad' && !P.on.grad){ P.on.grad = 1; syncGroup('grad'); }
     if (PICK === 'ray' && !P.on.ray){ P.on.ray = 1; syncGroup('ray'); }
@@ -6262,6 +6289,11 @@ function tkLook2(img, n, P, w, h){
       });
       gctx.setLineDash([]);
       [[x0, y0, '#E0A36B'], [x1, y1, '#8FB0C4']].forEach(function(p){ gctx.beginPath(); gctx.fillStyle = p[2]; gctx.arc(p[0], p[1], 7 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke(); });
+    } else if (kind === 'lp'){
+      LP.list.forEach(function(p){ var x = p.u * W, y = p.v * H, rr = (7 + p.w * 7) * dpr;
+        gctx.beginPath(); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = p.off ? 'rgba(255,255,255,.45)' : 'rgba(255,255,255,.95)'; gctx.stroke();
+        if (p.off){ gctx.beginPath(); gctx.moveTo(x - rr * 0.6, y - rr * 0.6); gctx.lineTo(x + rr * 0.6, y + rr * 0.6); gctx.moveTo(x + rr * 0.6, y - rr * 0.6); gctx.lineTo(x - rr * 0.6, y + rr * 0.6); gctx.stroke(); } });
+      gctx.strokeStyle = 'rgba(255,255,255,.95)';
     } else if (kind === 'ray'){
       var sx = P.rx * W, sy = P.ry * H;
       gctx.beginPath(); gctx.fillStyle = '#E0A36B'; gctx.arc(sx, sy, 8 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke();
@@ -6288,18 +6320,31 @@ function tkLook2(img, n, P, w, h){
     }
     drawGuide(); schedule();
   }
+  function lpTap(e){
+    var pt = pickPt(e), best = null, bd = 1e9;
+    LP.list.forEach(function(p){ var dx = (p.u - pt.u) * pt.rc.width, dy = (p.v - pt.v) * pt.rc.height, d = dx * dx + dy * dy; if (d < bd){ bd = d; best = p; } });
+    if (!best || bd > 26 * 26) return;
+    var key = LP.fx === 'cross' ? 'crEx' : 'anEx', ex = (P[key] || []).slice();
+    if (best.off){ ex = ex.filter(function(q){ var dx = (q[0] - best.u) * pt.rc.width, dy = (q[1] - best.v) * pt.rc.height; return dx * dx + dy * dy > 26 * 26; }); best.off = false; }
+    else { ex.push([Math.round(best.u * 10000) / 10000, Math.round(best.v * 10000) / 10000]); best.off = true; }
+    P[key] = ex; drawGuide(); clearPresetMark(); schedule();
+  }
   view.addEventListener('pointerdown', function(e){
     if (!PICK) return;
+    if (PICK === 'lp'){ e.preventDefault(); e.stopImmediatePropagation(); lpTap(e); return; }
     e.preventDefault(); e.stopImmediatePropagation();
     try{ view.setPointerCapture(e.pointerId); }catch(x){}
     pickStart = pickPt(e); document.getElementById('app').classList.add('raydrag'); pickApply(pickStart, null, false);
   }, true);
   view.addEventListener('pointermove', function(e){ if (!PICK || !pickStart) return; e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), false); }, true);
   function pickEnd(e){
+    if (PICK === 'lp'){ e.stopImmediatePropagation(); return; }
     if (!PICK || !pickStart) return;
     e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), true);
     var kind = PICK; pickStart = null; PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); flashGuide(kind); clearPresetMark();
   }
+  view.addEventListener('click', function(e){ if (PICK === 'lp'){ e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  var lpTimer = null; ['crRange', 'anRange'].forEach(function(k){ var el = $('s-' + k); if (el) el.addEventListener('input', function(){ if (PICK !== 'lp') return; clearTimeout(lpTimer); lpTimer = setTimeout(function(){ try{ lpCompute(); }catch(e){} drawGuide(); }, 250); }); });
   view.addEventListener('pointerup', pickEnd, true); view.addEventListener('pointercancel', pickEnd, true);
   window.addEventListener('resize', function(){ if (PICK) setTimeout(drawGuide, 350); });
   // スライダーで向きを変えた時もガイドを一瞬表示
@@ -6310,6 +6355,8 @@ function tkLook2(img, n, P, w, h){
     try{ syncGrade(); }catch(e){}
     try{ syncGeo(); present(); }catch(e){}
     try{ lmSync(); }catch(e){}
+    if (XE.crPick){ XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
+    if (XE.anPick){ XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
     if (XE.anaSeg) Array.prototype.forEach.call(XE.anaSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.anColor || 'orange')); });
     if (XE.raySeg){
