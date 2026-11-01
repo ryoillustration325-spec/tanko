@@ -504,7 +504,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v155</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v156</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5318,6 +5318,7 @@ function tkLook2(img, n, P, w, h){
   function applyVZ(){
     var t = VZ.s === 1 && !VZ.x && !VZ.y ? '' : 'translate(' + VZ.x + 'px,' + VZ.y + 'px) scale(' + VZ.s + ')';
     ['view', 'ovl', 'gde'].forEach(function(id){ var e = $(id); if (e){ e.style.transformOrigin = '50% 50%'; e.style.transform = t; } });
+    if (typeof PICK !== 'undefined' && PICK === 'lp'){ clearTimeout(applyVZ.t); applyVZ.t = setTimeout(function(){ drawGuide(); }, 60); }
   }
   function clampVZ(){
     var r = view.getBoundingClientRect(), w = r.width / VZ.s, h = r.height / VZ.s;
@@ -5325,7 +5326,7 @@ function tkLook2(img, n, P, w, h){
     VZ.x = Math.max(-mx, Math.min(mx, VZ.x)); VZ.y = Math.max(-my, Math.min(my, VZ.y));
   }
   function resetVZ(){ if (VZ.s === 1 && !VZ.x && !VZ.y) return; VZ.s = 1; VZ.x = 0; VZ.y = 0; applyVZ(); clearTimeout(vzIdleT); if (VZHI){ VZHI = false; vzInRef = true; refreshHiRes(); vzInRef = false; } }
-  function vzBlocked(){ return CROPMODE || document.body.classList.contains('brushing') || document.body.classList.contains('picking') || SPLIT; }
+  function vzBlocked(){ return CROPMODE || document.body.classList.contains('brushing') || (document.body.classList.contains('picking') && PICK !== 'lp') || SPLIT; }   // 光源の表示中は2本指で拡大できる（重なった光を選びやすく）
   (function(){
     var st = $('stage'), pts = {}, g0 = null, lastTap = 0, lastXY = { x: 0, y: 0 }, hrT = null;
     function k(){ return Object.keys(pts); }
@@ -5337,7 +5338,7 @@ function tkLook2(img, n, P, w, h){
       if (e.isPrimary) pts = {};
       try{ st.setPointerCapture(e.pointerId); }catch(er){}
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (k().length === 1){ var now = Date.now(); if (now - lastTap < 300 && Math.hypot(e.clientX - lastXY.x, e.clientY - lastXY.y) < 40){ resetVZ(); lastTap = 0; } else lastTap = now; lastXY = { x: e.clientX, y: e.clientY }; }
+      if (k().length === 1 && PICK !== 'lp'){ var now = Date.now(); if (now - lastTap < 300 && Math.hypot(e.clientX - lastXY.x, e.clientY - lastXY.y) < 40){ resetVZ(); lastTap = 0; } else lastTap = now; lastXY = { x: e.clientX, y: e.clientY }; }
       start();
     });
     st.addEventListener('pointermove', function(e){
@@ -5350,7 +5351,7 @@ function tkLook2(img, n, P, w, h){
         // 指の間の点がついてくるように
         var px = (g0.mx - g0.cx - g0.x) / g0.s, py = (g0.my - g0.cy - g0.y) / g0.s;
         VZ.s = s; VZ.x = t.x - g0.cx - px * s; VZ.y = t.y - g0.cy - py * s;
-      } else if (VZ.s > 1){
+      } else if (VZ.s > 1 && PICK !== 'lp'){
         var p = pts[e.pointerId]; VZ.x = g0.x + (p.x - g0.mx); VZ.y = g0.y + (p.y - g0.my);
       } else return;
       clampVZ(); applyVZ();
@@ -6272,7 +6273,7 @@ function tkLook2(img, n, P, w, h){
     if (!img){ toast('先に写真を選んでください'); return; }
     if (kind === 'lp'){
       var same = PICK === 'lp' && LP.fx === fx; PICK = same ? null : 'lp'; LP.fx = same ? null : fx;
-      if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。なぞると まとめて外せます（タップで1つずつ）' : '光源が見つかりませんでした（光の範囲を右へ）'); }
+      if (PICK){ var key = fx === 'cross' ? 'cross' : 'ana'; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } try{ lpCompute(); }catch(e){ LP.list = []; } toast(LP.list.length ? '白い丸＝線・筋が出る光。なぞると まとめて外せます。重なった所は2本指で拡大' : '光源が見つかりませんでした（光の範囲を右へ）'); }
       document.body.classList.toggle('picking', !!PICK); updateExtras(); drawGuide(); schedule(); return;
     }
     PICK = PICK === kind ? null : kind;
@@ -6303,9 +6304,17 @@ function tkLook2(img, n, P, w, h){
       gctx.setLineDash([]);
       [[x0, y0, '#E0A36B'], [x1, y1, '#8FB0C4']].forEach(function(p){ gctx.beginPath(); gctx.fillStyle = p[2]; gctx.arc(p[0], p[1], 7 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke(); });
     } else if (kind === 'lp'){
-      LP.list.forEach(function(p){ var x = p.u * W, y = p.v * H, rr = (7 + p.w * 7) * dpr;
-        gctx.beginPath(); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = p.off ? 'rgba(255,255,255,.45)' : 'rgba(255,255,255,.95)'; gctx.stroke();
-        if (p.off){ gctx.beginPath(); gctx.moveTo(x - rr * 0.6, y - rr * 0.6); gctx.lineTo(x + rr * 0.6, y + rr * 0.6); gctx.moveTo(x + rr * 0.6, y - rr * 0.6); gctx.lineTo(x - rr * 0.6, y + rr * 0.6); gctx.stroke(); } });
+      // 画面の上で近い光（30px以内）は1つの丸にまとめる。拡大すると離れて別々の丸になる
+      var zs = (typeof VZ !== 'undefined' && VZ) ? VZ.s : 1, gap = 26 * dpr / zs, G = [];
+      LP.list.forEach(function(p){ var x = p.u * W, y = p.v * H, g = null;
+        for (var gi = 0; gi < G.length; gi++){ var q = G[gi]; if (Math.hypot(q.x - x, q.y - y) < gap){ g = q; break; } }
+        if (g){ g.m.push(p); var nn = g.m.length; g.x += (x - g.x) / nn; g.y += (y - g.y) / nn; g.w = Math.max(g.w, p.w); } else G.push({ x: x, y: y, w: p.w, m: [p] }); });
+      LP.groups = G.map(function(g){ return { u: g.x / W, v: g.y / H, m: g.m }; });
+      G.forEach(function(g){ var n = g.m.length, on = g.m.filter(function(p){ return !p.off; }).length, rr = (6 + g.w * 5 + (n > 1 ? 4 : 0)) * dpr / zs, x = g.x, y = g.y;
+        gctx.beginPath(); gctx.lineWidth = 2 * dpr / Math.sqrt(zs); gctx.setLineDash(on && on < n ? [3 * dpr / zs, 3 * dpr / zs] : []); gctx.arc(x, y, rr, 0, Math.PI * 2); gctx.strokeStyle = on ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)'; gctx.stroke(); gctx.setLineDash([]);
+        if (!on){ gctx.beginPath(); gctx.moveTo(x - rr * 0.6, y - rr * 0.6); gctx.lineTo(x + rr * 0.6, y + rr * 0.6); gctx.moveTo(x + rr * 0.6, y - rr * 0.6); gctx.lineTo(x - rr * 0.6, y + rr * 0.6); gctx.stroke(); }
+        if (n > 1){ gctx.save(); gctx.shadowBlur = 0; gctx.font = '600 ' + Math.round(11 * dpr / zs) + 'px -apple-system,sans-serif'; var t = String(n), tw = gctx.measureText(t).width, bx = x + rr * 0.75, by = y - rr * 0.75, br = Math.max(tw / 2 + 4 * dpr / zs, 8 * dpr / zs);
+          gctx.beginPath(); gctx.arc(bx, by, br, 0, Math.PI * 2); gctx.fillStyle = on ? 'rgba(143,176,196,.95)' : 'rgba(90,96,102,.95)'; gctx.fill(); gctx.fillStyle = '#0E1418'; gctx.textAlign = 'center'; gctx.textBaseline = 'middle'; gctx.fillText(t, bx, by + 0.5); gctx.restore(); } });
       if (LP.brushAt){ gctx.beginPath(); gctx.setLineDash([4 * dpr, 4 * dpr]); gctx.strokeStyle = (LP.brush || 'off') === 'off' ? 'rgba(240,140,120,.95)' : 'rgba(160,220,170,.95)'; gctx.arc(LP.brushAt.u * W, LP.brushAt.v * H, LP.brushAt.r * W, 0, Math.PI * 2); gctx.stroke(); gctx.setLineDash([]); }
       gctx.strokeStyle = 'rgba(255,255,255,.95)';
     } else if (kind === 'ray'){
@@ -6335,7 +6344,10 @@ function tkLook2(img, n, P, w, h){
     drawGuide(); schedule();
   }
   function lpTap(e){
-    var pt = pickPt(e), best = null, bd = 1e9;
+    var pt = pickPt(e), bg = null, gd = 1e9;
+    (LP.groups || []).forEach(function(g){ var dx = (g.u - pt.u) * pt.rc.width, dy = (g.v - pt.v) * pt.rc.height, d = dx * dx + dy * dy; if (d < gd){ gd = d; bg = g; } });
+    if (bg && gd <= 28 * 28 && bg.m.length > 1){ var anyOn = bg.m.some(function(p){ return !p.off; }); bg.m.forEach(function(p){ p.off = anyOn; }); lpSave(); drawGuide(); if (!LP.toldZ){ LP.toldZ = true; toast('重なった光をまとめて切り替えました。1つずつ選ぶ時は2本指で拡大'); } return; }
+    var best = null, bd = 1e9;
     LP.list.forEach(function(p){ var dx = (p.u - pt.u) * pt.rc.width, dy = (p.v - pt.v) * pt.rc.height, d = dx * dx + dy * dy; if (d < bd){ bd = d; best = p; } });
     if (!best || bd > 26 * 26) return;
     var key = LP.fx === 'cross' ? 'crEx' : 'anEx', ex = (P[key] || []).slice();
@@ -6345,7 +6357,7 @@ function tkLook2(img, n, P, w, h){
   }
   view.addEventListener('pointerdown', function(e){
     if (!PICK) return;
-    if (PICK === 'lp'){ e.preventDefault(); e.stopImmediatePropagation(); try{ view.setPointerCapture(e.pointerId); }catch(x){} LP.drag = { x: e.clientX, y: e.clientY, moved: false, e0: e }; return; }
+    if (PICK === 'lp'){ e.preventDefault(); LP.ptrs = (LP.ptrs || 0) + 1; if (LP.ptrs >= 2){ LP.drag = null; LP.pinch = true; LP.brushAt = null; document.getElementById('app').classList.remove('raydrag'); drawGuide(); return; } LP.pinch = false; LP.drag = { x: e.clientX, y: e.clientY, moved: false, e0: e }; return; }
     e.preventDefault(); e.stopImmediatePropagation();
     try{ view.setPointerCapture(e.pointerId); }catch(x){}
     pickStart = pickPt(e); document.getElementById('app').classList.add('raydrag'); pickApply(pickStart, null, false);
@@ -6356,18 +6368,30 @@ function tkLook2(img, n, P, w, h){
     LP.brushAt = { u: pt.u, v: pt.v, r: R / pt.rc.width }; drawGuide(); return hit;
   }
   view.addEventListener('pointermove', function(e){
-    if (PICK === 'lp' && LP.drag){ e.stopImmediatePropagation();
-      if (!LP.drag.moved && Math.hypot(e.clientX - LP.drag.x, e.clientY - LP.drag.y) > 8){ LP.drag.moved = true; document.getElementById('app').classList.add('raydrag'); lpBrush(LP.drag.e0); }
-      if (LP.drag.moved) lpBrush(e); return; }
+    if (PICK === 'lp') return;
     if (!PICK || !pickStart) return; e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), false); }, true);
   function pickEnd(e){
-    if (PICK === 'lp'){ e.stopImmediatePropagation(); var dg = LP.drag; LP.drag = null; LP.brushAt = null; document.getElementById('app').classList.remove('raydrag'); if (dg){ if (dg.moved){ lpSave(); drawGuide(); } else lpTap(e); } return; }
+    if (PICK === 'lp') return;
     if (!PICK || !pickStart) return;
     e.stopImmediatePropagation(); pickApply(pickStart, pickPt(e), true);
     var kind = PICK; pickStart = null; PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); flashGuide(kind); clearPresetMark();
   }
   view.addEventListener('click', function(e){ if (PICK === 'lp'){ e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   var lpTimer = null; ['crRange', 'anRange'].forEach(function(k){ var el = $('s-' + k); if (el) el.addEventListener('input', function(){ if (PICK !== 'lp') return; clearTimeout(lpTimer); lpTimer = setTimeout(function(){ try{ lpCompute(); }catch(e){} drawGuide(); }, 250); }); });
+  // 光源の表示中の指の動き：拡大（2本指）は写真の拡大の仕組みが指を受け持つので、ここでは画面全体で見張る
+  document.addEventListener('pointermove', function(e){
+    if (PICK !== 'lp' || !LP.drag || LP.pinch) return;
+    if (!LP.drag.moved && Math.hypot(e.clientX - LP.drag.x, e.clientY - LP.drag.y) > 8){ LP.drag.moved = true; document.getElementById('app').classList.add('raydrag'); lpBrush(LP.drag.e0); }
+    if (LP.drag.moved) lpBrush(e);
+  }, true);
+  function lpUp(e){
+    if (PICK !== 'lp' || !LP.ptrs) return;
+    LP.ptrs = Math.max(0, LP.ptrs - 1);
+    if (LP.pinch){ if (!LP.ptrs){ LP.pinch = false; drawGuide(); } LP.drag = null; return; }
+    var dg = LP.drag; LP.drag = null; LP.brushAt = null; document.getElementById('app').classList.remove('raydrag');
+    if (dg){ if (dg.moved){ lpSave(); drawGuide(); } else lpTap(e); }
+  }
+  document.addEventListener('pointerup', lpUp, true); document.addEventListener('pointercancel', lpUp, true);
   view.addEventListener('pointerup', pickEnd, true); view.addEventListener('pointercancel', pickEnd, true);
   window.addEventListener('resize', function(){ if (PICK) setTimeout(drawGuide, 350); });
   // スライダーで向きを変えた時もガイドを一瞬表示
