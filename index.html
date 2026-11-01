@@ -500,7 +500,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v145</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v146</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3725,7 +3725,7 @@ function tkLook2(img, n, P, w, h){
   // Lightroomでもできる処理は既定でOFF（プリセットでもONにしない。値だけ入れておく）
   var LR_KEYS = { bright: 1, tone: 1, split: 1, grain: 1 };
   // 既定でOFFにする項目（Lightroomでもできる処理＋濃さ）
-  var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1, glow: 1, hal: 1, diff: 1, mist: 1 };
+  var OFF_KEYS = { bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1, glow: 1, hal: 1, diff: 1, mist: 1, look2: 1, look3: 1 };   // v146：自動の仕上げ（look2・look3）は、選んだ時だけ。リセットや「なし（手動）」で勝手に戻らない
   // グロー・粒子などの光と質感は自分で入れる時だけ（仕上げ・おまかせでは入れない／今の設定にも触らない）
   var MANUAL_FX = { glow: 1, hal: 1, diff: 1, mist: 1, grain: 1, ray: 1, lens: 1 }, MANUAL_FX_KEYS = {};
   function crvBlank(){ return { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] }; }
@@ -4228,7 +4228,7 @@ function tkLook2(img, n, P, w, h){
   // すべて初期値へ（調整・仕上げ・強さ・部分調整・トリミング・マスク）
   function fullReset(){
     try{ AUTO_APPLYING = false; autoOff(); }catch(e){}
-    P.on.look2 = 0; P.on.look3 = 0; LAST_FULL = false;
+    P.on.look2 = 0; P.on.look3 = 0; P.l6 = 0; P.l6Custom = null; LAST_FULL = false;
     Object.keys(DEFAULTS).forEach(function(k){ if (isBasicKey(k)) setVal(k, DEFAULTS[k]); });
     P.crv = crvBlank(); cgReset(); P.geo = geoBlank(); syncGeo(); P.lm = []; LM.sel = -1; lmSync(); lmDraw();
     ['basic','wb','mix','crv','cg','fx','det'].forEach(function(k){ P.on[k] = 1; syncGroup(k); });
