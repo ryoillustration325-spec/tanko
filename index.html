@@ -514,7 +514,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v162</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v163</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1902,42 +1902,51 @@ function tkLinearGrad(img, w, h, P){
 // ---------- 光の差し込み ----------
 function tkRayColor(warm){ var t = warm / 100; return [1, 1 - 0.18 * t, 1 - 0.5 * t]; }
 function tkRays(img, w, h, P){
-  var L = Math.max(w, h), sx = P.rx * w, sy = P.ry * h, amt = P.rAmt / 100, col = tkRayColor(P.rWarm || 0);
+  var L = Math.max(w, h), sx = P.rx * w, sy = P.ry * h, amt = P.rAmt / 100, col = tkRayColor(P.rWarm || 0), soft = (P.rSoft == null ? 60 : P.rSoft) / 100;
+  // v163：光は「直線の光の量」で扱う（当たった面＝掛け算、空気中の光＝足し算）。写真と同じ粒子を乗せ、白は肩で丸める
+  var gsc = Math.min(1, 360 / L), gw = Math.max(8, Math.round(w * gsc)), gh = Math.max(8, Math.round(h * gsc)), GY = new Float32Array(gw * gh);
+  for (var gy = 0; gy < gh; gy++) for (var gx = 0; gx < gw; gx++){ var q0 = (Math.min(h - 1, Math.floor((gy + 0.5) / gsc)) * w + Math.min(w - 1, Math.floor((gx + 0.5) / gsc))) * 3; GY[gy * gw + gx] = 0.2126 * img[q0] + 0.7152 * img[q0 + 1] + 0.0722 * img[q0 + 2]; }
+  var gk = Math.min(0.5, tkFlareGrain(GY, gw, gh) * 5), hs = 2166136261;
+  function put(j, mul, add){   // mul：当たった面の明るさ（倍率−1）、add：空気中の光の量
+    hs = Math.imul(hs ^ (j + 7), 16777619) >>> 0; var nz = 1 + gk * ((hs & 4095) / 4095 - 0.5);
+    for (var c = 0; c < 3; c++){ var L0 = tkLin(img[j + c]), Lc = L0 * (1 + mul * col[c] * nz) + add * col[c] * nz, K = Math.max(0.82, L0); if (Lc > K) Lc = K + (1 - K) * (1 - Math.exp(-(Lc - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(Lc); }   // 肩は足した分だけに（元の明るさは下げない）
+  }
   if (P.rMode === 'leak'){
-    // 光漏れ：端から赤橙〜琥珀のやわらかい光
-    var R0 = (0.18 + (P.rWidth || 40) / 100 * 0.6) * L * (0.8 + 0.4 * (P.rSoft == null ? 60 : P.rSoft) / 100);   // 柔らかいほど広くなだらかに
+    // 光漏れ：端から入る光。芯は赤橙、外ほど琥珀。暗い所に効き、明るい所には溶ける（足し算）。縁は少しむらのある形
+    var R0 = (0.18 + (P.rWidth || 40) / 100 * 0.6) * L * (0.8 + 0.4 * soft), WB = tkFlareStria(64, 77);
     for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){
-      var dx = x - sx, dy = y - sy, d = Math.sqrt(dx * dx + dy * dy) / R0;
-      var I = amt * 0.9 * Math.exp(-d * d * 1.6); if (I < 0.003) continue;
-      var c0 = [1, 0.42 + 0.35 * Math.min(1, d), 0.2 + 0.25 * Math.min(1, d)], i = (y * w + x) * 3;   // 芯は赤橙、外ほど琥珀
-      for (var k = 0; k < 3; k++) img[i + k] = 1 - (1 - img[i + k]) * (1 - tkClamp01(c0[k] * col[k] * I));
+      var dx = x - sx, dy = y - sy, ang = (Math.atan2(dy, dx) / (2 * Math.PI) + 1) * 64, ai = ang | 0, at = ang - ai;
+      var wob = 1 + 0.12 * ((WB[ai % 64] * (1 - at) + WB[(ai + 1) % 64] * at) - 1), d = Math.sqrt(dx * dx + dy * dy) / (R0 * wob);
+      var I = amt * Math.exp(-d * d * 1.6); if (I < 0.002) continue;
+      var dd = Math.min(1, d), i = (y * w + x) * 3, c0 = [1, 0.42 + 0.35 * dd, 0.2 + 0.25 * dd], s0 = [img[i], img[i + 1], img[i + 2]];
+      put(i, I * 0.6, I * 0.35);
+      for (var k = 0; k < 3; k++) img[i + k] = s0[k] + (img[i + k] - s0[k]) * (k ? c0[k] / 1 : 1);   // 色：芯は赤橙、外は琥珀
     }
     return;
   }
-  // 窓の光（v148：より自然に）：光源から差し込む帯。当たった面が明るくなるのが主で、空気中の光（もや）は控えめ・別に調整。
-  //   縁は柔らかく（半影）、遠くほど少し広がって弱まる。明るい所は肩で丸めて白飛びさせない
+  // 窓の光：光源から差し込む帯。当たった面が明るくなるのが主（掛け算）で、空気中の光（もや）は控えめ（足し算）。
+  //   縁は柔らかく（半影）、遠くほど広がって弱まる。縁はわずかに揺らぎ、もやには光の筋（ほこりで見える筋）がうっすら入る
   var a = (P.rAng || 0) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a), nx = -uy, ny = ux;
-  var soft = (P.rSoft == null ? 60 : P.rSoft) / 100, len = 0.2 + (P.rLen == null ? 50 : P.rLen) / 100 * 1.3, haze = (P.rHaze == null ? 25 : P.rHaze) / 100;
+  var len = 0.2 + (P.rLen == null ? 50 : P.rLen) / 100 * 1.3, haze = (P.rHaze == null ? 25 : P.rHaze) / 100;
   var wid = (0.06 + (P.rWidth || 40) / 100 * 0.5) * L, bars = Math.round(P.rBars || 0), pw = 2 + (1 - soft) * 10, fin = 0.05 + soft * 0.15;
+  var NS = 256, STR = tkFlareStria(NS, 4242 + (P.rAng | 0)), EDG = tkBlur1(tkFlareStria(NS, 99), 1, NS, 6);
+  function nz1(A, t){ t = (t % NS + NS) % NS; var i0 = t | 0, f = t - i0; return A[i0] * (1 - f) + A[(i0 + 1) % NS] * f; }
   for (var y2 = 0; y2 < h; y2++) for (var x2 = 0; x2 < w; x2++){
     var px = x2 - sx, py = y2 - sy, along = (px * ux + py * uy) / L;
     if (along < -0.06) continue;
     var spread = 1 + Math.max(0, along) * (0.3 + soft * 0.9), across = (px * nx + py * ny) / wid / spread;
-    var prof = Math.exp(-Math.pow(Math.abs(across), pw) * 0.7);
-    if (bars > 0){   // 窓枠の影（v162）：1本の光の中に細い桟の影を落とす。帯を割らず、奥ほどぼけて薄くなる
+    var ea = Math.abs(across) * (1 + 0.06 * (nz1(EDG, along * 40) - 1));   // 縁のわずかな揺らぎ
+    var prof = Math.exp(-Math.pow(ea, pw) * 0.7);
+    if (bars > 0){   // 窓枠の影：1本の光の中に細い桟の影。奥ほどぼけて薄く
       var bw = (0.05 + soft * 0.07) * (1 + Math.max(0, along) * 1.5), bd = (0.45 - 0.2 * soft) / (1 + Math.max(0, along) * 1.2), sh2 = 0;
-      for (var bi = 1; bi <= bars; bi++){ var bc = -1 + 2 * bi / (bars + 1), dd = (across - bc) / bw; sh2 = Math.max(sh2, Math.exp(-dd * dd)); }
+      for (var bi = 1; bi <= bars; bi++){ var bc = -1 + 2 * bi / (bars + 1), d2 = (across - bc) / bw; sh2 = Math.max(sh2, Math.exp(-d2 * d2)); }
       prof *= 1 - bd * sh2;
     }
     var fa = tkSS((along + 0.06) / fin) * Math.exp(-Math.max(0, along) / len);
-    var I2 = amt * fa * prof / Math.sqrt(spread); if (I2 < 0.003) continue;
-    var j = (y2 * w + x2) * 3, Y = 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2];
-    var g = I2 * 1.5, hz = I2 * haze * 0.4 * Math.exp(-Math.max(0, along) / 0.45);
-    for (var k2 = 0; k2 < 3; k2++){
-      var v = img[j + k2] * (1 + g * col[k2]);                                   // 当たった面が明るくなる（色はそのまま、光の色を少し）
-      if (v > 0.82) v = 0.82 + 0.18 * (1 - Math.exp(-(v - 0.82) / 0.18));             // 肩：白飛びさせない
-      img[j + k2] = 1 - (1 - v) * (1 - tkClamp01(col[k2] * hz * (0.4 + 0.6 * Y))); // 空気中の光（もや）はごく薄く
-    }
+    var I2 = amt * fa * prof / Math.sqrt(spread); if (I2 < 0.002) continue;
+    var st = nz1(STR, (across + 2) * 18);   // 光の筋（光源から放射状に広がる）
+    var j = (y2 * w + x2) * 3;
+    put(j, I2 * 2.2 * (1 + (st - 1) * 0.12), I2 * haze * 0.22 * Math.exp(-Math.max(0, along) / 0.45) * (1 + (st - 1) * 0.6));
   }
 }
 // 光源（ラインフレア・クロス共通）：光の芯（まわり7×7でいちばん明るい点）を選ぶ。
@@ -2001,7 +2010,7 @@ function tkFlareComposite(img, w, h, SR, sw, sh, sc, grain){
         var a = (s00 + (s01 - s00) * tx) * (1 - ty) + (s10 + (s11 - s10) * tx) * ty; if (a < 0.0005) continue;
         if (nz < 0){ hs = Math.imul(hs ^ (j + 7), 16777619) >>> 0; nz = (hs & 4095) / 4095; }
         a *= 1 + gk * (nz - 0.5);   // 写真と同じくらいの粒子
-        var L = tkLin(img[j + c]) + a; if (L > 0.82) L = 0.82 + 0.18 * (1 - Math.exp(-(L - 0.82) / 0.18)); img[j + c] = tkGam(L); } } }
+        var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0); if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); } } }
 }
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
