@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v176</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v177</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -810,6 +810,9 @@ function tkProcess(src, w, h, P){
       img[i * 3 + 2] = src[i * 4 + 2] / 255 + (img[i * 3 + 2] - src[i * 4 + 2] / 255) * mx;
     }
   }
+
+  // 5.9) 色のまとまり（彩度の散らかりを抑える）
+  if (P.on.calm) tkCalm(img, w, h, P);
 
   var doDiff = P.on.diff && P.diff > 0, doGlow = P.on.glow && P.glow > 0, doHal = P.on.hal && P.hal > 0, doMist = P.on.mist && P.mist > 0;
   // v173：白っぽさ（ベール）を出す効果が2つ以上重なった時だけ、黒の浮きに上限をかける（眠い写真になるのを防ぐ）
@@ -2408,6 +2411,58 @@ function tkRefTarget(sc, s0, L){
 // 色は OKLab（人の見え方に近い色空間）で扱う
 function tkLin(v){ return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
 function tkGam(v){ v = v < 0 ? 0 : (v > 1 ? 1 : v); return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; }
+// ---------- 色のまとまり（v177）：彩度が高くても散らからないように ----------
+//   ① 影と光の色をそろえる（影は青・光は黄のような反対の色を、中間の色の向きへ寄せる）
+//   ② 色のまとまり（散らばった色相を、写真の主な2〜3色へ少し寄せる）
+//   ③ 色むらの均し（明るさの細かさはそのまま、同じ面の中の色のばらつきだけをなだらかに。輪郭の色はにじませない）
+//   ④ ハイライトの色抜け（明るい所ほど彩度を落とす＝フィルムの肩）
+function tkCalm(img, w, h, P){
+  var hiA = (P.cmHi == null ? 35 : P.cmHi) / 100, hiPt = (P.cmHiPt == null ? 70 : P.cmHiPt) / 100, ev = (P.cmEven == null ? 40 : P.cmEven) / 100, evR = P.cmEvenR == null ? 6 : P.cmEvenR,
+      un = (P.cmUnify == null ? 30 : P.cmUnify) / 100, sp = (P.cmSplit == null ? 30 : P.cmSplit) / 100;
+  if (hiA <= 0 && ev <= 0 && un <= 0 && sp <= 0) return;
+  var n = w * h, LL = new Float32Array(n), AA = new Float32Array(n), BB = new Float32Array(n), o = [0, 0, 0], i;
+  for (i = 0; i < n; i++){ tkToOk(img[i * 3], img[i * 3 + 1], img[i * 3 + 2], o); LL[i] = o[0]; AA[i] = o[1]; BB[i] = o[2]; }
+  var st = Math.max(1, Math.floor(n / 80000));
+  // ① 影と光の色をそろえる
+  if (sp > 0){
+    var m = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (i = 0; i < n; i += st){ var L = LL[i], k = L < 0.4 ? 0 : L > 0.72 ? 2 : 1; m[k][0] += AA[i]; m[k][1] += BB[i]; m[k][2]++; }
+    var mm = m.map(function(q){ return q[2] ? [q[0] / q[2], q[1] / q[2]] : [0, 0]; }), da0 = mm[1][0] - mm[0][0], db0 = mm[1][1] - mm[0][1], da2 = mm[1][0] - mm[2][0], db2 = mm[1][1] - mm[2][1];
+    for (i = 0; i < n; i++){ var L2 = LL[i], ws = 1 - tkSS((L2 - 0.18) / 0.3), wh = tkSS((L2 - 0.55) / 0.3); AA[i] += sp * (ws * da0 + wh * da2); BB[i] += sp * (ws * db0 + wh * db2); }
+  }
+  // ② 主な色へ寄せる
+  if (un > 0){
+    var HB = 36, hist = new Float64Array(HB);
+    for (i = 0; i < n; i += st){ var C = Math.hypot(AA[i], BB[i]); if (C < 0.02 || LL[i] < 0.15 || LL[i] > 0.92) continue; var hb = Math.floor(((Math.atan2(BB[i], AA[i]) / (2 * Math.PI) + 1) % 1) * HB) % HB; hist[hb] += C; }
+    var sm = new Float64Array(HB); for (var b = 0; b < HB; b++) sm[b] = hist[(b + HB - 1) % HB] * 0.25 + hist[b] * 0.5 + hist[(b + 1) % HB] * 0.25;
+    var peaks = [], used = new Uint8Array(HB), tot = 0; for (b = 0; b < HB; b++) tot += sm[b];
+    for (var pk = 0; pk < 3; pk++){ var bi = -1, bv = 0; for (b = 0; b < HB; b++) if (!used[b] && sm[b] > bv){ bv = sm[b]; bi = b; } if (bi < 0 || bv < tot * 0.06) break; peaks.push((bi + 0.5) / HB * 2 * Math.PI); for (var d = -4; d <= 4; d++) used[(bi + d + HB) % HB] = 1; }
+    if (peaks.length){
+      for (i = 0; i < n; i++){ var C2 = Math.hypot(AA[i], BB[i]); if (C2 < 0.004) continue; var H = Math.atan2(BB[i], AA[i]), best = 0, bd = 9;
+        for (var q = 0; q < peaks.length; q++){ var dd = Math.atan2(Math.sin(peaks[q] - H), Math.cos(peaks[q] - H)); if (Math.abs(dd) < Math.abs(bd)){ bd = dd; best = q; } }
+        var pull = un * 0.6 * Math.exp(-Math.pow(bd / 1.0, 2)) * tkSS(C2 / 0.03), H2 = H + bd * pull; AA[i] = C2 * Math.cos(H2); BB[i] = C2 * Math.sin(H2); }
+    }
+  }
+  // ③ 色むらの均し（縮小して色だけぼかし、明るさの輪郭がある所は元の色を残す）
+  if (ev > 0){
+    var Lm = Math.max(w, h), sc = Math.min(1, 640 / Lm), sw = Math.max(4, Math.round(w * sc)), sh = Math.max(4, Math.round(h * sc)), sn = sw * sh;
+    var sa = new Float32Array(sn), sb = new Float32Array(sn), sl = new Float32Array(sn);
+    for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++){ var j = Math.min(h - 1, Math.floor((y + 0.5) / sc)) * w + Math.min(w - 1, Math.floor((x + 0.5) / sc)), k2 = y * sw + x; sa[k2] = AA[j]; sb[k2] = BB[j]; sl[k2] = LL[j]; }
+    var sg = Math.max(1, evR * 0.0025 * Math.max(sw, sh)), ba = tkBlur1(sa, sw, sh, sg), bb = tkBlur1(sb, sw, sh, sg), bl = tkBlur1(sl, sw, sh, sg);
+    for (y = 0; y < h; y++){ var gy = Math.min(sh - 1.001, Math.max(0, (y + 0.5) * sc - 0.5)), y0 = gy | 0, ty = gy - y0, y1 = Math.min(sh - 1, y0 + 1);
+      for (x = 0; x < w; x++){ var gx = Math.min(sw - 1.001, Math.max(0, (x + 0.5) * sc - 0.5)), x0 = gx | 0, tx = gx - x0, x1 = Math.min(sw - 1, x0 + 1);
+        var i00 = y0 * sw + x0, i01 = y0 * sw + x1, i10 = y1 * sw + x0, i11 = y1 * sw + x1;
+        var A2 = (ba[i00] * (1 - tx) + ba[i01] * tx) * (1 - ty) + (ba[i10] * (1 - tx) + ba[i11] * tx) * ty, B2 = (bb[i00] * (1 - tx) + bb[i01] * tx) * (1 - ty) + (bb[i10] * (1 - tx) + bb[i11] * tx) * ty, L3 = (bl[i00] * (1 - tx) + bl[i01] * tx) * (1 - ty) + (bl[i10] * (1 - tx) + bl[i11] * tx) * ty;
+        i = y * w + x; var e = tkSS(Math.abs(LL[i] - L3) / 0.1), kk = Math.min(1, ev * 1.1) * (1 - e);   // 明るさの輪郭（物の境目）では元の色
+        var c0 = Math.hypot(AA[i], BB[i]); AA[i] += (A2 - AA[i]) * kk; BB[i] += (B2 - BB[i]) * kk;
+        var c1 = Math.hypot(AA[i], BB[i]); if (c1 > 1e-5){ var keep = (c1 + (c0 - c1) * 0.5) / c1; AA[i] *= keep; BB[i] *= keep; } } }   // 均した分だけ彩度が落ちすぎないよう半分戻す
+  }
+  // ④ ハイライトの色抜け
+  for (i = 0; i < n; i++){
+    if (hiA > 0){ var t = tkSS((LL[i] - hiPt) / Math.max(0.05, (1 - hiPt) * 0.6)), f = 1 - hiA * 0.9 * t; AA[i] *= f; BB[i] *= f; }
+    tkFromOk(LL[i], AA[i], BB[i], o); img[i * 3] = o[0]; img[i * 3 + 1] = o[1]; img[i * 3 + 2] = o[2];
+  }
+}
 function tkToOk(r, g, b, o){
   r = tkLin(r); g = tkLin(g); b = tkLin(b);
   var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -4037,6 +4092,9 @@ function tkLook2(img, n, P, w, h){
       sliders: [['lCa','色にじみ',0,100,35],['lSoft','周辺の流れ',0,100,40],['lVeil','ベール',0,100,25],['lVig','周辺減光',0,100,35]],
       hint: '色にじみは周辺ほど赤と青がずれる、古いレンズの写り。ベールは逆光のときの白っぽいかぶり（フレア）。' },
     { sect: '色（Lightroomでは作れない部分）' },
+    { key: 'calm', title: '色のまとまり', sub: '彩度が高くても散らからない：明るい所の色抜け・面の色むら・色相のまとまり',
+      sliders: [['cmHi','ハイライトの色抜け',0,100,35],['cmHiPt','抜き始める明るさ',40,90,70],['cmEven','色むらの均し',0,100,40],['cmEvenR','均す広さ',1,20,6],['cmUnify','色のまとまり',0,100,30],['cmSplit','影と光の色をそろえる',0,100,30]],
+      hint: '彩度を下げずに落ち着かせる道具です。ハイライトの色抜け＝白っぽい所が黄色や水色に染まるのを防ぐ。色むらの均し＝石畳や壁、毛並みの中のまだらな色をそろえる（物の境目の色はそのまま）。色のまとまり＝写真の主な2〜3色へ色相を寄せる。影と光の色をそろえる＝影は青・光は黄のような反対の色のぶつかりを減らす。' },
     { key: 'dens', title: '濃さ（Density）', sub: '色が濃い所ほど沈める。フィルムの色の密度',
       modes: [['A','A 全色一律'],['B','B 肌を守る'],['C','C 色ごと']],
       sliders: [['dens','強さ',0,100,40],
@@ -4126,7 +4184,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], flBlend: ['どこでも同じ', '暗い所では控えめ'], flShape: ['正円', '絞りの形・欠け'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], cmHiPt: ['暗めから', '白い所だけ'], cmEvenR: ['細かいむら', '広いむら'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], flBlend: ['どこでも同じ', '暗い所では控えめ'], flShape: ['正円', '絞りの形・欠け'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
@@ -6719,7 +6777,7 @@ function tkLook2(img, n, P, w, h){
   var TABS = [
     { key: 'look', label: '自動' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone']],['comp','白飛び・霞',['comp','mist']]] },
-    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
+    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['calm','まとまり',['calm']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
     { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['flare','フレア',['flare']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
