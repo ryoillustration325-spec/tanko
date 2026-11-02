@@ -58,6 +58,7 @@
   #view{will-change:transform}
   .stage{position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; border-radius:10px; background:#08090A}
   .app:not(.immersive):not(.cropping):not(.collapsed) .stage{align-items:flex-start}   /* v148：写真は上に寄せ、明るさの表示を写真の上に重ねる（下のパネルに隠れる所を減らす）。写真だけの表示・パネルを下げた時は中央（明るさの表示の下） */
+  .app:not(.immersive):not(.cropping):not(.collapsed) .stage.fitc{align-items:center; padding-bottom:var(--sheetov,0px); box-sizing:border-box}   /* v164：パネルに隠れない写真は見える範囲の中央 */
   .stage canvas{display:block; max-width:100%; max-height:100%; width:auto; height:auto}
   /* 写真の選択：写真を置く場所のどこを押しても選択（透明な入力欄を全面に重ね、指で直接押す形。プログラムから押すと白いちらつきが出るため使わない）。
      iPhoneの選択メニューは押した指の位置に出る（iOSの仕様） */
@@ -514,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v163</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v164</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -5443,11 +5444,21 @@ function tkLook2(img, n, P, w, h){
     ['gesturestart', 'gesturechange'].forEach(function(t){ document.addEventListener(t, function(e){ e.preventDefault(); }, { passive: false }); });
     st.addEventListener('touchmove', function(e){ if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
   })();
+  (function(){ var ap = document.querySelector('.app'); if (ap && window.MutationObserver) new MutationObserver(function(){ requestAnimationFrame(function(){ fitView(); }); }).observe(ap, { attributes: true, attributeFilter: ['class'] }); })();
   function fitView(){
     var st = $('stage'), cs = getComputedStyle(st);
     var W = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), H = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
     if (W < 10 || H < 10 || !view.width) return;
-    var a = view.width / view.height, w = Math.min(W, H * a), h = w / a;
+    // v164：パネルに隠れない写真（横長など）は、パネルより上の見える範囲の中央に。隠れる写真（縦長など）だけ上に寄せる
+    var apc = $('app').classList, fc = st.classList.contains('fitc'); if (fc && !apc.contains('immersive') && !apc.contains('cropping') && !apc.contains('collapsed')) H += parseFloat(cs.paddingBottom);
+    var a = view.width / view.height, w = Math.min(W, H * a), h = w / a, sk = $('sheet');
+    if (sk){
+      var sr = st.getBoundingClientRect(), kr = sk.getBoundingClientRect(), ty = 0;
+      try{ var mt = getComputedStyle(sk).transform; if (mt && mt !== 'none') ty = new DOMMatrix(mt).m42; }catch(e){}
+      var ov = (kr.left < sr.right - 1 && kr.right > sr.left + 1) ? sr.bottom - (kr.top - ty) : 0, fit = ov > 0 && h <= H - ov - 8;
+      if (fit !== fc){ st.classList.toggle('fitc', fit); }
+      if (fit) st.style.setProperty('--sheetov', Math.round(ov) + 'px');
+    }
     view.style.width = Math.round(w) + 'px'; view.style.height = Math.round(h) + 'px';
   }
   // トリミングで写真の一部を拡大して見る時は、その分だけ細かい解像度で計算し直す
