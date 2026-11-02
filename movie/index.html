@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v8</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v9</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -294,19 +294,20 @@ function makeLight(srcCv, fx, maxL, prev){
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(srcCv, 0, 0, w, h); const d = x.getImageData(0, 0, w, h).data, n = w * h;
   const img = new Float32Array(n * 3); for (let i = 0; i < n; i++){ img[i * 3] = d[i * 4] / 255; img[i * 3 + 1] = d[i * 4 + 1] / 255; img[i * 3 + 2] = d[i * 4 + 2] / 255; }
   const P = lightP(fx, prev), out = new Float32Array(n * 3);
-  window.TK_PRE = tkPreSnap(img, w, h);
-  try{ if (P.on.ana) tkAnamorph(out, w, h, P); if (P.on.cross) tkCross(out, w, h, P); if (P.on.flare) tkFlare(out, w, h, P); } finally { window.TK_PRE = null; }
+  window.TK_PRE = tkPreSnap(img, w, h); window.TK_STRICT = true;
+  try{ if (P.on.ana) tkAnamorph(out, w, h, P); if (P.on.cross) tkCross(out, w, h, P); if (P.on.flare) tkFlare(out, w, h, P); } finally { window.TK_PRE = null; window.TK_STRICT = false; }
   const o = new Uint8Array(n * 4); for (let i = 0; i < n; i++){ o[i * 4] = out[i * 3] * 255 + .5; o[i * 4 + 1] = out[i * 3 + 1] * 255 + .5; o[i * 4 + 2] = out[i * 3 + 2] * 255 + .5; o[i * 4 + 3] = 255; }
   return { data: o, w, h };
 }
-const LT = { last: null, at: 0, prev: {}, key: '' };
+const LT = { last: null, at: 0, prev: {}, key: '', ms: 0, slow: false };
 function previewLight(fx){
   if (S.orig || !lightOn(fx)) return null;
   if (typeof window.tkCross !== 'function'){ loadEngine().then(() => redraw()).catch(() => {}); return null; }
   const now = performance.now(), key = JSON.stringify([fx.crAmt, fx.crRange, fx.crLen, fx.crWidth, fx.anAmt, fx.anRange, fx.anLen, fx.flAmt, fx.flGhost, fx.flDist, fx.flSize, video.currentTime]);
-  if (!video.paused && LT.last && now - LT.at < 150) return LT.last;   // 再生中は間引いて描く（重さ対策）
-  if (video.paused && LT.last && key === LT.key) return LT.last;
-  LT.last = makeLight(fcv, fx, video.paused ? 960 : 480, video.paused ? null : LT.prev); LT.at = performance.now(); LT.key = key; return LT.last;
+  // v9：再生中も毎コマ描き直す（前のコマの光を使い回すと、動いた所の跡を追いかけて見える）。重い端末では再生中だけ光を出さない（止めた時と書き出しは毎コマ正しく描く）
+  if (!video.paused){ if (LT.slow) return null; const t = performance.now(), r = makeLight(fcv, fx, 360, LT.prev), dt = performance.now() - t; LT.ms = LT.ms ? LT.ms * 0.8 + dt * 0.2 : dt; if (LT.ms > 80){ LT.slow = true; toast('再生中は光の効果を省いて表示します（止めた時・書き出しには入ります）'); } LT.last = null; return r; }
+  if (LT.last && key === LT.key) return LT.last;
+  LT.last = makeLight(fcv, fx, 960, null); LT.at = performance.now(); LT.key = key; return LT.last;
 }
 let GLR;
 try{ GLR = new Renderer($('gl'), { low: true }); }catch(e){ toast('この端末では画面の処理（WebGL2）が使えません'); console.error(e); }
