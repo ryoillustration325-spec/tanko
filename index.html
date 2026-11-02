@@ -514,7 +514,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v161</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v162</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1506,7 +1506,7 @@ var TK_PRESETS = {
   cinema: { label: 'Cinema 映画', legacy: 1, target: 52, thr: 64, diff: 55, diffR: 8, glow: 50, glowR: 14, hal: 45, comp: 30, mist: 6, lift: 10, roll: 12, con: -8, sat: -8, shb: 12, hiw: 14, grain: 16,
             on: { bright: 1, diff: 1, glow: 1, hal: 1, comp: 1, mist: 1, tone: 1, split: 1, grain: 1 } },
   window:  { label: '窓の光', legacy: 1, thr: 62, diff: 45, diffR: 8, glow: 30, glowR: 14, hal: 12, comp: 35, mist: 4,
-            rMode: 'beam', rAmt: 45, rWidth: 40, rWarm: 60, rAng: 125, rBars: 2,
+            rMode: 'beam', rAmt: 45, rWidth: 40, rWarm: 60, rAng: 125, rBars: 0,
             on: { diff: 1, glow: 1, hal: 1, comp: 1, mist: 1, ray: 1, lens: 0, grad: 0, dens: 0, skin: 0 } },
   kandan:  { label: '寒暖ムード', legacy: 1, thr: 64, diff: 40, diffR: 7, glow: 25, glowR: 12, hal: 10, comp: 30, mist: 5,
             gAtemp: 40, gAtint: 12, gAev: 5, gBtemp: -40, gBtint: -6, gBev: -12, skAmt: 40, skShift: -4, dens: 30,
@@ -1918,13 +1918,17 @@ function tkRays(img, w, h, P){
   //   縁は柔らかく（半影）、遠くほど少し広がって弱まる。明るい所は肩で丸めて白飛びさせない
   var a = (P.rAng || 0) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a), nx = -uy, ny = ux;
   var soft = (P.rSoft == null ? 60 : P.rSoft) / 100, len = 0.2 + (P.rLen == null ? 50 : P.rLen) / 100 * 1.3, haze = (P.rHaze == null ? 25 : P.rHaze) / 100;
-  var wid = (0.06 + (P.rWidth || 40) / 100 * 0.5) * L, bars = Math.round(P.rBars || 0), pw = 2 + (1 - soft) * 10, bp = 2 + (1 - soft) * 10, fin = 0.05 + soft * 0.15;
+  var wid = (0.06 + (P.rWidth || 40) / 100 * 0.5) * L, bars = Math.round(P.rBars || 0), pw = 2 + (1 - soft) * 10, fin = 0.05 + soft * 0.15;
   for (var y2 = 0; y2 < h; y2++) for (var x2 = 0; x2 < w; x2++){
     var px = x2 - sx, py = y2 - sy, along = (px * ux + py * uy) / L;
     if (along < -0.06) continue;
     var spread = 1 + Math.max(0, along) * (0.3 + soft * 0.9), across = (px * nx + py * ny) / wid / spread;
     var prof = Math.exp(-Math.pow(Math.abs(across), pw) * 0.7);
-    if (bars > 0) prof *= 1 - (0.75 - 0.3 * soft) * Math.pow(Math.max(0, Math.cos(across * Math.PI * (bars + 1) * 0.5)), bp);   // 窓枠の影：柔らかいほど薄くぼける
+    if (bars > 0){   // 窓枠の影（v162）：1本の光の中に細い桟の影を落とす。帯を割らず、奥ほどぼけて薄くなる
+      var bw = (0.05 + soft * 0.07) * (1 + Math.max(0, along) * 1.5), bd = (0.45 - 0.2 * soft) / (1 + Math.max(0, along) * 1.2), sh2 = 0;
+      for (var bi = 1; bi <= bars; bi++){ var bc = -1 + 2 * bi / (bars + 1), dd = (across - bc) / bw; sh2 = Math.max(sh2, Math.exp(-dd * dd)); }
+      prof *= 1 - bd * sh2;
+    }
     var fa = tkSS((along + 0.06) / fin) * Math.exp(-Math.max(0, along) / len);
     var I2 = amt * fa * prof / Math.sqrt(spread); if (I2 < 0.003) continue;
     var j = (y2 * w + x2) * 3, Y = 0.2126 * img[j] + 0.7152 * img[j + 1] + 0.0722 * img[j + 2];
@@ -3873,7 +3877,7 @@ function tkLook2(img, n, P, w, h){
       sliders: [['mist','量',0,100,8]],
       hint: '上げすぎると眠い写真になります。0〜15が目安。' },
     { key: 'ray', title: '光の差し込み', sub: '窓からの斜めの光／端からの光漏れ', custom: buildRayExtra,
-      sliders: [['rAmt','強さ',0,100,35],['rWidth','幅',0,100,40],['rSoft','柔らかさ',0,100,60],['rLen','届く長さ',0,100,50],['rHaze','空気の光（もや）',0,100,25],['rWarm','暖かさ',0,100,55],['rAng','向き',0,359,125],['rBars','窓枠の影',0,4,2]],
+      sliders: [['rAmt','強さ',0,100,35],['rWidth','幅',0,100,40],['rSoft','柔らかさ',0,100,60],['rLen','届く長さ',0,100,50],['rHaze','空気の光（もや）',0,100,25],['rWarm','暖かさ',0,100,55],['rAng','向き',0,359,125],['rBars','窓枠の影',0,4,0]],
       hint: '「窓の光」は写真の上で、光の来る所から差し込む向きへドラッグ。「光漏れ」は光らせたい端をタップ。' },
     { key: 'lens', title: 'オールドレンズ風', sub: '色にじみ・周辺の流れ・ベール・周辺減光',
       sliders: [['lCa','色にじみ',0,100,35],['lSoft','周辺の流れ',0,100,40],['lVeil','ベール',0,100,25],['lVig','周辺減光',0,100,35]],
