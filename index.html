@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v167</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v168</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2134,7 +2134,7 @@ function tkAnamorph(img, w, h, P){
 var TK_GHOSTS = [{ t: -0.55, r: 0.07, c: [1, 0.58, 0.24] }, { t: -1.0, r: 0.032, c: [0.58, 1, 0.68] }, { t: 0.42, r: 0.02, c: [0.78, 0.62, 1] }, { t: -0.25, r: 0.045, c: [0.5, 0.75, 1] }];
 function tkFlare(img, w, h, P){
   var veil = (P.flAmt == null ? 35 : P.flAmt) / 100, spr = (P.flSpread == null ? 40 : P.flSpread) / 100, gho = (P.flGhost == null ? 40 : P.flGhost) / 100,
-      dist = (P.flDist == null ? 50 : P.flDist) / 100, size = (P.flSize == null ? 40 : P.flSize) / 100, clr = (P.flClear == null ? 50 : P.flClear) / 100, n = Math.max(1, Math.min(4, Math.round(P.flCount || 3)));
+      dist = (P.flDist == null ? 50 : P.flDist) / 100, size = (P.flSize == null ? 40 : P.flSize) / 100, clr = (P.flClear == null ? 50 : P.flClear) / 100, n = Math.max(1, Math.min(4, Math.round(P.flCount || 3))), bl = (P.flBlend == null ? 60 : P.flBlend) / 100;
   if (veil <= 0 && gho <= 0) return;
   var diag = Math.sqrt(w * w + h * h), sc = Math.min(1, 640 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc)), sn = sw * sh, x, y;
   var R = new Float32Array(sn), G = new Float32Array(sn), B = new Float32Array(sn), Y = new Float32Array(sn), MX = new Float32Array(sn);
@@ -2153,15 +2153,18 @@ function tkFlare(img, w, h, P){
   var E = src.E, cs = [0.6 + 0.4 * src.s3[0], 0.6 + 0.4 * src.s3[1], 0.6 + 0.4 * src.s3[2]], cx = w / 2, cy = h / 2, vx = src.x - cx, vy = src.y - cy;
   var GH = gho > 0 ? TK_GHOSTS.slice(0, n).map(function(g){ var t = g.t * (0.3 + dist * 1.4); return { x: cx + vx * t, y: cy + vy * t, r: g.r * (0.4 + size * 1.6) * diag, c: g.c }; }) : [];
   var fill = 0.15 + 0.85 * (1 - clr), rimW = 0.25 + 0.75 * clr, gA = gho * E * 0.3, vA = veil * E, d1 = 0.08 + spr * 0.3, d0 = 0.012 + spr * 0.05, gl = 0.01 + spr * 0.04;
-  var NZ = tkBlur1(tkFlareStria(256, 31), 1, 256, 10);   // 玉の中のごく薄い、なだらかなむら
+  var NZ = tkBlur1(tkFlareStria(256, 31), 1, 256, 10), YB = GH.length && bl > 0 ? tkBlur1(Y, sw, sh, Math.max(2, Math.max(sw, sh) * 0.01)) : null;   // 玉の中のごく薄い、なだらかなむら
   var hs = 2166136261, add = [0, 0, 0];
   for (y = 0; y < h; y++) for (x = 0; x < w; x++){
     var j = (y * w + x) * 3, dx = x + 0.5 - src.x, dy = y + 0.5 - src.y, d = Math.sqrt(dx * dx + dy * dy) / diag, c;
     var vl = vA * (gl + 0.2 * Math.exp(-d / d1) + 0.45 * Math.exp(-d / d0));
     add[0] = vl * cs[0]; add[1] = vl * cs[1]; add[2] = vl * cs[2];
+    var gk2 = 1, gs = 1;
+    if (YB){ var yb = YB[Math.min(sh - 1, (y * sc) | 0) * sw + Math.min(sw - 1, (x * sc) | 0)], lt = tkSS(yb / 0.55); gk2 = 1 - bl * 0.75 * (1 - lt); gs = 1 - bl * 0.7 * (1 - lt); }   // v168：暗い所ではゴーストを控えめ・色も淡く（暗い面に色の玉が貼り付いて見えるのを防ぐ）
     for (var g = 0; g < GH.length; g++){ var Gh = GH[g], ex = x + 0.5 - Gh.x, ey = y + 0.5 - Gh.y, rd = Math.sqrt(ex * ex + ey * ey) / Gh.r; if (rd > 1.25) continue;
       var mu = 0.8 + 0.2 * NZ[((Math.atan2(ey, ex) / 6.2832 * 256 + rd * 40 + g * 60) | 0) & 255];
-      for (c = 0; c < 3; c++){ var rc = rd * (1 + (c - 1) * 0.035), disc = 1 - tkSS((rc - 0.8) / 0.2), edge = Math.exp(-Math.pow((rc - 0.9) / 0.08, 2)); add[c] += gA * Gh.c[c] * (fill * disc * mu + rimW * 0.7 * edge); } }
+      var gl3 = (Gh.c[0] + Gh.c[1] + Gh.c[2]) / 3, ew = 0.08 + bl * 0.05 * (1 - gs);
+      for (c = 0; c < 3; c++){ var rc = rd * (1 + (c - 1) * 0.035), disc = 1 - tkSS((rc - 0.8) / (0.2 + bl * 0.1)), edge = Math.exp(-Math.pow((rc - 0.9) / ew, 2)), gc = gl3 + (Gh.c[c] - gl3) * gs; add[c] += gA * gk2 * gc * (fill * disc * mu + rimW * 0.7 * edge); } }
     hs = Math.imul(hs ^ (j + 7), 16777619) >>> 0; var nz = 1 + 0.12 * ((hs & 4095) / 4095 - 0.5);
     for (c = 0; c < 3; c++){ var a = add[c] * nz; if (a < 0.0005) continue; var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0); if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); }
   }
@@ -3948,7 +3951,7 @@ function tkLook2(img, n, P, w, h){
       sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crWidth','太さ',0,100,30],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけがクロスします。右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
     { key: 'flare', title: 'レンズフレア', sub: '逆光の白っぽさ（ベール）と光の玉（ゴースト）', custom: buildFlareExtra,
-      sliders: [['flAmt','ベール',0,100,35],['flSpread','ベールの広がり',0,100,40],['flGhost','ゴースト',0,100,40],['flCount','ゴーストの数',1,4,3],['flDist','ゴーストの距離',0,100,50],['flSize','ゴーストの大きさ',0,100,40],['flClear','透明感',0,100,50]],
+      sliders: [['flAmt','ベール',0,100,35],['flSpread','ベールの広がり',0,100,40],['flGhost','ゴースト',0,100,40],['flCount','ゴーストの数',1,4,3],['flDist','ゴーストの距離',0,100,50],['flSize','ゴーストの大きさ',0,100,40],['flClear','透明感',0,100,50],['flBlend','なじませ',0,100,60]],
       hint: '光源は写真のいちばん大きい光（太陽・窓）を自動で選びます。写っていない光や別の光にしたい時は、写真の上で位置を決めてください。ゴーストは光源と画面の中心を結ぶ線の上に並びます。' },
     { key: 'comp', title: 'ハイライト余白', sub: '白を少し沈めて、光を足しても飛ばさない',
       sliders: [['comp','量',0,100,30]],
@@ -4052,7 +4055,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], flBlend: ['どこでも同じ', '暗い所では控えめ'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
