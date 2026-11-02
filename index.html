@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v173</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v174</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2204,6 +2204,10 @@ function tkFlare(img, w, h, P){
     var best = -1; tkPeakInfo(PK, R, G, B, Y, sw, sh, sc).forEach(function(p){ var a = clipAt(Math.round(p.x * sc), Math.round(p.y * sc), rq); if (a[0] > best){ best = a[0]; src = p; src.cnt = a[1]; } });   // いちばん大きい光の塊
     var frac = best / Math.max(1, src.cnt); if (frac < 0.3) return;   // 白く飛んだ光の塊がない写真（白い壁など）には出さない
     src.E = Math.min(1, 0.35 + 3 * frac);
+  }
+  if (P._flPrev){   // 動画：光源の位置と強さをコマ間でなめらかに（ゴーストが跳ねない）
+    var pv = P._flPrev; if (pv.x != null && Math.hypot(pv.x - src.x / w, pv.y - src.y / h) < 0.25){ src = { x: (pv.x * 0.75 + src.x / w * 0.25) * w, y: (pv.y * 0.75 + src.y / h * 0.25) * h, E: pv.E * 0.75 + src.E * 0.25, s3: src.s3 }; }
+    pv.x = src.x / w; pv.y = src.y / h; pv.E = src.E;
   }
   var E = src.E, cs = [0.6 + 0.4 * src.s3[0], 0.6 + 0.4 * src.s3[1], 0.6 + 0.4 * src.s3[2]], cx = w / 2, cy = h / 2, vx = src.x - cx, vy = src.y - cy;
   var GH = gho > 0 ? TK_GHOSTS.slice(0, n).map(function(g){ var t = g.t * (0.3 + dist * 1.4); var gx = cx + vx * t, gy = cy + vy * t, gr = g.r * (0.4 + size * 1.6) * diag, ox = cx - gx, oy = cy - gy, od = Math.sqrt(ox * ox + oy * oy) || 1, off = Math.min(1, od / (diag * 0.5));
