@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v164</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v165</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2013,6 +2013,61 @@ function tkFlareComposite(img, w, h, SR, sw, sh, sc, grain){
         a *= 1 + gk * (nz - 0.5);   // 写真と同じくらいの粒子
         var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0); if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); } } }
 }
+// ⑤ v165：細い光の筋を「元の解像度で」1本ずつ描く（縮小して描いてから戻すと筋が太く・ぼやけて「載せた感じ」になる）
+//   光源ごとに：光の量（芯の明るさ×光の塊の大きさ）で筋の長さと明るさが決まる。筋は髪の毛ほどの細さで、芯から急に減り、薄い尾が長く伸びる。
+//   虹色は芯の近くには出さず、筋の途中から色がゆっくり移り変わる（実際のクロスフィルターの回折）
+function tkPeakInfo(PK, R, G, B, Y, sw, sh, sc){
+  var rp = Math.max(2, Math.round(Math.max(sw, sh) * 0.009));
+  return PK.map(function(p){
+    var px = p.i % sw, py = (p.i / sw) | 0, yp = Y[p.i], tl = Math.max(0.55, yp * 0.72), tot = 0, mx = 0, my = 0, cr = 0, cg = 0, cb = 0;
+    for (var yy = Math.max(0, py - rp); yy <= Math.min(sh - 1, py + rp); yy++) for (var xx = Math.max(0, px - rp); xx <= Math.min(sw - 1, px + rp); xx++){
+      var k = yy * sw + xx, e = (Y[k] - tl) / Math.max(1e-3, yp - tl); if (e <= 0) continue; e = Math.min(1, e); var d2 = ((xx - px) * (xx - px) + (yy - py) * (yy - py)) / (rp * rp); if (d2 > 1) continue;
+      e *= 1 - d2 * 0.5; tot += e; mx += (xx + 0.5) * e; my += (yy + 0.5) * e; cr += R[k] * e; cg += G[k] * e; cb += B[k] * e; }
+    if (tot <= 0){ tot = 1; mx = px + 0.5; my = py + 0.5; cr = R[p.i]; cg = G[p.i]; cb = B[p.i]; }
+    var cm = Math.max(1e-4, cr, cg, cb);
+    return { x: mx / tot / sc, y: my / tot / sc, E: p.w * Math.min(1.8, 0.65 + 0.32 * Math.log(1 + tot)), s3: [cr / cm, cg / cm, cb / cm] };
+  });
+}
+function tkSpikes(img, w, h, PI, o){
+  // o: { angs:[度], len:筋の長さ(0〜1), sig:太さ(元画像の画素), gain, rain:虹色0〜1, colFn(s3,c), halo, grain }
+  var diag = Math.sqrt(w * w + h * h), hs = 2166136261, gk = Math.min(0.5, (o.grain || 0.01) * 5);
+  function add(j, a3){
+    hs = Math.imul(hs ^ (j + 7), 16777619) >>> 0; var nz = 1 + gk * ((hs & 4095) / 4095 - 0.5);
+    for (var c = 0; c < 3; c++){ var a = a3[c] * nz; if (a < 0.0004) continue; var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0);
+      if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); }
+  }
+  var a3 = [0, 0, 0], RB = [0, 0, 0], pf = o.prof || [0.86, 0.09, 0.28], wc = o.wc || 0;
+  PI.forEach(function(p, pi){
+    var E = p.E, A = o.gain * E; if (A < 0.004) return;
+    var col = [o.colFn(p.s3, 0), o.colFn(p.s3, 1), o.colFn(p.s3, 2)];
+    var Lk = o.len * diag * (0.12 + 0.88 * Math.pow(Math.min(1.5, E), 1.3)), sg = o.sig, rad = Math.ceil(sg * 2 * 3 + 1), ph = (pi * 0.37) % 1;
+    o.angs.forEach(function(ad){
+      var an = ad * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an), major = Math.abs(ux) >= Math.abs(uy);
+      var x1 = p.x + ux * Lk, y1 = p.y + uy * Lk, n = Math.ceil(major ? Math.abs(x1 - p.x) : Math.abs(y1 - p.y)), sl = major ? uy / ux : ux / uy, dir = major ? (x1 >= p.x ? 1 : -1) : (y1 >= p.y ? 1 : -1);
+      var mrad = Math.ceil(rad / Math.max(0.5, major ? Math.abs(ux) : Math.abs(uy)));
+      for (var s = 0; s <= n; s++){
+        var Mj = Math.round(major ? p.x : p.y) + s * dir; if (major ? (Mj < 0 || Mj >= w) : (Mj < 0 || Mj >= h)) continue;
+        var mc = (major ? p.y + (Mj + 0.5 - p.x) * sl : p.x + (Mj + 0.5 - p.y) * sl) - 0.5, m0 = Math.round(mc);
+        for (var mm = m0 - mrad; mm <= m0 + mrad; mm++){
+          var X = major ? Mj : mm, Yp = major ? mm : Mj; if (X < 0 || Yp < 0 || X >= w || Yp >= h) continue;
+          var dx = X + 0.5 - p.x, dy = Yp + 0.5 - p.y, t = dx * ux + dy * uy, d = Math.abs(-dx * uy + dy * ux); if (t < 0 || t > Lk || d > rad) continue;
+          var tn = t / Lk, f = (pf[0] * Math.exp(-tn / pf[1]) + (1 - pf[0]) * Math.exp(-tn / pf[2])) * (1 - tkSS((tn - 0.7) / 0.3)), sgt = sg * (2 - 1.2 * Math.min(1, tn / 0.4)), wd = Math.exp(-d * d / (2 * sgt * sgt)) * Math.sqrt(sg / sgt);
+          var v = A * f * wd; if (v < 0.0004) continue;
+          var rw = o.rain * tkSS(tn / 0.12), hu = tn * 2.4 + ph;
+          var wz = wc * (1 - tkSS(tn / 0.15));   // 芯の近くは白寄り
+          for (var c = 0; c < 3; c++){ RB[c] = 0.5 + 0.5 * Math.cos(2 * Math.PI * (hu - c / 3)); a3[c] = v * (col[c] * (1 - wz) + wz) * (1 - rw + rw * 1.6 * RB[c]); }
+          add((Yp * w + X) * 3, a3);
+        }
+      }
+    });
+    {   // 芯のまわりの小さなにじみ（やわらかくするほど広く）
+      var hr = sg * 2.5 + o.halo * diag * 0.012, hq = Math.ceil(hr * 2.5);
+      for (var yy = Math.max(0, Math.floor(p.y - hq)); yy <= Math.min(h - 1, Math.ceil(p.y + hq)); yy++) for (var xx = Math.max(0, Math.floor(p.x - hq)); xx <= Math.min(w - 1, Math.ceil(p.x + hq)); xx++){
+        var ddx = xx + 0.5 - p.x, ddy = yy + 0.5 - p.y, g = Math.exp(-(ddx * ddx + ddy * ddy) / (2 * hr * hr)) * A * (0.3 / (1 + o.halo * 6) + 0.1 * o.halo); if (g < 0.0004) continue;
+        a3[0] = g * col[0]; a3[1] = g * col[1]; a3[2] = g * col[2]; add((yy * w + xx) * 3, a3); }
+    }
+  });
+}
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
 //   光源ごとに平行な線になり、強い光ほど長く明るい。芯は白寄り、外は色（フィルターの色と光源の色を混ぜる）
@@ -2055,8 +2110,7 @@ function tkAnamorph(img, w, h, P){
   var Oc = [new Float32Array(RW * RH), new Float32Array(RW * RH), new Float32Array(RW * RH)];
   for (i = 0; i < RW * RH; i++){ Oc[0][i] = O[i * 3]; Oc[1][i] = O[i * 3 + 1]; Oc[2][i] = O[i * 3 + 2]; }
   function vblur(A, sg){ var tmp = new Float32Array(A.length); for (var uu = 0; uu < RW; uu++){ var col = new Float32Array(RH); for (var vv = 0; vv < RH; vv++) col[vv] = A[vv * RW + uu]; var bl = tkBlur1(col, 1, RH, sg); for (vv = 0; vv < RH; vv++) tmp[vv * RW + uu] = bl[vv]; } return tmp; }
-  var C1 = Oc.map(function(A){ return vblur(A, sg1); }), C2 = Oc.map(function(A){ return vblur(A, sg2); });
-  var STR = tkFlareStria(RH, 1234 + (P.anAng | 0)); C1.forEach(function(A){ for (var vv = 0; vv < RH; vv++){ var f = STR[vv]; for (var uu = 0; uu < RW; uu++) A[vv * RW + uu] *= f; } });
+  var C2 = Oc.map(function(A){ return vblur(A, sg2); });
   // 6) 元の向きに戻し、芯は白寄り・外は色で重ねる（スクリーン）
   var gain = amt * 6, kk = [0, 0, 0];
   function sampT(A, pu, pv){ if (pu < 0 || pv < 0 || pu > RW - 1 || pv > RH - 1) return 0; var u0 = pu | 0, v0 = pv | 0, u1 = Math.min(RW - 1, u0 + 1), v1 = Math.min(RH - 1, v0 + 1), tx = pu - u0, ty = pv - v0;
@@ -2064,12 +2118,14 @@ function tkAnamorph(img, w, h, P){
   var SR = new Float32Array(sn * 3);
   for (y = 0; y < sh; y++) for (x = 0; x < sw; x++){
     var dx = x + 0.5 - cx, dy = y + 0.5 - cy, pu = cu + dx * ux + dy * uy, pv = cv - dx * uy + dy * ux, k2 = (y * sw + x) * 3;
-    var core = 0; for (var c4 = 0; c4 < 3; c4++){ kk[c4] = sampT(C1[c4], pu, pv); core += kk[c4]; } core /= 3;
-    var wh = tkSS(core * gain / 0.9) * 0.6;   // 芯の強い所ほど白へ
-    for (c4 = 0; c4 < 3; c4++){ var line = kk[c4] * (1 - wh) + core * wh, glo = sampT(C2[c4], pu, pv) * 0.9 * sg2 / (sg1 * 6); SR[k2 + c4] = (line + glo) * gain; }
+    for (var c4 = 0; c4 < 3; c4++){ var glo = sampT(C2[c4], pu, pv) * 0.9 * sg2 / (sg1 * 6); SR[k2 + c4] = glo * gain * 0.6; }   // v165：縮小画像で作るのは太く薄い滲みだけ
   }
   // 7) 元の大きさへ戻して、光の量として足す
   tkFlareComposite(img, w, h, SR, sw, sh, sc, GR);
+  // 8) v165：芯の細い線は元の解像度で1本ずつ（縮小して戻すと太くぼやけて「載せた感じ」になる）
+  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
+  tkSpikes(img, w, h, PI, { angs: [P.anAng || 0, (P.anAng || 0) + 180], len: 0.06 + 0.85 * len * len, sig: Math.max(0.5, (0.7 + soft * 2.6) * res), gain: amt * 1.6, rain: 0, prof: [0.55, 0.1, 0.42], wc: 0.55,
+    colFn: function(s3, c){ return fc[c] * (1 - tint) + s3[c] * tint; }, halo: soft * 0.6, grain: GR });
 }
 // ---------- クロスフィルター：強い光の芯から、4・6・8本の光の筋（光芒）。ラインフレアと同じ光源の選び方 ----------
 //   筋の向きごとに「回した小さな画像の上で両側へ指数で減るぼかし」をかけて足す。虹色＝色ごとに筋の長さと太さを少し変える（先ほど色が分かれる）
@@ -2084,40 +2140,12 @@ function tkCross(img, w, h, P){
     R[k] = img[q]; G[k] = img[q + 1]; B[k] = img[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
-  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx), any = PK.length > 0;
-  tkFlareDeposit(S, R, G, B, Y, sw, sh, PK, function(s3, c){ return 1 - tint + s3[c] * tint; }); var GR = tkFlareGrain(Y, sw, sh);
-  if (!any) return;
-  var diag = Math.sqrt(sw * sw + sh * sh), L1 = (0.015 + 0.25 * len * len) * diag, sg1 = 0.5 + soft * 1.8, sg2 = 2 + soft * 8;
-  var CL = [1 + 0.25 * rain, 1, 1 - 0.3 * rain], CW = [1 + 0.5 * rain, 1, 1 - 0.2 * rain];   // 虹色：赤は長く太く、青は短く細く＝先ほど暖かく、縁に色
-  var A1 = new Float32Array(sn * 3), A2 = new Float32Array(sn * 3), cx = sw / 2, cy = sh / 2, nl = pts / 2, base0 = (P.crAng || 0);
-  var o3 = [0, 0, 0];
-  for (var li = 0; li < nl; li++){
-    var an = (base0 + 180 / nl * li) * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an);
-    var RW = Math.ceil(Math.abs(sw * ux) + Math.abs(sh * uy)) + 2, RH = Math.ceil(Math.abs(sw * uy) + Math.abs(sh * ux)) + 2, cu = RW / 2, cv = RH / 2, rn = RW * RH;
-    var T = [new Float32Array(rn), new Float32Array(rn), new Float32Array(rn)];
-    for (var v = 0; v < RH; v++) for (var u = 0; u < RW; u++){
-      var du = u - cu, dv = v - cv, px = cx + du * ux - dv * uy, py = cy + du * uy + dv * ux; if (px < 0 || py < 0 || px > sw - 1 || py > sh - 1) continue;
-      var x0 = px | 0, y0 = py | 0, x1 = Math.min(sw - 1, x0 + 1), y1 = Math.min(sh - 1, y0 + 1), tx = px - x0, ty = py - y0;
-      for (var c2 = 0; c2 < 3; c2++){ var a0 = S[(y0 * sw + x0) * 3 + c2], a1 = S[(y0 * sw + x1) * 3 + c2], a2 = S[(y1 * sw + x0) * 3 + c2], a3 = S[(y1 * sw + x1) * 3 + c2]; T[c2][v * RW + u] = (a0 + (a1 - a0) * tx) * (1 - ty) + (a2 + (a3 - a2) * tx) * ty; }
-    }
-    var O = [new Float32Array(rn), new Float32Array(rn), new Float32Array(rn)], f1 = new Float32Array(RW);
-    for (var c3 = 0; c3 < 3; c3++){ var aa = Math.exp(-1 / Math.max(1, L1 * CL[c3])), Tc = T[c3], Oc = O[c3];
-      for (v = 0; v < RH; v++){ var rb = v * RW, p1 = 0, q1 = 0; for (u = 0; u < RW; u++){ p1 = Tc[rb + u] + aa * p1; f1[u] = p1; } for (u = RW - 1; u >= 0; u--){ var xw = Tc[rb + u]; q1 = xw + aa * q1; Oc[rb + u] = f1[u] + q1 - xw; } } }
-    var vb = function(A, sg){ var out = new Float32Array(rn), col = new Float32Array(RH); for (var uu = 0; uu < RW; uu++){ for (var vv = 0; vv < RH; vv++) col[vv] = A[vv * RW + uu]; var bl = tkBlur1(col, 1, RH, sg); for (vv = 0; vv < RH; vv++) out[vv * RW + uu] = bl[vv]; } return out; };
-    var C1 = [vb(O[0], sg1 * CW[0]), vb(O[1], sg1 * CW[1]), vb(O[2], sg1 * CW[2])], C2 = [vb(O[0], sg2), vb(O[1], sg2), vb(O[2], sg2)];
-    var STR = tkFlareStria(RH, 777 + li * 131); C1.forEach(function(A){ for (var vv = 0; vv < RH; vv++){ var f = 0.6 + 0.4 * STR[vv]; for (var uu = 0; uu < RW; uu++) A[vv * RW + uu] *= f; } });
-    for (y = 0; y < sh; y++) for (x = 0; x < sw; x++){
-      var dx = x + 0.5 - cx, dy = y + 0.5 - cy, pu = cu + dx * ux + dy * uy, pv = cv - dx * uy + dy * ux; if (pu < 0 || pv < 0 || pu > RW - 1 || pv > RH - 1) continue;
-      var u0 = pu | 0, v0 = pv | 0, u1 = Math.min(RW - 1, u0 + 1), v1 = Math.min(RH - 1, v0 + 1), tx2 = pu - u0, ty2 = pv - v0, k3 = (y * sw + x) * 3;
-      for (var c4 = 0; c4 < 3; c4++){ var A = C1[c4], Bq = C2[c4];
-        A1[k3 + c4] += (A[v0 * RW + u0] + (A[v0 * RW + u1] - A[v0 * RW + u0]) * tx2) * (1 - ty2) + (A[v1 * RW + u0] + (A[v1 * RW + u1] - A[v1 * RW + u0]) * tx2) * ty2;
-        A2[k3 + c4] += (Bq[v0 * RW + u0] + (Bq[v0 * RW + u1] - Bq[v0 * RW + u0]) * tx2) * (1 - ty2) + (Bq[v1 * RW + u0] + (Bq[v1 * RW + u1] - Bq[v1 * RW + u0]) * tx2) * ty2; }
-    }
-  }
-  var gain = amt * 5 / Math.sqrt(nl), SR = new Float32Array(sn * 3);
-  for (i = 0; i < sn; i++){ var core = (A1[i * 3] + A1[i * 3 + 1] + A1[i * 3 + 2]) / 3, wh = tkSS(core * gain / 0.8) * 0.7;
-    for (var c5 = 0; c5 < 3; c5++){ var ln = A1[i * 3 + c5] * (1 - wh) + core * wh; SR[i * 3 + c5] = (ln + A2[i * 3 + c5] * 0.5 * sg2 / (sg1 * 6)) * gain; } }
-  tkFlareComposite(img, w, h, SR, sw, sh, sc, GR);
+  var PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx); if (!PK.length) return;
+  // v165：筋は元の解像度で1本ずつ、髪の毛ほどの細さで描く（縮小して描いて戻すと太く・ぼやけて「載せた感じ」になる）
+  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
+  var angs = [], base0 = (P.crAng || 0); for (var li = 0; li < pts; li++) angs.push(base0 + 360 / pts * li);
+  tkSpikes(img, w, h, PI, { angs: angs, len: 0.02 + 0.22 * len * len + 0.04 * len, sig: Math.max(0.45, (0.4 + soft * 1.6) * res), gain: amt * 2.2, rain: rain * 0.85,
+    colFn: function(s3, c){ return 1 - tint + s3[c] * tint; }, halo: Math.max(0, soft - 0.3) * 1.4, grain: GR });
 }
 // ---------- オールドレンズ風 ----------
 function tkOldLens(img, w, h, P){
