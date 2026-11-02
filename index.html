@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v175</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v176</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1982,7 +1982,7 @@ function tkLightPeaks(Y, sw, sh, rng, MX, EX){
     if (pk && li >= 0.32 * (1 - r2)) out.push({ i: i, w: wv, y: Y[i], s: Y[i] * (0.4 + 0.6 * tkSS((Y[i] - LM[i]) / 0.3)) * li });   // 光らしさが低い点（白い物）は数に入れない。右端ほどゆるく
   }
   out.sort(function(a, b){ return b.s - a.s; });
-  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return tkPeakEx(out, sw, sh, EX); }   // 選んだ光ははっきり（強い光ほど強く）
+  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = TK_STRICT ? 0.85 * Math.pow(Math.min(1, p.s / 0.7), 1.5) : Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return tkPeakEx(out, sw, sh, EX); }   // 動画：いちばん強い光で割らない（コマごとに明るさが跳ねない）   // 選んだ光ははっきり（強い光ほど強く）
   // 0.3から右：強い順の25個（左側の続き）＋明るさのしきい値を超える光。しきい値より下の光は弱めに＝バーを右へ動かすほど必ず増える
   var thw = function(y){ return tkSS((y - thHi) / Math.max(0.04, (1 - thHi) * 0.6)); };
   var s1 = out.length ? out[0].s : 1; out = out.filter(function(p, k){ return k < 60 || (p.y > thHi && p.s > s1 * 0.08); }); out.forEach(function(p, k){ if (k < 60) p.w = Math.max(thw(p.y), 0.85 * Math.pow(p.s / s1, 1.5)); });
@@ -2099,7 +2099,7 @@ function tkGrainEst(img, w, h){
 // 黒の浮き（いちばん暗い1%の明るさ）
 function tkBlackLevel(img, n){ var hb = new Float64Array(256), st = Math.max(1, Math.floor(n / 60000)), c = 0; for (var i = 0; i < n; i += st){ hb[Math.min(255, Math.max(0, tkLuma(img[i * 3], img[i * 3 + 1], img[i * 3 + 2]) * 255) | 0)]++; c++; } var a = 0; for (var b = 0; b < 256; b++){ a += hb[b]; if (a >= c * 0.01) return b / 255; } return 0; }
 // クロス・ラインフレア・レンズフレアの光源は、グローをかける前の写真で探す（グローで膨らんだ光や、先にかけた線を光源と数えない）
-var TK_PRE = null, TK_STRICT = false;
+var TK_PRE = null, TK_STRICT = false, TK_PEAKHOOK = null;
 function tkPreSnap(img, w, h){ var sc = Math.min(1, 720 / Math.max(w, h)), pw = Math.max(8, Math.round(w * sc)), ph = Math.max(8, Math.round(h * sc)), d = new Float32Array(pw * ph * 3);
   for (var y = 0; y < ph; y++) for (var x = 0; x < pw; x++){ var q = (Math.min(h - 1, Math.floor((y + 0.5) / sc)) * w + Math.min(w - 1, Math.floor((x + 0.5) / sc))) * 3, k = (y * pw + x) * 3; d[k] = img[q]; d[k + 1] = img[q + 1]; d[k + 2] = img[q + 2]; }
   return { w: pw, h: ph, d: d }; }
@@ -2180,7 +2180,7 @@ function tkAnamorph(img, w, h, P){
   // 7) 元の大きさへ戻して、光の量として足す
   tkFlareComposite(img, w, h, SR, sw, sh, sc, GR);
   // 8) v165：芯の細い線は元の解像度で1本ずつ（縮小して戻すと太くぼやけて「載せた感じ」になる）
-  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
+  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800); if (TK_PEAKHOOK) PI = TK_PEAKHOOK(PI, w, h, 'ana');
   tkSpikes(img, w, h, PI, { angs: [P.anAng || 0, (P.anAng || 0) + 180], len: 0.06 + 0.85 * len * len, sig: Math.max(0.35, (0.3 + (P.anWidth == null ? 30 : P.anWidth) / 100 * 3 + soft * 0.8) * res), gain: amt * 1.6, rain: 0, prof: [0.55, 0.1, 0.42], wc: 0.55,
     colFn: function(s3, c){ return fc[c] * (1 - tint) + s3[c] * tint; }, halo: soft * 0.6, grain: GR });
 }
@@ -2254,7 +2254,7 @@ function tkCross(img, w, h, P){
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
   var PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx); if (!PK.length) return;
   // v165：筋は元の解像度で1本ずつ、髪の毛ほどの細さで描く（縮小して描いて戻すと太く・ぼやけて「載せた感じ」になる）
-  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
+  var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc); if (TK_PEAKHOOK) PI = TK_PEAKHOOK(PI, w, h, 'cross'); var GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
   var angs = [], base0 = (P.crAng || 0); for (var li = 0; li < pts; li++) angs.push(base0 + 360 / pts * li);
   tkSpikes(img, w, h, PI, { angs: angs, len: 0.02 + 0.22 * len * len + 0.04 * len, sig: Math.max(0.35, (0.25 + (P.crWidth == null ? 30 : P.crWidth) / 100 * 1.6 + soft * 0.3) * res), gain: amt * 2.2, rain: rain * 0.85,
     colFn: function(s3, c){ return 1 - tint + s3[c] * tint; }, halo: Math.max(0, soft - 0.3) * 1.4, grain: GR });

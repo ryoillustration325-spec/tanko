@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v9</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v10</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -193,8 +193,11 @@ in vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0
       const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp sampler3D;\nin vec2 uv; out vec4 o;\n' + fs)); gl.bindAttribLocation(p, 0, 'p'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); const U = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++){ const a = gl.getActiveUniform(p, i); U[a.name] = gl.getUniformLocation(p, a.name); } return { p, U }; };
     // 1) 色：対応表を当てて、強さで元と混ぜる
-    this.pColor = prog(`uniform sampler2D src; uniform sampler3D lut; uniform float N, mixA, useLut;
-void main(){ vec3 c = texture(src, vec2(uv.x, 1. - uv.y)).rgb; vec3 l = c; if (useLut > .5){ l = texture(lut, c * ((N - 1.) / N) + .5 / N).rgb; } o = vec4(mix(c, l, mixA), 1.); }`);
+    this.pColor = prog(`uniform sampler2D src, lt; uniform sampler3D lut; uniform float N, mixA, useLut, useL, lop;
+vec3 lin(vec3 c){ c = clamp(c, 0., 1.); return mix(c / 12.92, pow((c + .055) / 1.055, vec3(2.4)), step(.04045, c)); }
+vec3 gam(vec3 L){ L = clamp(L, 0., 1.); return mix(L * 12.92, 1.055 * pow(L, vec3(1. / 2.4)) - .055, step(.0031308, L)); }
+vec3 ladd(vec3 c, vec3 a){ vec3 L0 = lin(c), L = L0 + a, K = max(vec3(.82), L0); vec3 sh = K + (1. - K) * (1. - exp(-(L - K) / max(vec3(1e-4), 1. - K))); return gam(mix(L, sh, step(K, L))); }
+void main(){ vec3 c = texture(src, vec2(uv.x, 1. - uv.y)).rgb; if (useL > .5) c = ladd(c, lin(texture(lt, vec2(uv.x, 1. - uv.y)).rgb) * lop); vec3 l = c;   /* v10：光は色を作る前に足す＝見本の色が光にもかかり、後から載せた感じにならない */ if (useLut > .5){ l = texture(lut, c * ((N - 1.) / N) + .5 / N).rgb; } o = vec4(mix(c, l, mixA), 1.); }`);
     // 2) 光源の取り出し（にじみ・ハレーション用＝明るさ／グロー用＝明るさの2乗）。色×重み と 重み
     this.pBright = prog(`uniform sampler2D src; uniform float t0, mode, gs, lodM;
 float ss(float x){ x = clamp(x, 0., 1.); return x * x * (3. - 2. * x); }
@@ -205,7 +208,7 @@ void main(){ vec3 c = texture(src, uv).rgb; float y = dot(c, vec3(.2126, .7152, 
     this.pBlur = prog(`uniform sampler2D src; uniform vec2 dir; uniform float sig, lod;
 void main(){ vec4 s = vec4(0.); float ws = 0.; int R = int(ceil(sig * 2.5)); for (int i = -24; i <= 24; i++){ if (i < -R || i > R) continue; float f = float(i); float w = exp(-.5 * f * f / (sig * sig)); s += textureLod(src, uv + dir * f, lod) * w; ws += w; } o = s / ws; }`);
     // 4) 仕上げ：ミスト → ハイライトの余白 → にじみ → グロー → ハレーション → 粒子 → 周辺光量
-    this.pComp = prog(`uniform sampler2D col, gA, gB, hA, hB, dA, mA, lt; uniform float ig, kG1, kG2, hk, dop, mo, cp, gr, vg, vgMid, fr, useG, useH, useD, useM, useL, lop; uniform vec2 res;
+    this.pComp = prog(`uniform sampler2D col, gA, gB, hA, hB, dA, mA; uniform float ig, kG1, kG2, hk, dop, mo, cp, gr, vg, vgMid, fr, useG, useH, useD, useM; uniform vec2 res;
 float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 scr(vec3 a, vec3 b){ return 1. - (1. - a) * (1. - clamp(b, 0., 1.)); }
 vec3 lin(vec3 c){ c = clamp(c, 0., 1.); return mix(c / 12.92, pow((c + .055) / 1.055, vec3(2.4)), step(.04045, c)); }
@@ -217,7 +220,6 @@ void main(){ vec3 c = texture(col, uv).rgb;
  if (useD > .5){ vec4 d = texture(dA, uv) * ig; if (d.a > 1e-4){ vec3 cc = d.rgb / d.a; float al = min(1., d.a * 2.2) * dop; c = mix(c, c + (cc - c) * al, step(c, cc)); } }
  if (useG > .5){ c = ladd(c, lin(clamp(texture(gA, uv).rgb * ig * kG1 + texture(gB, uv).rgb * ig * kG2, 0., 1.)) * 1.25); }
  if (useH > .5){ float ha = texture(hA, uv).a, hb = texture(hB, uv).a, f = max(0., ha - hb) * ig * hk, nr = smoothstep(0., .9, hb / max(1e-4, ha)); c = ladd(c, lin(vec3(min(f, 1.))).r * 1.3 * vec3(1., .16 + .22 * nr, .05 + .08 * nr)); }
- if (useL > .5) c = ladd(c, lin(texture(lt, vec2(uv.x, 1. - uv.y)).rgb) * lop);
  if (gr > 0.){ vec2 q = uv * res; float y = dot(c, vec3(.2126, .7152, .0722)); float nz = (h12(q + fr * 17.13) + h12(q + fr * 31.7 + 5.1) + h12(q + fr * 7.9 + 11.3) - 1.5) * gr * (.35 + 2.6 * y * (1. - y)); c += nz; }
  if (vg != 0.){ vec2 p = (uv - .5) * res; float R = length(res) * .5, r0 = R * (.18 + .62 * vgMid), r1 = R * 1.02; float a = clamp((length(p) - r0) / (r1 - r0), 0., 1.) * abs(vg) * .8; c = vg < 0. ? c * (1. - a) : c + a * (1. - c); }
  o = vec4(clamp(c, 0., 1.), 1.); }`);
@@ -261,7 +263,8 @@ void main(){ vec3 c = texture(col, uv).rgb;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.src); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     const L = Math.max(W, H), col = this.target('col', W, H, true);
-    this.draw(this.pColor, col, W, H, { N: this.N || 2, mixA: this.lut ? mix / 100 : 0, useLut: this.lut ? 1 : 0 }, { src: { t: this.src }, lut: { t: this.lut || this.dummy3, is3: true } });
+    if (light){ gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.ltT); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, light.w, light.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, light.data); }
+    this.draw(this.pColor, col, W, H, { N: this.N || 2, mixA: this.lut ? mix / 100 : 0, useLut: this.lut ? 1 : 0, useL: light ? 1 : 0, lop: (fx.ltOp == null ? 100 : fx.ltOp) / 100 }, { src: { t: this.src }, lt: { t: light ? this.ltT : this.src }, lut: { t: this.lut || this.dummy3, is3: true } });
     const doG = fx.glow > 0, doH = fx.hal > 0, doD = fx.diff > 0, doM = fx.mist > 0, t0 = fx.thr / 100;
     const T = {};
     if (doG || doH || doD || doM){ gl.bindTexture(gl.TEXTURE_2D, col.tex); gl.generateMipmap(gl.TEXTURE_2D); }
@@ -273,10 +276,8 @@ void main(){ vec3 c = texture(col, uv).rgb;
       const sG = L * fx.glowR * .001; T.gA = this.blur(b, sG, q, 'g1'); T.gB = this.blur(b, sG * 3, q, 'g2'); }
     if (doM) T.mA = this.blur(col, L * fx.diffR * .0009, 1, 'm');
     const z = { t: col.tex }, tx = { col: { t: col.tex } };
-    if (light){ gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.ltT); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, light.w, light.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, light.data); }
-    tx.lt = light ? { t: this.ltT } : z;
     ['gA', 'gB', 'hA', 'hB', 'dA', 'mA'].forEach(k => { tx[k] = T[k] ? { t: T[k].tex } : z; });
-    this.draw(this.pComp, null, W, H, { ig: this.fxHalf ? 1 : 1 / 8, kG1: fx.glow / 100 * 1.6 * 1.25, kG2: fx.glow / 100 * .5 * 1.25, hk: fx.hal / 100 * 1.6 * 1.5, dop: fx.diff / 100, mo: fx.mist / 100 * .35 * 1.1, cp: fx.comp / 100, gr: fx.grain / 100 * .16 * .8, vg: fx.vgAmt / 100, vgMid: fx.vgMid / 100, fr: frame % 997, res: [W, H], useG: doG ? 1 : 0, useH: doH ? 1 : 0, useD: doD ? 1 : 0, useM: doM ? 1 : 0, useL: light ? 1 : 0, lop: (fx.ltOp == null ? 100 : fx.ltOp) / 100 }, tx);
+    this.draw(this.pComp, null, W, H, { ig: this.fxHalf ? 1 : 1 / 8, kG1: fx.glow / 100 * 1.6 * 1.25, kG2: fx.glow / 100 * .5 * 1.25, hk: fx.hal / 100 * 1.6 * 1.5, dop: fx.diff / 100, mo: fx.mist / 100 * .35 * 1.1, cp: fx.comp / 100, gr: fx.grain / 100 * .16 * .8, vg: fx.vgAmt / 100, vgMid: fx.vgMid / 100, fr: frame % 997, res: [W, H], useG: doG ? 1 : 0, useH: doH ? 1 : 0, useD: doD ? 1 : 0, useM: doM ? 1 : 0 }, tx);
   }
 }
 
@@ -287,25 +288,33 @@ function lightP(fx, prev){ return { on: { ana: fx.anAmt > 0 ? 1 : 0, cross: fx.c
   anAmt: fx.anAmt, anRange: fx.anRange, anLen: fx.anLen, anWidth: 30, anSoft: 30, anAng: 0, anTint: 20, anColor: 'blue',
   flAmt: fx.flAmt, flGhost: fx.flGhost, flDist: fx.flDist, flSize: fx.flSize, flSpread: 40, flCount: 2, flClear: 25, flBlend: 60, flShape: 40, _flPrev: prev }; }
 // コマ（2Dの画面）から光の層を作る。maxL：光を描く大きさ（長辺）
-function makeLight(srcCv, fx, maxL, prev){
+function makeLight(srcCv, fx, maxL, prev, trk){
   if (typeof window.tkCross !== 'function') return null;
   const sw = srcCv.width, sh = srcCv.height, k = Math.min(1, maxL / Math.max(sw, sh)), w = Math.max(2, Math.round(sw * k)), h = Math.max(2, Math.round(sh * k));
   const c = makeLight.cv || (makeLight.cv = document.createElement('canvas')); if (c.width !== w || c.height !== h){ c.width = w; c.height = h; }
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(srcCv, 0, 0, w, h); const d = x.getImageData(0, 0, w, h).data, n = w * h;
   const img = new Float32Array(n * 3); for (let i = 0; i < n; i++){ img[i * 3] = d[i * 4] / 255; img[i * 3 + 1] = d[i * 4 + 1] / 255; img[i * 3 + 2] = d[i * 4 + 2] / 255; }
   const P = lightP(fx, prev), out = new Float32Array(n * 3);
-  window.TK_PRE = tkPreSnap(img, w, h); window.TK_STRICT = true;
-  try{ if (P.on.ana) tkAnamorph(out, w, h, P); if (P.on.cross) tkCross(out, w, h, P); if (P.on.flare) tkFlare(out, w, h, P); } finally { window.TK_PRE = null; window.TK_STRICT = false; }
+  window.TK_PRE = tkPreSnap(img, w, h); window.TK_STRICT = true; window.TK_PEAKHOOK = trk ? (PI, W2, H2, k) => trackPeaks(trk[k] || (trk[k] = []), PI, W2, H2) : null;
+  try{ if (P.on.ana) tkAnamorph(out, w, h, P); if (P.on.cross) tkCross(out, w, h, P); if (P.on.flare) tkFlare(out, w, h, P); } finally { window.TK_PRE = null; window.TK_STRICT = false; window.TK_PEAKHOOK = null; }
   const o = new Uint8Array(n * 4); for (let i = 0; i < n; i++){ o[i * 4] = out[i * 3] * 255 + .5; o[i * 4 + 1] = out[i * 3 + 1] * 255 + .5; o[i * 4 + 2] = out[i * 3 + 2] * 255 + .5; o[i * 4 + 3] = 255; }
   return { data: o, w, h };
 }
-const LT = { last: null, at: 0, prev: {}, key: '', ms: 0, slow: false };
+const LT = { last: null, at: 0, prev: {}, key: '', ms: 0, slow: false, trk: {} };
+// コマ間で光を追いかける：同じ光は強さをなめらかに、新しく出た光は数コマかけて現れ、消えた光は1コマだけ薄く残す（ぱっと出たり消えたりしない）
+function trackPeaks(T, PI, w, h){
+  const r = 0.025 * Math.hypot(w, h), used = new Set(), out = [], nt = [];
+  PI.forEach(p => { let bi = -1, bd = r * r; T.forEach((q, i) => { if (used.has(i)) return; const dx = q.x * w - p.x, dy = q.y * h - p.y, d = dx * dx + dy * dy; if (d < bd){ bd = d; bi = i; } });
+    const E = bi >= 0 ? T[bi].E + (p.E - T[bi].E) * 0.45 : p.E * 0.35; if (bi >= 0) used.add(bi); out.push(Object.assign({}, p, { E })); nt.push({ x: p.x / w, y: p.y / h, E, s3: p.s3 }); });
+  T.forEach((q, i) => { if (used.has(i) || q.fading || q.E < 0.12) return; const E = q.E * 0.35; out.push({ x: q.x * w, y: q.y * h, E, s3: q.s3 }); nt.push({ x: q.x, y: q.y, E, s3: q.s3, fading: 1 }); });
+  T.length = 0; nt.forEach(q => T.push(q)); return out;
+}
 function previewLight(fx){
   if (S.orig || !lightOn(fx)) return null;
   if (typeof window.tkCross !== 'function'){ loadEngine().then(() => redraw()).catch(() => {}); return null; }
   const now = performance.now(), key = JSON.stringify([fx.crAmt, fx.crRange, fx.crLen, fx.crWidth, fx.anAmt, fx.anRange, fx.anLen, fx.flAmt, fx.flGhost, fx.flDist, fx.flSize, video.currentTime]);
   // v9：再生中も毎コマ描き直す（前のコマの光を使い回すと、動いた所の跡を追いかけて見える）。重い端末では再生中だけ光を出さない（止めた時と書き出しは毎コマ正しく描く）
-  if (!video.paused){ if (LT.slow) return null; const t = performance.now(), r = makeLight(fcv, fx, 360, LT.prev), dt = performance.now() - t; LT.ms = LT.ms ? LT.ms * 0.8 + dt * 0.2 : dt; if (LT.ms > 80){ LT.slow = true; toast('再生中は光の効果を省いて表示します（止めた時・書き出しには入ります）'); } LT.last = null; return r; }
+  if (!video.paused){ if (LT.slow) return null; const t = performance.now(), r = makeLight(fcv, fx, 360, LT.prev, LT.trk), dt = performance.now() - t; LT.ms = LT.ms ? LT.ms * 0.8 + dt * 0.2 : dt; if (LT.ms > 80){ LT.slow = true; toast('再生中は光の効果を省いて表示します（止めた時・書き出しには入ります）'); } LT.last = null; return r; }
   if (LT.last && key === LT.key) return LT.last;
   LT.last = makeLight(fcv, fx, 960, null); LT.at = performance.now(); LT.key = key; return LT.last;
 }
@@ -331,7 +340,7 @@ $('seek').addEventListener('input', () => { seeking = true; if (video.duration) 
 $('seek').addEventListener('change', () => { seeking = false; });
 video.addEventListener('seeked', () => paint());
 $('play').addEventListener('click', () => { if (!video.src) return; if (video.paused) video.play(); else video.pause(); });
-video.addEventListener('play', () => { $('playIco').innerHTML = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>'; });
+video.addEventListener('play', () => { LT.trk = {}; LT.prev = {}; $('playIco').innerHTML = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>'; });
 video.addEventListener('pause', () => { $('playIco').innerHTML = '<path d="M7 5v14l12-7z"/>'; paint(); });
 // 光らせる明るさを、この動画のいちばん明るい所に合わせる（動画は写真より明るい所が少なく、そのままだとグローがかからないことがある）
 function fitThr(){ try{ const c = document.createElement('canvas'); c.width = 96; c.height = Math.max(2, Math.round(96 * fcv.height / Math.max(1, fcv.width))); const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(fcv, 0, 0, c.width, c.height);
@@ -389,12 +398,12 @@ $('exp').addEventListener('click', async () => {
     if (!codec && (await canEncodeVideo('vp9', { width: W, height: H }))){ codec = 'vp9'; webm = true; }   /* MP4（H.264）が作れない環境だけ WebM */
     if (!codec) throw new Error('この端末では動画の書き出しに対応していません');
     const ocv = document.createElement('canvas'), R2 = new Renderer(ocv); if (S.look) R2.setLut(S.look.lut, S.look.N);
-    const tmp = new OffscreenCanvas(W, H), tctx = tmp.getContext('2d', { willReadFrequently: true }); let fn = 0; const useLt = lightOn(S.fx), ltPrev = {};
+    const tmp = new OffscreenCanvas(W, H), tctx = tmp.getContext('2d', { willReadFrequently: true }); let fn = 0; const useLt = lightOn(S.fx), ltPrev = {}, ltTrk = {};
     if (useLt) await loadEngine();
     const output = new Output({ format: webm ? new WebMOutputFormat() : new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
     conv = await Conversion.init({ input, output, showWarnings: false,
       video: { width: W, height: H, fit: 'fill', codec, bitrate: Math.round(W * H * 30 * 0.2), forceTranscode: true, processedWidth: W, processedHeight: H,
-        process: (sample) => { sample.draw(tctx, 0, 0, W, H); R2.render(tmp, W, H, S.mix, S.fx, fn++, useLt ? makeLight(tmp, S.fx, 1280, ltPrev) : null); return ocv; } },
+        process: (sample) => { sample.draw(tctx, 0, 0, W, H); R2.render(tmp, W, H, S.mix, S.fx, fn++, useLt ? makeLight(tmp, S.fx, 1280, ltPrev, ltTrk) : null); return ocv; } },
       audio: {} });
     if (!conv.isValid) throw new Error('この動画は書き出せません（' + conv.discardedTracks.map(d => d.reason).join(', ') + '）');
     const dur = await input.computeDuration();
