@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v170</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v171</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -940,10 +940,10 @@ function tkProcess(src, w, h, P){
   }
 
   // 6.3) ラインフレア（アナモルフィック風）
-  if (P.on.ana && P.anAmt > 0) tkAnamorph(img, w, h, P);
+  if (P.on.ana && P.anAmt > 0) tkFxLayer(img, w, h, P, 'anMode', 'anOp', function(){ tkAnamorph(img, w, h, P); });
   // 6.4) クロスフィルター
-  if (P.on.cross && P.crAmt > 0) tkCross(img, w, h, P);
-  if (P.on.flare && ((P.flAmt == null ? 35 : P.flAmt) > 0 || (P.flGhost == null ? 40 : P.flGhost) > 0)) tkFlare(img, w, h, P);
+  if (P.on.cross && P.crAmt > 0) tkFxLayer(img, w, h, P, 'crMode', 'crOp', function(){ tkCross(img, w, h, P); });
+  if (P.on.flare && ((P.flAmt == null ? 35 : P.flAmt) > 0 || (P.flGhost == null ? 40 : P.flGhost) > 0)) tkFxLayer(img, w, h, P, 'flMode', 'flOp', function(){ tkFlare(img, w, h, P); });
 
   // 6.5) 光の差し込み（窓の光／光漏れ）
   if (P.on.ray && P.rAmt > 0) tkRays(img, w, h, P);
@@ -2068,6 +2068,27 @@ function tkSpikes(img, w, h, PI, o){
         a3[0] = g * col[0]; a3[1] = g * col[1]; a3[2] = g * col[2]; add((yy * w + xx) * 3, a3); }
     }
   });
+}
+// ⑥ v171：光の効果の重ね方（描画モード）と不透明度。効果をかける前の写真を「下の層」、足された光を「上の層」として重ね直す
+//   加算＝光をそのまま足す（今まで通り）／スクリーン＝明るい所ほど控えめ／ソフトライト＝下の写真の明暗が透ける／オーバーレイ＝コントラスト強め／比較明＝下の写真より明るい所だけ
+function tkFxLayer(img, w, h, P, mk, ok, fn){
+  var op = (P[ok] == null ? 100 : P[ok]) / 100, md = P[mk] || 'add';
+  if (op >= 1 && md === 'add'){ fn(); return; }
+  var base = img.slice(); fn();
+  for (var i = 0, n = w * h * 3; i < n; i++){
+    var b = base[i], r = img[i], o;
+    if (r === b) continue;
+    if (md === 'add') o = r;
+    else {
+      var L = tkGam(Math.max(0, tkLin(r) - tkLin(b)));   // 上の層＝黒の上に光だけを描いたもの
+      if (md === 'screen') o = b + L * (1 - b);
+      else if (md === 'soft') o = b + L * (b - b * b) * 1.6;
+      else if (md === 'overlay') o = b < 0.5 ? b * (1 + L) : b + L * (1 - b);
+      else if (md === 'lighten') o = Math.max(b, L);
+      else o = r;
+    }
+    img[i] = b + (o - b) * op;
+  }
 }
 // ---------- ラインフレア（アナモルフィック風フィルター）：強い光から、決めた角度へ長い光の線 ----------
 //   明るい点を取り出し、線の向きに回した小さな画像の上で「片側ずつ指数で減る」長いぼかしをかけ、元の向きに戻して重ねる。
@@ -3955,13 +3976,13 @@ function tkLook2(img, n, P, w, h){
       sliders: [['hal','強さ',0,100,10]],
       hint: '芯は白のまま、外へ広がった光だけに色が付きます。映画っぽさの決め手。' },
     { key: 'ana', title: 'ラインフレア', sub: 'アナモルフィック風：強い光から長い光の線', custom: buildAnaExtra,
-      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,30],['anLen','長さ',0,100,55],['anWidth','太さ',0,100,30],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20]],
+      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,30],['anLen','長さ',0,100,55],['anWidth','太さ',0,100,30],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20],['anOp','不透明度',0,100,100]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけ。右へ動かすほど、弱い光からも線が出ます。角度0で水平、90で垂直。' },
     { key: 'cross', title: 'クロスフィルター', sub: '強い光から4・6・8本の光の筋', custom: buildCrossExtra,
-      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crWidth','太さ',0,100,30],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
+      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crWidth','太さ',0,100,30],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50],['crOp','不透明度',0,100,100]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけがクロスします。右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
     { key: 'flare', title: 'レンズフレア', sub: '逆光の白っぽさ（ベール）と光の玉（ゴースト）', custom: buildFlareExtra,
-      sliders: [['flAmt','ベール',0,100,35],['flSpread','ベールの広がり',0,100,40],['flGhost','ゴースト',0,100,40],['flCount','ゴーストの数',1,4,3],['flDist','ゴーストの距離',0,100,50],['flSize','ゴーストの大きさ',0,100,40],['flClear','透明感',0,100,25],['flBlend','なじませ',0,100,60],['flShape','形の崩し',0,100,40]],
+      sliders: [['flAmt','ベール',0,100,35],['flSpread','ベールの広がり',0,100,40],['flGhost','ゴースト',0,100,40],['flCount','ゴーストの数',1,4,3],['flDist','ゴーストの距離',0,100,50],['flSize','ゴーストの大きさ',0,100,40],['flClear','透明感',0,100,25],['flBlend','なじませ',0,100,60],['flShape','形の崩し',0,100,40],['flOp','不透明度',0,100,100]],
       hint: '光源は写真のいちばん大きい光（太陽・窓）を自動で選びます。写っていない光や別の光にしたい時は、写真の上で位置を決めてください。ゴーストは光源と画面の中心を結ぶ線の上に並びます。' },
     { key: 'comp', title: 'ハイライト余白', sub: '白を少し沈めて、光を足しても飛ばさない',
       sliders: [['comp','量',0,100,30]],
@@ -5234,6 +5255,14 @@ function tkLook2(img, n, P, w, h){
     body.appendChild(seg);
     XE.diffNote = xel('div', 'hint', ''); body.appendChild(XE.diffNote);
   }
+  function blendSeg(body, mk, key){
+    var TK_BLENDS = [['add','加算'],['screen','スクリーン'],['soft','ソフト'],['overlay','オーバーレイ'],['lighten','比較明']];
+    var cap = xel('div', 'xcap', '描画モード'); cap.style.cssText = 'font-size:11px;color:var(--faint);margin:6px 2px 0';
+    var seg = xel('div', 'seg l5seg'); seg.style.flexWrap = 'wrap';
+    TK_BLENDS.forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0];
+      b.addEventListener('click', function(){ P[mk] = m[0]; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } updateExtras(); clearPresetMark(); schedule(); }); seg.appendChild(b); });
+    body.appendChild(cap); body.appendChild(seg); (XE.blendSegs = XE.blendSegs || []).push([seg, mk]);
+  }
   function buildCrossExtra(body){
     var seg = xel('div', 'seg'); XE.crossSeg = seg;
     [[4,'4本'],[6,'6本'],[8,'8本']].forEach(function(m){
@@ -5242,6 +5271,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    blendSeg(body, 'crMode', 'cross');
     XE.crPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'cross'); }); body.appendChild(XE.crPick);
     var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
     var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
@@ -5257,6 +5287,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    blendSeg(body, 'anMode', 'ana');
     XE.anPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'ana'); }); body.appendChild(XE.anPick);
     var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
     var sg = xel('div', 'seg'); [['off','なぞって外す'],['on','なぞって戻す']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0]; b.addEventListener('click', function(){ LP.brush = m[0]; updateExtras(); }); sg.appendChild(b); }); lt.appendChild(sg);
@@ -5269,6 +5300,7 @@ function tkLook2(img, n, P, w, h){
     XE.flPick = xbtn('写真の上で光源の位置を決める', 'ghost', function(){ startPick('flare'); }); rw.appendChild(XE.flPick);
     XE.flAuto = xbtn('自動に戻す', 'ghost', function(){ delete P.flx; delete P.fly; updateExtras(); clearPresetMark(); schedule(); }); rw.appendChild(XE.flAuto);
     body.appendChild(rw);
+    blendSeg(body, 'flMode', 'flare');
   }
   function buildRayExtra(body){
     var seg = xel('div', 'seg'); XE.raySeg = seg;
@@ -6595,6 +6627,7 @@ function tkLook2(img, n, P, w, h){
     if (XE.crPick){ XE.crPick.style.display = PICK === 'lp' && LP.fx === 'cross' ? 'none' : ''; XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
     if (XE.anPick){ XE.anPick.style.display = PICK === 'lp' && LP.fx === 'ana' ? 'none' : ''; XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
     if (XE.diffSeg){ Array.prototype.forEach.call(XE.diffSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.diffType || 'black')); }); XE.diffNote.textContent = P.diffType === 'white' ? '光のまわりが柔らかくにじみ、画面全体に薄い白のベール。黒が浮いてコントラストが下がる（淡い仕上がり）。' : '明るい光の縁だけが暗い隣へにじむ。黒は沈んだまま・コントラストはほぼそのまま。'; }
+    (XE.blendSegs || []).forEach(function(d){ Array.prototype.forEach.call(d[0].children, function(b){ b.classList.toggle('on', b.dataset.m === (P[d[1]] || 'add')); }); });
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
     if (XE.anaSeg) Array.prototype.forEach.call(XE.anaSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.anColor || 'orange')); });
     if (XE.raySeg){
