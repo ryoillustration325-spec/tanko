@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v165</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v166</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2124,7 +2124,7 @@ function tkAnamorph(img, w, h, P){
   tkFlareComposite(img, w, h, SR, sw, sh, sc, GR);
   // 8) v165：芯の細い線は元の解像度で1本ずつ（縮小して戻すと太くぼやけて「載せた感じ」になる）
   var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
-  tkSpikes(img, w, h, PI, { angs: [P.anAng || 0, (P.anAng || 0) + 180], len: 0.06 + 0.85 * len * len, sig: Math.max(0.5, (0.7 + soft * 2.6) * res), gain: amt * 1.6, rain: 0, prof: [0.55, 0.1, 0.42], wc: 0.55,
+  tkSpikes(img, w, h, PI, { angs: [P.anAng || 0, (P.anAng || 0) + 180], len: 0.06 + 0.85 * len * len, sig: Math.max(0.35, (0.3 + (P.anWidth == null ? 30 : P.anWidth) / 100 * 3 + soft * 0.8) * res), gain: amt * 1.6, rain: 0, prof: [0.55, 0.1, 0.42], wc: 0.55,
     colFn: function(s3, c){ return fc[c] * (1 - tint) + s3[c] * tint; }, halo: soft * 0.6, grain: GR });
 }
 // ---------- クロスフィルター：強い光の芯から、4・6・8本の光の筋（光芒）。ラインフレアと同じ光源の選び方 ----------
@@ -2144,7 +2144,7 @@ function tkCross(img, w, h, P){
   // v165：筋は元の解像度で1本ずつ、髪の毛ほどの細さで描く（縮小して描いて戻すと太く・ぼやけて「載せた感じ」になる）
   var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc), GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
   var angs = [], base0 = (P.crAng || 0); for (var li = 0; li < pts; li++) angs.push(base0 + 360 / pts * li);
-  tkSpikes(img, w, h, PI, { angs: angs, len: 0.02 + 0.22 * len * len + 0.04 * len, sig: Math.max(0.45, (0.4 + soft * 1.6) * res), gain: amt * 2.2, rain: rain * 0.85,
+  tkSpikes(img, w, h, PI, { angs: angs, len: 0.02 + 0.22 * len * len + 0.04 * len, sig: Math.max(0.35, (0.25 + (P.crWidth == null ? 30 : P.crWidth) / 100 * 1.6 + soft * 0.3) * res), gain: amt * 2.2, rain: rain * 0.85,
     colFn: function(s3, c){ return 1 - tint + s3[c] * tint; }, halo: Math.max(0, soft - 0.3) * 1.4, grain: GR });
 }
 // ---------- オールドレンズ風 ----------
@@ -3903,10 +3903,10 @@ function tkLook2(img, n, P, w, h){
       sliders: [['hal','強さ',0,100,10]],
       hint: '芯は白のまま、外へ広がった光だけに色が付きます。映画っぽさの決め手。' },
     { key: 'ana', title: 'ラインフレア', sub: 'アナモルフィック風：強い光から長い光の線', custom: buildAnaExtra,
-      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,30],['anLen','長さ',0,100,55],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20]],
+      sliders: [['anAmt','強さ',0,100,50],['anRange','光の範囲',0,100,30],['anLen','長さ',0,100,55],['anWidth','太さ',0,100,30],['anSoft','滲み',0,100,30],['anAng','角度',0,179,0],['anTint','光源の色を残す',0,100,20]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけ。右へ動かすほど、弱い光からも線が出ます。角度0で水平、90で垂直。' },
     { key: 'cross', title: 'クロスフィルター', sub: '強い光から4・6・8本の光の筋', custom: buildCrossExtra,
-      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
+      sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crWidth','太さ',0,100,30],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけがクロスします。右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
     { key: 'comp', title: 'ハイライト余白', sub: '白を少し沈めて、光を足しても飛ばさない',
       sliders: [['comp','量',0,100,30]],
@@ -4010,7 +4010,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
