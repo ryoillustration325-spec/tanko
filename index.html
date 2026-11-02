@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v166</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v167</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -943,6 +943,7 @@ function tkProcess(src, w, h, P){
   if (P.on.ana && P.anAmt > 0) tkAnamorph(img, w, h, P);
   // 6.4) クロスフィルター
   if (P.on.cross && P.crAmt > 0) tkCross(img, w, h, P);
+  if (P.on.flare && ((P.flAmt == null ? 35 : P.flAmt) > 0 || (P.flGhost == null ? 40 : P.flGhost) > 0)) tkFlare(img, w, h, P);
 
   // 6.5) 光の差し込み（窓の光／光漏れ）
   if (P.on.ray && P.rAmt > 0) tkRays(img, w, h, P);
@@ -2127,6 +2128,44 @@ function tkAnamorph(img, w, h, P){
   tkSpikes(img, w, h, PI, { angs: [P.anAng || 0, (P.anAng || 0) + 180], len: 0.06 + 0.85 * len * len, sig: Math.max(0.35, (0.3 + (P.anWidth == null ? 30 : P.anWidth) / 100 * 3 + soft * 0.8) * res), gain: amt * 1.6, rain: 0, prof: [0.55, 0.1, 0.42], wc: 0.55,
     colFn: function(s3, c){ return fc[c] * (1 - tint) + s3[c] * tint; }, halo: soft * 0.6, grain: GR });
 }
+// ---------- レンズフレア（v167）：逆光の白っぽさ（ベール）＋光の玉（ゴースト） ----------
+//   光源は写真のいちばん大きい光の塊（太陽・窓）か、指で決めた位置。強さは光源のまわりの白飛びの量で決まる＝葉で隠れていれば弱い。
+//   ゴーストは光源と画面の中心を結ぶ線の上（中心をはさんだ反対側にも）に並ぶ。光として足すので、明るい所では溶け、暗い所でだけ見える
+var TK_GHOSTS = [{ t: -0.55, r: 0.07, c: [1, 0.58, 0.24] }, { t: -1.0, r: 0.032, c: [0.58, 1, 0.68] }, { t: 0.42, r: 0.02, c: [0.78, 0.62, 1] }, { t: -0.25, r: 0.045, c: [0.5, 0.75, 1] }];
+function tkFlare(img, w, h, P){
+  var veil = (P.flAmt == null ? 35 : P.flAmt) / 100, spr = (P.flSpread == null ? 40 : P.flSpread) / 100, gho = (P.flGhost == null ? 40 : P.flGhost) / 100,
+      dist = (P.flDist == null ? 50 : P.flDist) / 100, size = (P.flSize == null ? 40 : P.flSize) / 100, clr = (P.flClear == null ? 50 : P.flClear) / 100, n = Math.max(1, Math.min(4, Math.round(P.flCount || 3)));
+  if (veil <= 0 && gho <= 0) return;
+  var diag = Math.sqrt(w * w + h * h), sc = Math.min(1, 640 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc)), sn = sw * sh, x, y;
+  var R = new Float32Array(sn), G = new Float32Array(sn), B = new Float32Array(sn), Y = new Float32Array(sn), MX = new Float32Array(sn);
+  for (y = 0; y < sh; y++) for (x = 0; x < sw; x++){ var q = (Math.min(h - 1, Math.floor((y + 0.5) / sc)) * w + Math.min(w - 1, Math.floor((x + 0.5) / sc))) * 3, k = y * sw + x; R[k] = img[q]; G[k] = img[q + 1]; B[k] = img[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k]; MX[k] = Math.max(R[k], G[k], B[k]); }
+  var src = null, rq = Math.round(Math.max(sw, sh) * 0.05);
+  function clipAt(qx, qy, r){ var a = 0, c = 0; for (var yy = Math.max(0, qy - r); yy < Math.min(sh, qy + r); yy++) for (var xx = Math.max(0, qx - r); xx < Math.min(sw, qx + r); xx++){ c++; a += tkSS((MX[yy * sw + xx] - 0.88) / 0.1) * (0.3 + 0.7 * tkSS((Y[yy * sw + xx] - 0.75) / 0.2)); } return [a, c]; }
+  if (P.flx != null){
+    var cm = clipAt(Math.round(P.flx * sw), Math.round(P.fly * sh), rq), qx0 = Math.min(sw - 1, Math.max(0, Math.round(P.flx * sw))), qy0 = Math.min(sh - 1, Math.max(0, Math.round(P.fly * sh))), k0 = qy0 * sw + qx0, m0 = Math.max(1e-4, R[k0], G[k0], B[k0]);
+    src = { x: P.flx * w, y: P.fly * h, E: Math.max(0.7, Math.min(1, 0.35 + 3 * cm[0] / Math.max(1, cm[1]))), s3: [R[k0] / m0, G[k0] / m0, B[k0] / m0] };   // 指で決めた時は、光が写っていなくても出す（画面外の太陽）
+  } else {
+    var PK = tkLightPeaks(Y, sw, sh, 0.35, MX, null); if (!PK.length) return;
+    var best = -1; tkPeakInfo(PK, R, G, B, Y, sw, sh, sc).forEach(function(p){ var a = clipAt(Math.round(p.x * sc), Math.round(p.y * sc), rq); if (a[0] > best){ best = a[0]; src = p; src.cnt = a[1]; } });   // いちばん大きい光の塊
+    var frac = best / Math.max(1, src.cnt); if (frac < 0.3) return;   // 白く飛んだ光の塊がない写真（白い壁など）には出さない
+    src.E = Math.min(1, 0.35 + 3 * frac);
+  }
+  var E = src.E, cs = [0.6 + 0.4 * src.s3[0], 0.6 + 0.4 * src.s3[1], 0.6 + 0.4 * src.s3[2]], cx = w / 2, cy = h / 2, vx = src.x - cx, vy = src.y - cy;
+  var GH = gho > 0 ? TK_GHOSTS.slice(0, n).map(function(g){ var t = g.t * (0.3 + dist * 1.4); return { x: cx + vx * t, y: cy + vy * t, r: g.r * (0.4 + size * 1.6) * diag, c: g.c }; }) : [];
+  var fill = 0.15 + 0.85 * (1 - clr), rimW = 0.25 + 0.75 * clr, gA = gho * E * 0.3, vA = veil * E, d1 = 0.08 + spr * 0.3, d0 = 0.012 + spr * 0.05, gl = 0.01 + spr * 0.04;
+  var NZ = tkBlur1(tkFlareStria(256, 31), 1, 256, 10);   // 玉の中のごく薄い、なだらかなむら
+  var hs = 2166136261, add = [0, 0, 0];
+  for (y = 0; y < h; y++) for (x = 0; x < w; x++){
+    var j = (y * w + x) * 3, dx = x + 0.5 - src.x, dy = y + 0.5 - src.y, d = Math.sqrt(dx * dx + dy * dy) / diag, c;
+    var vl = vA * (gl + 0.2 * Math.exp(-d / d1) + 0.45 * Math.exp(-d / d0));
+    add[0] = vl * cs[0]; add[1] = vl * cs[1]; add[2] = vl * cs[2];
+    for (var g = 0; g < GH.length; g++){ var Gh = GH[g], ex = x + 0.5 - Gh.x, ey = y + 0.5 - Gh.y, rd = Math.sqrt(ex * ex + ey * ey) / Gh.r; if (rd > 1.25) continue;
+      var mu = 0.8 + 0.2 * NZ[((Math.atan2(ey, ex) / 6.2832 * 256 + rd * 40 + g * 60) | 0) & 255];
+      for (c = 0; c < 3; c++){ var rc = rd * (1 + (c - 1) * 0.035), disc = 1 - tkSS((rc - 0.8) / 0.2), edge = Math.exp(-Math.pow((rc - 0.9) / 0.08, 2)); add[c] += gA * Gh.c[c] * (fill * disc * mu + rimW * 0.7 * edge); } }
+    hs = Math.imul(hs ^ (j + 7), 16777619) >>> 0; var nz = 1 + 0.12 * ((hs & 4095) / 4095 - 0.5);
+    for (c = 0; c < 3; c++){ var a = add[c] * nz; if (a < 0.0005) continue; var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0); if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); }
+  }
+}
 // ---------- クロスフィルター：強い光の芯から、4・6・8本の光の筋（光芒）。ラインフレアと同じ光源の選び方 ----------
 //   筋の向きごとに「回した小さな画像の上で両側へ指数で減るぼかし」をかけて足す。虹色＝色ごとに筋の長さと太さを少し変える（先ほど色が分かれる）
 function tkCross(img, w, h, P){
@@ -2437,7 +2476,7 @@ function tkPaletteStats(px, n){
 }
 // 目標（好みで強さ・向きを変える）へ、灰色の色かぶり・青と暖色の鮮やかさを数回で合わせる
 function tkPrefFit(src, w, h, P, opt){
-  var n = w * h, Q = JSON.parse(JSON.stringify(P)); Q.lm = []; if (Q.on){ Q.on.reg = 0; Q.on.match = 0; ['glow', 'grain', 'skin', 'det', 'fx', 'diff', 'hal', 'mist', 'comp', 'ray', 'lens', 'ana', 'cross'].forEach(function(k){ Q.on[k] = 0; }); }
+  var n = w * h, Q = JSON.parse(JSON.stringify(P)); Q.lm = []; if (Q.on){ Q.on.reg = 0; Q.on.match = 0; ['glow', 'grain', 'skin', 'det', 'fx', 'diff', 'hal', 'mist', 'comp', 'ray', 'lens', 'ana', 'cross', 'flare'].forEach(function(k){ Q.on[k] = 0; }); }
   var rot = opt.rot || 0, Tn = tkRot(TK_PT.neu, rot), Ts = tkRot(TK_PT.sh, rot);
   Tn = [Tn[0] * opt.mt, Tn[1] * opt.mt]; Ts = [Ts[0] * opt.st, Ts[1] * opt.st];
   var Tc = TK_PT.coolS * opt.sat, Tw = TK_PT.warmS * opt.sat;
@@ -3908,6 +3947,9 @@ function tkLook2(img, n, P, w, h){
     { key: 'cross', title: 'クロスフィルター', sub: '強い光から4・6・8本の光の筋', custom: buildCrossExtra,
       sliders: [['crAmt','強さ',0,100,50],['crRange','光の範囲',0,100,30],['crLen','長さ',0,100,40],['crWidth','太さ',0,100,30],['crSoft','滲み',0,100,20],['crRain','虹色',0,100,40],['crAng','回転',0,179,20],['crTint','光源の色を残す',0,100,50]],
       hint: '光の範囲を左端にすると、いちばん強い光1つだけがクロスします。右へ動かすほど、弱い光からも筋が出ます。虹色を上げると、筋の先ほど色が分かれます。' },
+    { key: 'flare', title: 'レンズフレア', sub: '逆光の白っぽさ（ベール）と光の玉（ゴースト）', custom: buildFlareExtra,
+      sliders: [['flAmt','ベール',0,100,35],['flSpread','ベールの広がり',0,100,40],['flGhost','ゴースト',0,100,40],['flCount','ゴーストの数',1,4,3],['flDist','ゴーストの距離',0,100,50],['flSize','ゴーストの大きさ',0,100,40],['flClear','透明感',0,100,50]],
+      hint: '光源は写真のいちばん大きい光（太陽・窓）を自動で選びます。写っていない光や別の光にしたい時は、写真の上で位置を決めてください。ゴーストは光源と画面の中心を結ぶ線の上に並びます。' },
     { key: 'comp', title: 'ハイライト余白', sub: '白を少し沈めて、光を足しても飛ばさない',
       sliders: [['comp','量',0,100,30]],
       hint: '明るい写真ほど上げると安全。左上に「白飛」が出たら上げてください。' },
@@ -4010,7 +4052,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
@@ -5209,6 +5251,12 @@ function tkLook2(img, n, P, w, h){
     body.appendChild(lt);
     XE.anTools = lt;
   }
+  function buildFlareExtra(body){
+    var rw = xel('div', 'rrow');
+    XE.flPick = xbtn('写真の上で光源の位置を決める', 'ghost', function(){ startPick('flare'); }); rw.appendChild(XE.flPick);
+    XE.flAuto = xbtn('自動に戻す', 'ghost', function(){ delete P.flx; delete P.fly; updateExtras(); clearPresetMark(); schedule(); }); rw.appendChild(XE.flAuto);
+    body.appendChild(rw);
+  }
   function buildRayExtra(body){
     var seg = xel('div', 'seg'); XE.raySeg = seg;
     [['beam','窓の光'],['leak','光漏れ']].forEach(function(m){
@@ -6378,7 +6426,7 @@ function tkLook2(img, n, P, w, h){
   function lpAll(off){ if (PICK !== 'lp') return; LP.list.forEach(function(p){ p.off = off; }); lpSave(); drawGuide(); }
   function lpCompute(){
     if (!hi || !LP.fx) { LP.list = []; return; }
-    var Q = JSON.parse(JSON.stringify(P)); ['ana', 'cross', 'ray', 'lens', 'grain'].forEach(function(k){ Q.on[k] = 0; });
+    var Q = JSON.parse(JSON.stringify(P)); ['ana', 'cross', 'flare', 'ray', 'lens', 'grain'].forEach(function(k){ Q.on[k] = 0; });
     var out = tkProcess(hi.src, hi.w, hi.h, Q), w = hi.w, h = hi.h, sc = Math.min(1, 640 / Math.max(w, h)), sw = Math.max(8, Math.round(w * sc)), sh = Math.max(8, Math.round(h * sc));
     var Y = new Float32Array(sw * sh), MX = new Float32Array(sw * sh);
     for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++){ var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 4, r0 = out[q] / 255, g0 = out[q + 1] / 255, b0 = out[q + 2] / 255, k = y * sw + x; Y[k] = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0; MX[k] = Math.max(r0, g0, b0); }
@@ -6399,8 +6447,9 @@ function tkLook2(img, n, P, w, h){
     PICK = PICK === kind ? null : kind;
     if (PICK === 'grad' && !P.on.grad){ P.on.grad = 1; syncGroup('grad'); }
     if (PICK === 'ray' && !P.on.ray){ P.on.ray = 1; syncGroup('ray'); }
+    if (PICK === 'flare' && !P.on.flare){ P.on.flare = 1; syncGroup('flare'); }
     document.body.classList.toggle('picking', !!PICK);
-    if (PICK) toast(PICK === 'grad' ? '写真の上で、始点から終点へドラッグ' : (P.rMode === 'leak' ? '光らせたい端をタップ' : '光の来る所から、差し込む向きへドラッグ'));
+    if (PICK) toast(PICK === 'flare' ? '光源の位置をタップ（端に寄せるほどゴーストが長く並びます）' : PICK === 'grad' ? '写真の上で、始点から終点へドラッグ' : (P.rMode === 'leak' ? '光らせたい端をタップ' : '光の来る所から、差し込む向きへドラッグ'));
     updateExtras(); drawGuide(); schedule();
   }
   function placeGuide(){
@@ -6439,6 +6488,9 @@ function tkLook2(img, n, P, w, h){
           gctx.beginPath(); gctx.arc(bx, by, br, 0, Math.PI * 2); gctx.fillStyle = on ? 'rgba(143,176,196,.95)' : 'rgba(90,96,102,.95)'; gctx.fill(); gctx.fillStyle = '#0E1418'; gctx.textAlign = 'center'; gctx.textBaseline = 'middle'; gctx.fillText(t, bx, by + 0.5); gctx.restore(); } });
       if (LP.brushAt){ gctx.beginPath(); gctx.setLineDash([4 * dpr, 4 * dpr]); gctx.strokeStyle = (LP.brush || 'off') === 'off' ? 'rgba(240,140,120,.95)' : 'rgba(160,220,170,.95)'; gctx.arc(toX(LP.brushAt.u), toY(LP.brushAt.v), 30 * dpr, 0, Math.PI * 2); gctx.stroke(); gctx.setLineDash([]); }
       gctx.strokeStyle = 'rgba(255,255,255,.95)';
+    } else if (kind === 'flare'){
+      if (P.flx != null){ var fx0 = P.flx * W, fy0 = P.fly * H; gctx.setLineDash([5 * dpr, 6 * dpr]); gctx.beginPath(); gctx.moveTo(fx0, fy0); gctx.lineTo(W - fx0, H - fy0); gctx.stroke(); gctx.setLineDash([]);
+        gctx.beginPath(); gctx.fillStyle = '#E0A36B'; gctx.arc(fx0, fy0, 8 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke(); }
     } else if (kind === 'ray'){
       var sx = P.rx * W, sy = P.ry * H;
       gctx.beginPath(); gctx.fillStyle = '#E0A36B'; gctx.arc(sx, sy, 8 * dpr, 0, Math.PI * 2); gctx.fill(); gctx.stroke();
@@ -6456,6 +6508,8 @@ function tkLook2(img, n, P, w, h){
       if (!b) return;
       var d = Math.hypot((b.u - a.u) * a.rc.width, (b.v - a.v) * a.rc.height); if (d < 12) return;
       P.gx0 = a.u; P.gy0 = a.v; P.gx1 = b.u; P.gy1 = b.v;
+    } else if (PICK === 'flare'){
+      P.flx = Math.round(a.u * 10000) / 10000; P.fly = Math.round(a.v * 10000) / 10000;
     } else if (PICK === 'ray'){
       P.rx = a.u; P.ry = a.v;
       if (b && P.rMode !== 'leak'){
@@ -6535,6 +6589,7 @@ function tkLook2(img, n, P, w, h){
       ['rAng','rBars','rLen','rHaze'].forEach(function(k){ var r = rowOf(k); if (r) r.style.display = P.rMode === 'leak' ? 'none' : ''; });
       XE.rayPick.textContent = PICK === 'ray' ? '写真の上で指定中…（もう一度押すと中止）' : (P.rMode === 'leak' ? '写真の上で光らせる端をタップ' : '写真の上で光の位置と向きを決める');
     }
+    if (XE.flPick){ XE.flPick.textContent = PICK === 'flare' ? '写真の上で指定中…（もう一度押すと中止）' : (P.flx != null ? '光源の位置を決め直す' : '写真の上で光源の位置を決める'); XE.flAuto.style.display = P.flx != null ? '' : 'none'; }
     if (XE.gradPick) XE.gradPick.textContent = PICK === 'grad' ? '写真の上でドラッグ中…（もう一度押すと中止）' : '写真の上でドラッグして線を引く';
     if (XE.mStat){
       XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'ref' ? '見本ルックの色に寄せています。' : XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
@@ -6578,7 +6633,7 @@ function tkLook2(img, n, P, w, h){
     { key: 'look', label: '自動' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone']],['comp','白飛び・霞',['comp','mist']]] },
     { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
-    { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
+    { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['glow','グロー',['glow']],['diff','ミスト',['diff']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['flare','フレア',['flare']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
@@ -7203,7 +7258,7 @@ function tkLook2(img, n, P, w, h){
   function modeNow(){
     if (CROPMODE) return { k: 'crop', ok: 'g-geo', done: function(){ cropDone(); } };
     if (PICK === 'lp') return { k: 'lp', ok: LP.fx === 'cross' ? 'g-cross' : 'g-ana', limit: true, done: function(){ startPick('lp', LP.fx); toast('光源の選択を終えました'); } };
-    if (PICK === 'ray' || PICK === 'grad') return { k: 'pick', ok: PICK === 'ray' ? 'g-ray' : 'g-grad', done: function(){ PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); drawGuide(); } };
+    if (PICK === 'ray' || PICK === 'grad' || PICK === 'flare') return { k: 'pick', ok: PICK === 'ray' ? 'g-ray' : PICK === 'flare' ? 'g-flare' : 'g-grad', done: function(){ PICK = null; document.body.classList.remove('picking'); document.getElementById('app').classList.remove('raydrag'); updateExtras(); drawGuide(); } };
     if (LMEDIT && L6EDIT) return { k: 'l6skin', ok: null, okEl: looksPanel, done: function(){ l6SkinEdit(false); } };
     if (LMEDIT) return { k: 'mask', ok: 'g-lm', done: function(){ showTab('part', 'reg'); toast('マスクの編集を終えました'); } };
     if (REG.tool !== 'off' || REG.pickDodge) return { k: 'reg', ok: 'g-reg', done: function(){ REG.tool = 'off'; REG.pickDodge = false; document.body.classList.remove('brushing'); updateRegUI(); drawOverlay(); } };
