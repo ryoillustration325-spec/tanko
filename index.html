@@ -514,7 +514,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v159</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v160</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -886,9 +886,12 @@ function tkProcess(src, w, h, P){
   if (doDiff && P.diffType === 'white'){
     // ホワイトミスト（v159）：光が画面全体に散る＝光の周りにやわらかなにじみ（明るい所にも重なる）＋全体に薄い白のベール（黒が浮き、コントラストが下がる）
     var DW = tkRowReader(tkBlurGrid(HS, sD * 2.6), w), dw = P.diff / 100, mr = 0, mg = 0, mb = 0;
-    for (i = 0; i < n; i++){ mr += img[i * 3]; mg += img[i * 3 + 1]; mb += img[i * 3 + 2]; }
-    mr /= n; mg /= n; mb /= n; var mY = 0.2126 * mr + 0.7152 * mg + 0.0722 * mb;
-    var vc = [0.55 + 0.45 * mr, 0.55 + 0.45 * mg, 0.55 + 0.45 * mb], vk = dw * (0.2 + 0.22 * mY);   // ベールの色＝写真の平均の色を白へ寄せたもの。明るい写真ほど濃い
+    // v160：もやの濃さ＝画面に入る強い光の量（明るい所ほど・強い光ほど多く数える）。色＝その光の色。平均の明るさではない
+    //   → 暗い夜景でも強い光が多ければ濃く、明るくても光源の無い曇りの写真は薄い
+    var la = 0, lw = 0;
+    for (i = 0; i < n; i += 2){ var r0 = img[i * 3], g0 = img[i * 3 + 1], b0 = img[i * 3 + 2], yl = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0, wl = tkSS((Math.max(r0, g0, b0) - 0.82) / 0.15) * yl; if (wl > 0){ mr += r0 * wl; mg += g0 * wl; mb += b0 * wl; lw += wl; } la += wl; }
+    la /= Math.ceil(n / 2); if (lw > 0){ mr /= lw; mg /= lw; mb /= lw; } else { mr = mg = mb = 1; }
+    var mx3 = Math.max(mr, mg, mb, 1e-4), vc = [0.5 + 0.5 * mr / mx3, 0.5 + 0.5 * mg / mx3, 0.5 + 0.5 * mb / mx3], vk = dw * (0.03 + 0.42 * Math.sqrt(Math.min(1, la / 0.12)));
     for (y = 0; y < h; y++){
       var rw = DW(y);
       for (x = 0; x < w; x++){
