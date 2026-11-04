@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v180</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v181</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2051,11 +2051,11 @@ function tkSpikes(img, w, h, PI, o){
     for (var c = 0; c < 3; c++){ var a = a3[c] * nz; if (a < 0.0004) continue; var L0 = tkLin(img[j + c]), L = L0 + a, K = Math.max(0.82, L0);
       if (L > K) L = K + (1 - K) * (1 - Math.exp(-(L - K) / Math.max(1e-4, 1 - K))); img[j + c] = tkGam(L); }
   }
-  var a3 = [0, 0, 0], RB = [0, 0, 0], pf = o.prof || [0.86, 0.09, 0.28], wc = o.wc || 0;
+  var a3 = [0, 0, 0], pf = o.prof || [0.86, 0.09, 0.28], wc = o.wc || 0;
   PI.forEach(function(p, pi){
     var E = p.E, A = o.gain * E; if (A < 0.004) return;
     var col = [o.colFn(p.s3, 0), o.colFn(p.s3, 1), o.colFn(p.s3, 2)];
-    var Lk = o.len * diag * (0.12 + 0.88 * Math.pow(Math.min(1.5, E), 1.3)), sg = o.sig, rad = Math.ceil(sg * 2 * 3 + 1), ph = (pi * 0.37) % 1;
+    var Lb = o.len * diag * (0.12 + 0.88 * Math.pow(Math.min(1.5, E), 1.3)), Lk = Lb * (1 + 0.35 * o.rain), sg = o.sig, rad = Math.ceil(sg * 2 * 3 + 1 + o.rain * sg * 2.5), ph = (pi * 0.37) % 1;
     o.angs.forEach(function(ad){
       var an = ad * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an), major = Math.abs(ux) >= Math.abs(uy);
       var x1 = p.x + ux * Lk, y1 = p.y + uy * Lk, n = Math.ceil(major ? Math.abs(x1 - p.x) : Math.abs(y1 - p.y)), sl = major ? uy / ux : ux / uy, dir = major ? (x1 >= p.x ? 1 : -1) : (y1 >= p.y ? 1 : -1);
@@ -2065,12 +2065,16 @@ function tkSpikes(img, w, h, PI, o){
         var mc = (major ? p.y + (Mj + 0.5 - p.x) * sl : p.x + (Mj + 0.5 - p.y) * sl) - 0.5, m0 = Math.round(mc);
         for (var mm = m0 - mrad; mm <= m0 + mrad; mm++){
           var X = major ? Mj : mm, Yp = major ? mm : Mj; if (X < 0 || Yp < 0 || X >= w || Yp >= h) continue;
-          var dx = X + 0.5 - p.x, dy = Yp + 0.5 - p.y, t = dx * ux + dy * uy, d = Math.abs(-dx * uy + dy * ux); if (t < 0 || t > Lk || d > rad) continue;
-          var tn = t / Lk, f = (pf[0] * Math.exp(-tn / pf[1]) + (1 - pf[0]) * Math.exp(-tn / pf[2])) * (1 - tkSS((tn - 0.7) / 0.3)), sgt = sg * (2 - 1.2 * Math.min(1, tn / 0.4)), wd = Math.exp(-d * d / (2 * sgt * sgt)) * Math.sqrt(sg / sgt);
-          var v = A * f * wd; if (v < 0.0004) continue;
-          var rw = o.rain * tkSS(tn / 0.12), hu = tn * 2.4 + ph;
-          var wz = wc * (1 - tkSS(tn / 0.15));   // 芯の近くは白寄り
-          for (var c = 0; c < 3; c++){ RB[c] = 0.5 + 0.5 * Math.cos(2 * Math.PI * (hu - c / 3)); a3[c] = v * (col[c] * (1 - wz) + wz) * (1 - rw + rw * 1.6 * RB[c]); }
+          var dx = X + 0.5 - p.x, dy = Yp + 0.5 - p.y, t = dx * ux + dy * uy, dp = -dx * uy + dy * ux; if (t < 0 || t > Lk || Math.abs(dp) > rad) continue;
+          // v181：虹色は塗らない。光の色ごとに筋の長さと位置がほんの少しずれる（緑は短く横にずれ、赤・青は長い）＝芯は白、筋は先へ行くほど薄い赤紫、横に薄い緑がにじむ（実際のクロスフィルターの回折）
+          var tn = t / Lb, sgt = sg * (2 - 1.2 * Math.min(1, tn / 0.4)), wz = wc * (1 - tkSS(tn / 0.15)), any = 0;
+          for (var c = 0; c < 3; c++){
+            var tc = t / (Lb * (1 + o.rain * (c === 0 ? 0.35 : c === 1 ? -0.18 : 0.12))); if (tc > 1){ a3[c] = 0; continue; }
+            var fc = (pf[0] * Math.exp(-tc / pf[1]) + (1 - pf[0]) * Math.exp(-tc / pf[2])) * (1 - tkSS((tc - 0.7) / 0.3));
+            var off = c === 1 ? o.rain * sg * 2.2 * Math.min(1, tn * 2.5) : 0, dc = dp - off, wd = Math.exp(-dc * dc / (2 * sgt * sgt)) * Math.sqrt(sg / sgt);
+            a3[c] = A * fc * wd * (col[c] * (1 - wz) + wz); if (a3[c] > 0.0004) any = 1;
+          }
+          if (!any) continue;
           add((Yp * w + X) * 3, a3);
         }
       }
@@ -4209,7 +4213,7 @@ function tkLook2(img, n, P, w, h){
     fxTex: ['なめらかに', '細部を立てる'], fxCla: ['柔らかく', 'くっきり'], fxDeh: ['かすませる', '晴らす'], vgAmt: ['周りを暗く', '周りを明るく'], vgMid: ['狭く', '広く'],
     mh0: ['マゼンタ寄り', '橙寄り'], mh1: ['赤寄り', '黄寄り'], mh2: ['橙寄り', '緑寄り'], mh3: ['黄寄り', '水色寄り'], mh4: ['緑寄り', '青寄り'], mh5: ['水色寄り', '紫寄り'], mh6: ['青寄り', 'マゼンタ寄り'], mh7: ['紫寄り', '赤寄り'],
     gAtemp: ['青', '黄'], gAtint: ['緑', '赤紫'], gAev: ['暗く', '明るく'], gBtemp: ['青', '黄'], gBtint: ['緑', '赤紫'], gBev: ['暗く', '明るく'],
-    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], cmHiPt: ['暗めから', '白い所だけ'], cmEvenR: ['細かいむら', '広いむら'], cmShPt: ['深い影だけ', '暗めから'], cmDense: ['そのまま', '濃い色'], cmSoft: ['くっきり', '淡く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], flBlend: ['どこでも同じ', '暗い所では控えめ'], flShape: ['正円', '絞りの形・欠け'], anWidth: ['細く', '太く'], crRain: ['白', '虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
+    rWarm: ['白い光', '暖かい光'], rSoft: ['くっきり', 'やわらか'], anRange: ['いちばん強い光だけ', '全ての光'], crRange: ['いちばん強い光だけ', '全ての光'], crLen: ['短く', '長く'], crSoft: ['鋭く', 'やわらか'], crWidth: ['細く', '太く'], cmHiPt: ['暗めから', '白い所だけ'], cmEvenR: ['細かいむら', '広いむら'], cmShPt: ['深い影だけ', '暗めから'], cmDense: ['そのまま', '濃い色'], cmSoft: ['くっきり', '淡く'], flSpread: ['光源のまわり', '画面全体'], flDist: ['光源の近く', '反対側の遠く'], flSize: ['小さく', '大きく'], flClear: ['濃い玉', '透ける輪'], flBlend: ['どこでも同じ', '暗い所では控えめ'], flShape: ['正円', '絞りの形・欠け'], anWidth: ['細く', '太く'], crRain: ['白', 'うっすら虹色'], crTint: ['白い筋', '光源の色'], anLen: ['短く', '画面の端まで'], anSoft: ['鋭く', 'やわらか'], anTint: ['フィルターの色', '光源の色'], rLen: ['近くだけ', '遠くまで'], rHaze: ['面だけ', '空気も光る'], con: ['弱く', '強く'], sat: ['淡く', '鮮やかに'], target: ['暗め', '明るめ']
   };
   [0, 1, 2, 3, 4, 5, 6, 7].forEach(function(i){ SL_WORDS['ms' + i] = ['淡く', '鮮やかに']; SL_WORDS['ml' + i] = ['暗く', '明るく']; });
   function slHueName(h){ h = ((+h % 360) + 360) % 360; return h < 15 || h >= 345 ? '赤' : h < 40 ? '橙' : h < 65 ? '黄' : h < 95 ? '黄緑' : h < 150 ? '緑' : h < 175 ? '青緑' : h < 200 ? '水色' : h < 230 ? '青' : h < 260 ? '藍' : h < 290 ? '紫' : h < 320 ? '赤紫' : 'ピンク'; }
