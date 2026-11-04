@@ -295,7 +295,7 @@ function makeLight(srcCv, fx, maxL, prev, trk){
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(srcCv, 0, 0, w, h); const d = x.getImageData(0, 0, w, h).data, n = w * h;
   const img = new Float32Array(n * 3); for (let i = 0; i < n; i++){ img[i * 3] = d[i * 4] / 255; img[i * 3 + 1] = d[i * 4 + 1] / 255; img[i * 3 + 2] = d[i * 4 + 2] / 255; }
   const P = lightP(fx, prev), out = new Float32Array(n * 3);
-  window.TK_PRE = tkPreSnap(img, w, h); window.TK_STRICT = true; window.TK_PEAKHOOK = trk ? (PI, W2, H2, k) => trackPeaks(trk[k] || (trk[k] = []), PI, W2, H2) : null;
+  window.TK_PRE = tkPreSnap(img, w, h); window.TK_STRICT = 2; window.TK_PEAKHOOK = trk ? (PI, W2, H2, k) => trackPeaks(trk[k] || (trk[k] = []), PI, W2, H2) : null;
   try{ if (P.on.ana) tkAnamorph(out, w, h, P); if (P.on.cross) tkCross(out, w, h, P); if (P.on.flare) tkFlare(out, w, h, P); } finally { window.TK_PRE = null; window.TK_STRICT = false; window.TK_PEAKHOOK = null; }
   const o = new Uint8Array(n * 4); for (let i = 0; i < n; i++){ o[i * 4] = out[i * 3] * 255 + .5; o[i * 4 + 1] = out[i * 3 + 1] * 255 + .5; o[i * 4 + 2] = out[i * 3 + 2] * 255 + .5; o[i * 4 + 3] = 255; }
   return { data: o, w, h };

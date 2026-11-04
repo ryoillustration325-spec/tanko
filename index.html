@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v181</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v182</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -1975,17 +1975,18 @@ function tkLightPeaks(Y, sw, sh, rng, MX, EX){
   // v153：「光らしさ」＝白く飛んでいる（いちばん強い色の値が上限近く）×明るさが一点に集まり周りへ滲んでいる（光の芯とにじみ）。
   //   白い服・白い壁・白い器のような「明るいだけの面」は光らしさが低い＝線・筋が出にくい
   var BN = tkBlur1(Y, sw, sh, Math.max(1.5, Math.max(sw, sh) * 0.004)), BW = tkBlur1(Y, sw, sh, Math.max(5, Math.max(sw, sh) * 0.016));
+  var mxTh = 0.94; if (TK_STRICT && MX){ var mh = new Float64Array(101); for (i = 0; i < sn; i += 2) mh[Math.min(100, (MX[i] * 100) | 0)]++; var acc2 = 0; for (var b3 = 100; b3 >= 0; b3--){ acc2 += mh[b3]; if (acc2 >= sn / 2 * 0.002){ mxTh = Math.min(0.94, Math.max(0.82, b3 / 100 - 0.02)); break; } } }   // 写真の白の上限に合わせる（ハイライトを抑えた写真でも見つかる）
   var lit = function(i){ var clip = MX ? tkSS((MX[i] - 0.86) / 0.1) : 1, conc = tkSS((BN[i] - BW[i] - 0.015) / 0.1), small = 1 - tkSS((BW[i] - 0.75) / 0.2) * 0.6; return (0.15 + 0.85 * clip) * (0.2 + 0.8 * conc) * small; };
   for (i = 0; i < sn; i++){
     if (Y[i] <= th) continue;
     var li = lit(i), wv = tkSS((Y[i] - th) / Math.max(0.04, (1 - th) * 0.6)) * (0.2 + 0.8 * tkSS((Y[i] - LM[i] - 0.04) / 0.2)) * Math.pow(li, 0.7); if (wv <= 0.002) continue;
     var ix = i % sw, iy = (i / sw) | 0, pk = true;
     for (var oy = -3; oy <= 3 && pk; oy++) for (var ox = -3; ox <= 3; ox++){ var xx = ix + ox, yy = iy + oy; if (xx < 0 || yy < 0 || xx >= sw || yy >= sh || (!ox && !oy)) continue; var yv = Y[yy * sw + xx]; if (yv > Y[i] || (yv === Y[i] && (oy < 0 || (oy === 0 && ox < 0)))){ pk = false; break; } }
-    if (pk && TK_STRICT && (li < 0.55 || (MX && MX[i] < 0.94) || BW[i] > 0.7)) pk = false;   // 動画：白い面の上ではなく、本当に光っている小さな点だけ
+    if (pk && TK_STRICT && (li < 0.55 || (MX && MX[i] < mxTh) || BW[i] > 0.7 || Y[i] - BW[i] < 0.1)) pk = false;   // 強い反射だけ：白飛びしていて、小さく、周りより飛び抜けて明るい点（白い服・壁・雲は外す）
     if (pk && li >= 0.32 * (1 - r2)) out.push({ i: i, w: wv, y: Y[i], s: Y[i] * (0.4 + 0.6 * tkSS((Y[i] - LM[i]) / 0.3)) * li });   // 光らしさが低い点（白い物）は数に入れない。右端ほどゆるく
   }
   out.sort(function(a, b){ return b.s - a.s; });
-  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = TK_STRICT ? 0.85 * Math.pow(Math.min(1, p.s / 0.7), 1.5) : Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return tkPeakEx(out, sw, sh, EX); }   // 動画：いちばん強い光で割らない（コマごとに明るさが跳ねない）   // 選んだ光ははっきり（強い光ほど強く）
+  if (cnt){ if (out.length > cnt) out.length = cnt; var s0 = out.length ? out[0].s : 1; out.forEach(function(p){ p.w = TK_STRICT === 2 ? 0.85 * Math.pow(Math.min(1, p.s / 0.7), 1.5) : Math.max(p.w, 0.85 * Math.pow(p.s / s0, 1.5)); }); return tkPeakEx(out, sw, sh, EX); }   // 動画：いちばん強い光で割らない（コマごとに明るさが跳ねない）   // 選んだ光ははっきり（強い光ほど強く）
   // 0.3から右：強い順の25個（左側の続き）＋明るさのしきい値を超える光。しきい値より下の光は弱めに＝バーを右へ動かすほど必ず増える
   var thw = function(y){ return tkSS((y - thHi) / Math.max(0.04, (1 - thHi) * 0.6)); };
   var s1 = out.length ? out[0].s : 1; out = out.filter(function(p, k){ return k < 60 || (p.y > thHi && p.s > s1 * 0.08); }); out.forEach(function(p, k){ if (k < 60) p.w = Math.max(thw(p.y), 0.85 * Math.pow(p.s / s1, 1.5)); });
@@ -2149,7 +2150,7 @@ function tkAnamorph(img, w, h, P){
   }
   // 2) 光源（tkLightPeaks）
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
-  var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX, P.anEx), any = PK.length > 0;
+  var st0 = TK_STRICT; if (P.anSrc !== 'bright' && !st0) TK_STRICT = 1; var S = new Float32Array(sn * 3), PK = tkLightPeaks(Y, sw, sh, rng, MX, P.anEx), any = PK.length > 0; TK_STRICT = st0;
   tkFlareDeposit(S, R, G, B, Y, sw, sh, PK, function(s3, c){ return fc[c] * (1 - tint) + s3[c] * tint; }); var GR = tkFlareGrain(Y, sw, sh);
   if (!any) return;
   // 3) 線の向きに回した画像へ
@@ -2259,7 +2260,7 @@ function tkCross(img, w, h, P){
     R[k] = SA[q]; G[k] = SA[q + 1]; B[k] = SA[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
-  var PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx); if (!PK.length) return;
+  var st0 = TK_STRICT; if (P.crSrc !== 'bright' && !st0) TK_STRICT = 1; var PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx); TK_STRICT = st0; if (!PK.length) return;
   // v165：筋は元の解像度で1本ずつ、髪の毛ほどの細さで描く（縮小して描いて戻すと太く・ぼやけて「載せた感じ」になる）
   var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc); if (TK_PEAKHOOK) PI = TK_PEAKHOOK(PI, w, h, 'cross'); var GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
   var angs = [], base0 = (P.crAng || 0); for (var li = 0; li < pts; li++) angs.push(base0 + 360 / pts * li);
@@ -5382,6 +5383,13 @@ function tkLook2(img, n, P, w, h){
     body.appendChild(seg);
     XE.diffNote = xel('div', 'hint', ''); body.appendChild(XE.diffNote);
   }
+  function srcSeg(body, mk, key){   // v182：光源の選び方
+    var cap = xel('div', 'xcap', '光源の選び方'); cap.style.cssText = 'font-size:11px;color:var(--faint);margin:6px 2px 0';
+    var seg = xel('div', 'seg');
+    [['spec','強い反射だけ'],['bright','明るい所も']].forEach(function(m){ var b = xel('button', null, m[1]); b.type = 'button'; b.dataset.m = m[0];
+      b.addEventListener('click', function(){ P[mk] = m[0]; if (!P.on[key]){ P.on[key] = 1; syncGroup(key); } if (PICK === 'lp'){ try{ lpCompute(); }catch(e){} drawGuide(); } updateExtras(); clearPresetMark(); schedule(); }); seg.appendChild(b); });
+    body.appendChild(cap); body.appendChild(seg); (XE.srcSegs = XE.srcSegs || []).push([seg, mk]);
+  }
   function blendSeg(body, mk, key){
     var TK_BLENDS = [['add','加算'],['screen','スクリーン'],['soft','ソフト'],['overlay','オーバーレイ'],['lighten','比較明']];
     var cap = xel('div', 'xcap', '描画モード'); cap.style.cssText = 'font-size:11px;color:var(--faint);margin:6px 2px 0';
@@ -5398,6 +5406,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    srcSeg(body, 'crSrc', 'cross');
     blendSeg(body, 'crMode', 'cross');
     XE.crPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'cross'); }); body.appendChild(XE.crPick);
     var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
@@ -5414,6 +5423,7 @@ function tkLook2(img, n, P, w, h){
       seg.appendChild(b);
     });
     body.appendChild(seg);
+    srcSeg(body, 'anSrc', 'ana');
     blendSeg(body, 'anMode', 'ana');
     XE.anPick = xbtn('光源を表示して、いらない光を外す', 'ghost', function(){ startPick('lp', 'ana'); }); body.appendChild(XE.anPick);
     var lt = xel('div', 'lptools modalkeep'); lt.style.display = 'none';
@@ -6604,7 +6614,7 @@ function tkLook2(img, n, P, w, h){
     var Y = new Float32Array(sw * sh), MX = new Float32Array(sw * sh);
     for (var y = 0; y < sh; y++) for (var x = 0; x < sw; x++){ var fx = Math.min(w - 1, Math.floor((x + 0.5) / sc)), fy = Math.min(h - 1, Math.floor((y + 0.5) / sc)), q = (fy * w + fx) * 4, r0 = out[q] / 255, g0 = out[q + 1] / 255, b0 = out[q + 2] / 255, k = y * sw + x; Y[k] = 0.2126 * r0 + 0.7152 * g0 + 0.0722 * b0; MX[k] = Math.max(r0, g0, b0); }
     var cr = LP.fx === 'cross', rng = ((cr ? P.crRange : P.anRange) == null ? 30 : (cr ? P.crRange : P.anRange)) / 100, ex = (cr ? P.crEx : P.anEx) || [];
-    var all = tkLightPeaks(Y, sw, sh, rng, MX, null), rr = 0.022;
+    if ((cr ? P.crSrc : P.anSrc) !== 'bright') TK_STRICT = 1; var all; try{ all = tkLightPeaks(Y, sw, sh, rng, MX, null); } finally { TK_STRICT = false; } var rr = 0.022;
     LP.list = all.map(function(p){ var u = ((p.i % sw) + 0.5) / sw, v = (((p.i / sw) | 0) + 0.5) / sh, off = false; return { u: u, v: v, w: p.w, off: off, i: p.i }; });
     var kept = tkPeakEx(all, sw, sh, ex), keptI = {}; kept.forEach(function(p){ keptI[p.i] = 1; }); LP.list.forEach(function(q){ q.off = !keptI[q.i]; });
   }
@@ -6755,6 +6765,7 @@ function tkLook2(img, n, P, w, h){
     if (XE.crPick){ XE.crPick.style.display = PICK === 'lp' && LP.fx === 'cross' ? 'none' : ''; XE.crPick.textContent = PICK === 'lp' && LP.fx === 'cross' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.crEx || []).length ? '（' + P.crEx.length + 'つ外し中）' : ''); }
     if (XE.anPick){ XE.anPick.style.display = PICK === 'lp' && LP.fx === 'ana' ? 'none' : ''; XE.anPick.textContent = PICK === 'lp' && LP.fx === 'ana' ? '完了（光源の表示を閉じる）' : '光源を表示して、いらない光を外す' + ((P.anEx || []).length ? '（' + P.anEx.length + 'つ外し中）' : ''); }
     if (XE.diffSeg){ Array.prototype.forEach.call(XE.diffSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.diffType || 'black')); }); XE.diffNote.textContent = P.diffType === 'white' ? '光のまわりが柔らかくにじみ、画面全体に薄い白のベール。黒が浮いてコントラストが下がる（淡い仕上がり）。' : '明るい光の縁だけが暗い隣へにじむ。黒は沈んだまま・コントラストはほぼそのまま。'; }
+    (XE.srcSegs || []).forEach(function(d){ Array.prototype.forEach.call(d[0].children, function(b){ b.classList.toggle('on', b.dataset.m === (P[d[1]] === 'bright' ? 'bright' : 'spec')); }); });
     (XE.blendSegs || []).forEach(function(d){ Array.prototype.forEach.call(d[0].children, function(b){ b.classList.toggle('on', b.dataset.m === (P[d[1]] || 'add')); }); });
     if (XE.crossSeg) Array.prototype.forEach.call(XE.crossSeg.children, function(b){ b.classList.toggle('on', +b.dataset.m === (P.crPts || 4)); });
     if (XE.anaSeg) Array.prototype.forEach.call(XE.anaSeg.children, function(b){ b.classList.toggle('on', b.dataset.m === (P.anColor || 'orange')); });
