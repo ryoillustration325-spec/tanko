@@ -90,7 +90,7 @@
 <body>
 <div class="app">
   <div class="top">
-    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v10</span></small></div>
+    <div class="brand">movie retouch<small>動画の色とエフェクト ・ <span class="num">v11</span></small></div>
     <label class="pill" id="pick">動画を選ぶ<input type="file" id="file" accept="video/*,.mov,.mp4,.m4v,.webm"></label>
     <button class="pill pri" id="exp" type="button" disabled>書き出し</button>
   </div>
@@ -133,7 +133,7 @@
 <div class="modal" id="xm" hidden><div class="pane"><h3 id="xt">書き出し中…</h3><div class="hint" id="xs">準備中</div><div class="bar"><i id="xb"></i></div><div class="rrow" id="xa"><button class="btn" id="xc" type="button">中止</button></div></div></div>
 <div class="toast" id="toast" role="status"></div>
 <script type="module">
-import { Input, Output, Conversion, ALL_FORMATS, BlobSource, BufferTarget, Mp4OutputFormat, WebMOutputFormat, QUALITY_HIGH, canEncodeVideo } from './mediabunny.min.mjs';
+import { Input, Output, Conversion, ALL_FORMATS, BlobSource, BufferTarget, Mp4OutputFormat, MovOutputFormat, WebMOutputFormat, QUALITY_HIGH, canEncodeVideo, canEncodeAudio } from './mediabunny.min.mjs';
 const $ = (id) => document.getElementById(id);
 let tt = 0; function toast(m){ const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2400); }
 // 長押しメニュー・文字選択を止める
@@ -400,22 +400,32 @@ $('exp').addEventListener('click', async () => {
     const ocv = document.createElement('canvas'), R2 = new Renderer(ocv); if (S.look) R2.setLut(S.look.lut, S.look.N);
     const tmp = new OffscreenCanvas(W, H), tctx = tmp.getContext('2d', { willReadFrequently: true }); let fn = 0; const useLt = lightOn(S.fx), ltPrev = {}, ltTrk = {};
     if (useLt) await loadEngine();
-    const output = new Output({ format: webm ? new WebMOutputFormat() : new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
+    // v11：音声。カメラのMOVの音声（リニアPCM）はMP4に入れるとiPhoneで鳴らないことがあるので、AACに変換できればAAC、できなければMOVのまま音声を残す
+    let at = null; try{ at = await input.getPrimaryAudioTrack(); }catch(e){}
+    const ac = at ? at.codec : null, isPcm = !!ac && /^(pcm|ulaw|alaw)/.test(ac); let audio = {}, mov = false, aNote = '';
+    if (at){
+      if (webm){ if (!['opus', 'vorbis'].includes(ac)){ if (await canEncodeAudio('opus')) audio = { codec: 'opus', bitrate: 160000 }; else aNote = 'この端末では音声を変換できませんでした'; } }
+      else if (isPcm){ if (await canEncodeAudio('aac')) audio = { codec: 'aac', bitrate: 192000 }; else mov = true; }
+      else if (!ac){ aNote = '音声の形式が読み取れませんでした'; }
+    }
+    const output = new Output({ format: webm ? new WebMOutputFormat() : mov ? new MovOutputFormat({ fastStart: 'in-memory' }) : new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
     conv = await Conversion.init({ input, output, showWarnings: false,
       video: { width: W, height: H, fit: 'fill', codec, bitrate: Math.round(W * H * 30 * 0.2), forceTranscode: true, processedWidth: W, processedHeight: H,
         process: (sample) => { sample.draw(tctx, 0, 0, W, H); R2.render(tmp, W, H, S.mix, S.fx, fn++, useLt ? makeLight(tmp, S.fx, 1280, ltPrev, ltTrk) : null); return ocv; } },
-      audio: {} });
+      audio });
     if (!conv.isValid) throw new Error('この動画は書き出せません（' + conv.discardedTracks.map(d => d.reason).join(', ') + '）');
+    const aDrop = conv.discardedTracks.filter(d => d.track && d.track.isAudioTrack && d.track.isAudioTrack());
+    if (aDrop.length) aNote = '音声は入りませんでした（' + aDrop.map(d => d.reason).join(', ') + '）';
     const dur = await input.computeDuration();
     conv.onProgress = (p, t) => { $('xb').style.width = Math.round(p * 100) + '%'; const el = (Date.now() - t0) / 1000, rest = p > 0.02 ? el * (1 - p) / p : 0; $('xs').textContent = Math.round(p * 100) + '% ・ ' + fmt(t) + ' / ' + fmt(dur) + (rest ? ' ・ 残り約' + Math.ceil(rest) + '秒' : ''); };
     await conv.execute(); conv = null;
-    const blob = new Blob([output.target.buffer], { type: webm ? 'video/webm' : 'video/mp4' }), sec = ((Date.now() - t0) / 1000).toFixed(1);
-    $('xt').textContent = '書き出しができました'; $('xs').textContent = W + '×' + H + ' ・ ' + (blob.size / 1048576).toFixed(1) + 'MB ・ ' + sec + '秒'; $('xb').style.width = '100%';
+    const blob = new Blob([output.target.buffer], { type: webm ? 'video/webm' : mov ? 'video/quicktime' : 'video/mp4' }), sec = ((Date.now() - t0) / 1000).toFixed(1);
+    $('xt').textContent = '書き出しができました'; $('xs').textContent = W + '×' + H + ' ・ ' + (blob.size / 1048576).toFixed(1) + 'MB ・ ' + sec + '秒' + (at ? (aNote ? ' ・ ' + aNote : ' ・ 音声あり') : ' ・ 元の動画に音声なし'); $('xb').style.width = '100%';
     xa.innerHTML = ''; const sv = document.createElement('button'); sv.className = 'pill pri'; sv.type = 'button'; sv.textContent = '保存・共有';
-    sv.addEventListener('click', async () => { const ok = await saveFile(blob, 'movie-retouch_' + stamp() + (webm ? '.webm' : '.mp4')); if (ok) $('xm').hidden = true; });   /* 共有シートは指で押した直後しか開けないので、ボタンで */
+    sv.addEventListener('click', async () => { const ok = await saveFile(blob, 'movie-retouch_' + stamp() + (webm ? '.webm' : mov ? '.mov' : '.mp4')); if (ok) $('xm').hidden = true; });   /* 共有シートは指で押した直後しか開けないので、ボタンで */
     const cl = document.createElement('button'); cl.className = 'btn'; cl.type = 'button'; cl.textContent = '閉じる'; cl.addEventListener('click', () => { $('xm').hidden = true; });
     xa.appendChild(sv); xa.appendChild(cl);
-    window.__lastExport = { W, H, size: blob.size, sec: +sec, codec }; window.__mrBlob = blob;
+    window.__lastExport = { W, H, size: blob.size, sec: +sec, codec, audioIn: ac, audioOut: aNote || (at ? (audio.codec || 'copy') : 'none'), mov }; window.__mrBlob = blob;
   }catch(e){
     conv = null; console.error(e); if (e && e.name === 'ConversionCanceledError') return;
     $('xt').textContent = '書き出せませんでした'; $('xs').textContent = (e && e.message) || String(e); window.__lastExport = { error: String(e && e.message || e) };
