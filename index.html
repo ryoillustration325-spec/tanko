@@ -515,7 +515,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v182</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v184</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -7218,7 +7218,8 @@ function tkLook2(img, n, P, w, h){
           var pk = rest.splice(bi, 1)[0]; if (pk._md >= 0.008 || pk.i < 0) sel.push(pk); }
         res = sel; res.forEach(function(x){ delete x.px; }); })();
       A.cands = res; A.judging = false;
-      if (!A.picked && !A.custom && res.length){
+      var keepPick = A.keepPick; A.keepPick = false;
+      if (!A.picked && !A.custom && !keepPick && res.length){
         var top = res[0];
         if (top.i < 0){ var nx = res.filter(function(x){ return x.i >= 0; })[0]; A.keep = true; P.l5Master = 0; if (nx){ A.idx = nx.i; P.l6Idx = nx.i; P.l6V = 3; A.group = TK_L6[nx.i].g; } }
         else { A.keep = false; P.l5Master = amt; A.idx = top.i; A.group = TK_L6[top.i].g; P.l6Idx = top.i; P.l6V = 3; }
@@ -7558,7 +7559,7 @@ function tkLook2(img, n, P, w, h){
       bx.appendChild(gridC);
       var cr = xel('div', 'rrow');
       if (A6.cands.length > 6) cr.appendChild(xbtn(A6.showAll ? '候補を減らす' : 'ほかの候補（' + (A6.cands.length - 6) + '）', 'ghost', function(){ A6.showAll = !A6.showAll; l6Render(); }));
-      cr.appendChild(xbtn('選び直す', 'ghost', function(){ AUTO.picked = false; l6Judge(); }));
+      cr.appendChild(xbtn('選び直す', 'ghost', function(){ A6.showAll = true; A6.keepPick = true; l6Judge(); toast('候補を採点し直しました。一覧から選んでください（今の色はそのまま）'); }));   // v184：採点し直すだけ。今の色を勝手に1位へ戻さない
       bx.appendChild(cr);
       var cr2 = xel('div', 'rrow'); cr2.appendChild(xbtn(TK_L6_PALE ? '淡い見本を優先：オン' : '淡い見本を優先：オフ', TK_L6_PALE ? 'pri' : 'ghost', function(){ TK_L6_PALE = !TK_L6_PALE; try{ localStorage.setItem('retouch-l6pale', TK_L6_PALE ? '1' : '0'); }catch(e){} applyLook6(null, true); }));
       bx.appendChild(cr2);
