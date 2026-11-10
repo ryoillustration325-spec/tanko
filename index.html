@@ -519,7 +519,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v187</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v188</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2466,7 +2466,7 @@ function tkGauss1(src, w, h, sigma){
 }
 function tkFilmSoft(img, w, h, P, on){
   on = on || { soft: 1, sh: 1, blk: 1 };   // v187：柔らかさ・白の肩・霞んだ黒は別々にオンオフ（白の肩は光タブ、霞んだ黒はトーンへ移した）
-  var n = w * h, s = Math.max(w, h) / 2000, i, c;
+  var n = w * h, s = P._fsScale > 0 ? P._fsScale : Math.max(w, h) / 2000, i, c;
   var amt = (P.fsAmt == null ? 40 : P.fsAmt) / 100, rad = P.fsRad == null ? 7 : P.fsRad, edge = (P.fsEdge == null ? 60 : P.fsEdge) / 100,
       fine = (P.fsFine == null ? 30 : P.fsFine) / 100, col = (P.fsCol == null ? 50 : P.fsCol) / 100,
       shv = (P.fsSh == null ? 50 : P.fsSh) / 100, blk = (P.fsBlk == null ? 70 : P.fsBlk) / 100;
@@ -2577,7 +2577,7 @@ function tkSoftStats(rgba, w, h){
   smp.sort(function(a, b){ return a - b; });
   var thr = Math.max(0.01, smp[Math.floor(smp.length * 0.94)] || 1), flatT = smp[Math.floor(smp.length * 0.2)] || 0;
   function sY(fx, fy){ var x0 = fx | 0, y0 = fy | 0, tx = fx - x0, ty = fy - y0, k = y0 * w + x0; return (Y[k] * (1 - tx) + Y[k + 1] * tx) * (1 - ty) + (Y[k + w] * (1 - tx) + Y[k + w + 1] * tx) * ty; }
-  var cnt = 0, OV = 0, WD = 0, TL = 0, SH = 0, R = 9, NP = 2 * R + 1;
+  var cnt = 0, OVa = [], WDa = [], TLa = [], SHa = [], R = 9, NP = 2 * R + 1;
   for (y = M; y < h - M; y++) for (x = M; x < w - M; x++){
     var k = y * w + x, g3 = gm(B2, k); if (g3 < thr) continue;
     // 境目の真上だけ（勾配の向きに沿って一番急な所）
@@ -2590,12 +2590,18 @@ function tkSoftStats(rgba, w, h){
     if (vl > 0.18 * ct || vh > 0.18 * ct) continue;
     var mxN = -1, mnN = 2; for (d = R + 1; d <= R + 4; d++) mxN = Math.max(mxN, P[d]); for (d = R - 4; d <= R - 1; d++) mnN = Math.min(mnN, P[d]);
     var hiN = (P[R + 5] + P[R + 6]) / 2, loN = (P[R - 6] + P[R - 5]) / 2;
-    OV += (Math.max(0, mxN - hiN) + Math.max(0, loN - mnN)) / ct;
+    OVa.push((Math.max(0, mxN - hiN) + Math.max(0, loN - mnN)) / ct);
     var a10 = lo + ct * 0.1, a90 = lo + ct * 0.9, d10 = 0, d90 = NP - 1; for (d = 0; d < NP; d++){ if (P[d] <= a10) d10 = d; } for (d = NP - 1; d >= 0; d--){ if (P[d] >= a90) d90 = d; }
-    WD += Math.max(0, d90 - d10);
-    TL += ((P[R - 5] + P[R - 4] + P[R - 3]) / 3 - lo) / ct;          // 暗い側の、境目から3〜5px の持ち上がり（裾）
-    SH += gm(B06, k) / g3; cnt++;
+    var x10 = d10 < NP - 1 && P[d10 + 1] > P[d10] ? d10 + (a10 - P[d10]) / (P[d10 + 1] - P[d10]) : d10, x90 = d90 > 0 && P[d90] > P[d90 - 1] ? d90 - (P[d90] - a90) / (P[d90] - P[d90 - 1]) : d90;   /* 画素の間まで測る */
+    WDa.push(Math.max(0, x90 - x10));
+    TLa.push(((P[R - 5] + P[R - 4] + P[R - 3]) / 3 - lo) / ct);          // 暗い側の、境目から3〜5px の持ち上がり（裾）
+    SHa.push(gm(B06, k) / g3); cnt++;
   }
+  // v188：ピントの合った境目だけで比べる。全部の境目の平均だと、ボケた境目の多い写真（や写真の一部）ほど柔らかく出てしまう＝写りではなく被写体の差を測ってしまう。
+  //   立ち上がり幅の狭い順に上位25％（ピントの合った境目）を取り、その中央値を使う
+  var ord = WDa.map(function(v, i){ return i; }).sort(function(a, b){ return WDa[a] - WDa[b]; }), nt = Math.max(1, Math.round(ord.length * 0.25)), top = ord.slice(0, nt);
+  function medOf(A){ if (!top.length) return 0; var v = top.map(function(i){ return A[i]; }).sort(function(a, b){ return a - b; }); return v[v.length >> 1]; }
+  var OV = medOf(OVa), WD = medOf(WDa), TL = medOf(TLa), SH = medOf(SHa);
   cnt = Math.max(1, cnt);
   // 色の輪郭の甘さ：色の境目で、細かい目の勾配／粗い目の勾配
   var C06a = tkGauss1(CB, w, h, 0.6), C2a = tkGauss1(CB, w, h, 2), C06b = tkGauss1(CR, w, h, 0.6), C2b = tkGauss1(CR, w, h, 2), cs = [];
@@ -2605,44 +2611,44 @@ function tkSoftStats(rgba, w, h){
   // 黒の底・白の上限・平らな所の粒
   var ys = []; for (i = 0; i < n; i += 5) ys.push(Y[i]); ys.sort(function(a, b){ return a - b; });
   var nz = 0, nc = 0; for (y = M; y < h - M; y += 3) for (x = M; x < w - M; x += 3){ var q3 = y * w + x; if (gm(B2, q3) > flatT) continue; var dv = Y[q3] - B12[q3]; nz += dv * dv; nc++; }
-  return { ov: OV / cnt, wd: WD / cnt, tail: TL / cnt, sharp: SH / cnt, edges: cnt, fine: fine, csharp: cc ? CS1 / cc : 1, p1: ys[Math.floor(ys.length * 0.01)], p995: ys[Math.floor(ys.length * 0.995)], noise: Math.sqrt(nz / Math.max(1, nc)) };
+  return { ov: OV, wd: WD, tail: TL, sharp: SH, edges: cnt, fine: fine, csharp: cc ? CS1 / cc : 1, p1: ys[Math.floor(ys.length * 0.01)], p995: ys[Math.floor(ys.length * 0.995)], noise: Math.sqrt(nz / Math.max(1, nc)) };
 }
 // 見本の柔らかさに合わせて「柔らかさ」の値を決める：この写真を小さくして実際にかけ、測って、いちばん近い値を探す（差の分だけ＝もともと柔らかい写真には少ししかかけない）
 //   cb(進み具合)。返り値は Promise（途中で画面を止めないよう、1回ずつ間を空ける）
-function tkSoftMatch(refStat, rgba, w, h, cb){
+function tkSoftMatch(refStat, rgba, w, h, cb, sc){
   var n = w * h, base = new Float32Array(n * 3), i;
   for (i = 0; i < n; i++){ base[i * 3] = rgba[i * 4] / 255; base[i * 3 + 1] = rgba[i * 4 + 1] / 255; base[i * 3 + 2] = rgba[i * 4 + 2] / 255; }
   var out = new Uint8ClampedArray(n * 4);
   function measure(p){
-    var im = Float32Array.from(base); tkFilmSoft(im, w, h, { fsAmt: p.fsAmt, fsRad: p.fsRad, fsEdge: p.fsEdge, fsFine: p.fsFine, fsCol: p.fsCol, fsSh: 0, fsBlk: 0 });
+    var im = Float32Array.from(base); tkFilmSoft(im, w, h, { fsAmt: p.fsAmt, fsRad: p.fsRad, fsEdge: p.fsEdge, fsFine: p.fsFine, fsCol: p.fsCol, fsSh: 0, fsBlk: 0, _fsScale: sc || 0 });
     for (var j = 0; j < n; j++){ out[j * 4] = im[j * 3] * 255 + 0.5; out[j * 4 + 1] = im[j * 3 + 1] * 255 + 0.5; out[j * 4 + 2] = im[j * 3 + 2] * 255 + 0.5; out[j * 4 + 3] = 255; }
     return tkSoftStats(out, w, h);
   }
+  // v188：合わせるのは、どの写真でも安定して測れる2つ（ピントの合った境目の「幅」と「急さ」）と色の輪郭だけ。
+  //   縁取りと裾は、同じ写真の中でも場所によって値が大きく変わる（被写体の差を拾う）ので、合わせる基準には使わない（表には参考として出す）。
+  //   動かすのは1本の強さ t：初期値の組み合わせ（芯と裾40・縁取りを消す60・細かい凹凸30）を、そのままの比率で 0〜1.67倍
   var T = refStat;
-  function cost(s){
-    var c = Math.pow((s.ov - T.ov) / 0.03, 2) + Math.pow((s.wd - T.wd) / 0.35, 2) + Math.pow((s.tail - T.tail) / 0.02, 2) + Math.pow((s.sharp - T.sharp) / 0.06, 2)
-          + 0.1 * Math.pow(Math.log(s.fine / T.fine) / 0.15, 2) + 0.5 * Math.pow((s.csharp - T.csharp) / 0.06, 2);
-    return c;
-  }
-  var p = { fsAmt: 0, fsRad: 7, fsEdge: 0, fsFine: 0, fsCol: 0 }, own = measure(p), best = cost(own), bestS = own, tries = 0;
-  var plan = [['fsEdge', [0, 20, 40, 60, 80, 100]], ['fsAmt', [0, 20, 40, 60, 80, 100]], ['fsRad', [3, 7, 12]], ['fsCol', [0, 35, 70, 100]], ['fsFine', [0, 20, 40, 60]], ['fsEdge', [0, 20, 40, 60, 80, 100]], ['fsAmt', [0, 20, 40, 60, 80, 100]], ['fsEdge', null]];   // 芯と縁取りは互いに効き合うので、もう一周
-  var total = 0; plan.forEach(function(st){ total += st[1] ? st[1].length : 2; });
+  function mk(t, col){ return { fsAmt: Math.round(Math.min(100, 40 * t)), fsRad: 7, fsEdge: Math.round(Math.min(100, 60 * t)), fsFine: Math.round(Math.min(60, 30 * t)), fsCol: col }; }
+  function cost(s, t){ return Math.abs(s.wd - T.wd) / 0.3 + Math.abs(s.sharp - T.sharp) / 0.15 + 0.2 * t; }   // 同じくらいなら弱い方を選ぶ
+  var own = measure(mk(0, 0)), best = cost(own, 0), bestS = own, bt = 0, bc = 0, tries = 0;
+  var softer = T.wd > own.wd + 0.25 || T.sharp < own.sharp - 0.12;   // 見本の方が柔らかい時だけ探す（見本の方がくっきりなら何もしない）
+  var ts = softer ? [0.33, 0.67, 1, 1.33, 1.67] : [], cs = [35, 70, 100], total = ts.length + 2 + cs.length;
   return new Promise(function(res){
-    var si = 0;
-    function nextStage(){
-      if (si >= plan.length){ res({ p: p, own: own, fit: bestS, ref: T }); return; }
-      var key = plan[si][0], vals = plan[si][1];
-      if (!vals){ var v0 = p[key]; vals = [v0 - 10, v0 + 10].filter(function(v){ return v >= 0 && v <= 100; }); }
-      var vi = 0;
-      (function step(){
-        if (vi >= vals.length){ si++; setTimeout(nextStage, 0); return; }
-        var q = Object.assign({}, p); q[key] = vals[vi++];
-        if (q[key] !== p[key]){ var s = measure(q), c = cost(s); if (c < best){ best = c; p = q; bestS = s; } }
-        tries++; if (cb) cb(Math.min(1, tries / total));
-        setTimeout(step, 0);
-      })();
-    }
-    nextStage();
+    var stage = 0, vi = 0, list = ts;
+    (function step(){
+      if (vi >= list.length){
+        stage++; vi = 0;
+        if (stage === 1){ list = softer && bt > 0 ? [bt - 0.17, bt + 0.17].filter(function(v){ return v > 0 && v <= 1.67; }) : []; }
+        else if (stage === 2){ list = T.csharp < bestS.csharp - 0.15 ? cs : []; }   // 色の輪郭：見本の方が甘い時だけ
+        else { res({ p: mk(bt, bc), own: own, fit: bestS, ref: T, t: bt }); return; }
+        setTimeout(step, 0); return;
+      }
+      var v = list[vi++], s2, c2;
+      if (stage < 2){ s2 = measure(mk(v, 0)); c2 = cost(s2, v); if (c2 < best){ best = c2; bt = v; bestS = s2; } }
+      else { s2 = measure(mk(bt, v)); if (Math.abs(s2.csharp - T.csharp) < Math.abs(bestS.csharp - T.csharp) - 0.01){ bc = v; bestS = s2; } }
+      tries++; if (cb) cb(Math.min(1, tries / total));
+      setTimeout(step, 0);
+    })();
   });
 }
 function tkCalm(img, w, h, P){
@@ -3525,8 +3531,9 @@ function tkL6DeepLut(dBg, dSk, skH){ return tkL6DeepLut2(dBg, 'bg', 0, 0); }   /
 // 色を落ち着かせる：見本の実測（色相ごとの鮮やかさ・明るさ）とJPEGの写真との差。30°ごと（0°〜）の鮮やかさの倍率と、色の付いた所の明るさの差
 var TK_L6_CALM_K = [0.71,  0.63,  0.57,  0.9,  0.47,  0.5,  0.75,  0.89,  1,  0.8,  0.51,  0.9], TK_L6_CALM_L = [-0.01,  -0.01,  -0.06,  -0.06,  -0.08,  -0.09,  -0.04,  -0.06,  -0.06,  -0.0,  0.01,  -0.02];   // v138：見本を本人の投稿322枚にして、色相ごとの鮮やかさ・明るさの差を反映
 function tkL6CalmAt(tab, H){ var f = ((H - 15) / 30 + 12) % 12, i0 = Math.floor(f), t = f - i0, i1 = (i0 + 1) % 12, u = (1 - Math.cos(t * Math.PI)) / 2; return tab[i0] + (tab[i1] - tab[i0]) * u; }
-function tkL6DeepLut2(d, kind, teal, calm){
-  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = 252 * Math.PI / 180, sk = kind === 'skin';
+function tkL6DeepLut2(d, kind, teal, calm, hS, hM, kS, hH){
+  if (hS == null) hS = 252; if (hM == null) hM = 248; if (kS == null) kS = 1; if (hH == null) hH = hS; var ihH = hH * Math.PI / 180;   // v188：青の色相（影・中間）と影の量は見本から。指定なし＝以前の藍
+  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = hS * Math.PI / 180, sk = kind === 'skin';
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
     var L = o[0], A = o[1], B = o[2], C = Math.sqrt(A * A + B * B), H = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
@@ -3538,12 +3545,13 @@ function tkL6DeepLut2(d, kind, teal, calm){
     var wb = Math.exp(-Math.pow(tkHd(H, 228) / 52, 2)) * tkSS((C - 0.006) / 0.014);
     var ws = (1 - tkSS((L - 0.22) / 0.3)) * tkSS((L - 0.03) / 0.1), wh = tkSS((L - 0.68) / 0.16) * (1 - tkSS((L - 0.97) / 0.03));
     // ① 青い物を藍へ
-    var H1 = H + tkHueDist(248, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 0.8 * d * wb) + 0.008 * d * wb, L1 = L - 0.09 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - 0.6 * wh);   // 明るい青（空）は沈めない＝明るく抜ける
+    var hT = L < 0.5 ? hS + (hM - hS) * tkSS((L - 0.2) / 0.3) : hM + (hH - hM) * tkSS((L - 0.55) / 0.25);   /* 回す先の青は、明るさごとに見本の色相へ（影→中間→明るい所） */
+    var H1 = H + tkHueDist(hT, H) * Math.min(1, 1.1 * d) * wb, C1 = C * (1 + 0.8 * d * wb) + 0.008 * d * wb, L1 = L - 0.09 * d * wb * tkSS((L - 0.12) / 0.2) * (1 - 0.6 * wh);   // 明るい青（空）は沈めない＝明るく抜ける
     var A1 = Math.cos(H1 * Math.PI / 180) * C1, B1 = Math.sin(H1 * Math.PI / 180) * C1;
     // ② 影に藍 ③ 明るい所にごく薄く（肌は影を控えめにして、中間〜明るい所に薄い青み）
-    var add = (0.045 * ws + 0.012 * wh) * d * (sk ? 0.6 : 1) * (1 - 0.5 * wb);   // 見本の影はほぼ無彩色（色の濃さ0.01〜0.02）。藍はうっすら
+    var kAdd = d * (sk ? 0.6 : 1) * (1 - 0.5 * wb), add = 0.045 * ws * kS * kAdd, addH = 0.012 * wh * kAdd;   // 見本の影はほぼ無彩色（色の濃さ0.01〜0.02）。藍はうっすら
     if (sk) add += 0.016 * d * tkSS((L - 0.25) / 0.15) * (1 - tkSS((L - 0.95) / 0.04));
-    A1 += Math.cos(ih) * add; B1 += Math.sin(ih) * add;
+    A1 += Math.cos(ih) * add + Math.cos(ihH) * addH; B1 += Math.sin(ih) * add + Math.sin(ihH) * addH;
     var C2 = Math.sqrt(A1 * A1 + B1 * B1); if (C2 > 0.13){ A1 *= 0.13 / C2; B1 *= 0.13 / C2; }
     tkFromOk(L1, A1, B1, o); LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
@@ -3558,7 +3566,11 @@ function tkL6Traits(M){
   var deep = Math.min(1.3, Math.max(blue(lo), 0.8 * blue(mid), 0.6 * blue(hi)) * 1.3);
   var tl = Math.min(1.3, Math.max(teal(mid) * 1.2, teal(lo), 0.6 * deep));
   var cs = tkL6Chroma(M), calm = Math.max(0, Math.min(1.2, (0.05 - cs) / 0.025));
-  return { deep: deep, teal: tl, calm: calm };
+  // v188：青の色相と影の青みの量も見本から（以前は藍252°・248°に固定＝どの見本でも同じ藍に寄っていた。本人の見本322枚の実測は、影の青の中央230°・幅214〜249°、中間226°・幅203〜240°）
+  function coolH(x, def){ return (x.c > 0.004 && x.h > 185 && x.h < 280) ? x.h : def; }
+  var hM = coolH(mid, coolH(lo, coolH(hi, 238))), hS = coolH(lo, hM);
+  var hH = coolH(hi, Math.max(hM, 238));   // 明るい所の青は、影・中間より藍寄り（実測の中央238°）
+  return { deep: deep, teal: tl, calm: calm, hS: Math.max(210, Math.min(252, hS)), hM: Math.max(212, Math.min(250, hM)), hH: Math.max(218, Math.min(255, hH)), kS: Math.max(0.3, Math.min(1, lo.c / 0.025)) };
 }
 // 近くの明暗の差（淡さ・質感の量）：長辺240に縮めた明るさから、細かい〜中くらいの明暗の揺れ（ぼかしとの差）の大きさ
 function tkL6LC(px, w, h, rgba){
@@ -3736,20 +3748,21 @@ function tkLook6(img, n, P, w, h){
   var sf = (P.l6Soft == null ? 0 : P.l6Soft) / 100;
   if (sf > 0 && w && h){ var liS = tkL6Idx(P); var eS = P.l6Custom ? null : TK_L6[liS]; var tgt = P.l6Custom ? P.l6CustomLC : (eS && eS.lc ? eS.lc[0] : 0); if (tgt) tkL6Soft(img, n, w, h, tgt, sf); }
   // 葉の深さ（人物でない写真）：葉は見本のように暗く沈めて濃く（色を抜いて灰緑にしない）、黄緑は青緑の方へ
-  var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person) tkL6Foliage(img, n, fo);
+  var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person){ var eF = P.l6Custom ? null : TK_L6[tkL6Idx(P)], qF = eF && eF.m && eF.m._q, fL = (qF && P.l6FolFollow !== 0) ? Math.min(0.62, TK_L6_FOL.L + Math.max(0, 0.8 * (qF[3] - 0.42))) : null; tkL6Foliage(img, n, fo, fL); }
   // 青の入れ方（人物でない写真）：1＝青影（暗い所に藍）／2＝中間（中くらいの明るさを青緑〜藍へ）／3＝青光（明るい所・光を青く）。黒は締める
-  var bmd = (P._tung || 0) > 0.3 && (P.l6BlueMode | 0) !== 1 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var kBM = bmd + ',' + bam; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
+  var bmd = (P._tung || 0) > 0.3 && (P.l6BlueMode | 0) !== 1 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var hBM = 245; if (P.l6BlueHue !== 0 && P.l6Follow !== 0){ var trB = tkL6Traits(P.l6Custom || (TK_L6[tkL6Idx(P)] || TK_L6[0]).m); hBM = Math.round(bmd === 1 ? trB.hS : bmd === 3 ? trB.hH : trB.hM); } var kBM = bmd + ',' + bam + ',' + hBM; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam, hBM); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
   var dBg = (P.l6DeepBg != null ? P.l6DeepBg : (P.l6Deep || 0)) / 100, dSk = (P.l6DeepSk || 0) / 100, tl = (P.l6Teal || 0) / 100, cm = (P.l6Calm || 0) / 100;
   // スライダーは「見本の特徴をどれだけ写すか」。実際の量＝スライダー×見本の特徴の強さ（見本ごとに違う結果になる）
   if (P.l6Follow !== 0){ var li6 = tkL6Idx(P); var M6 = P.l6Custom || (TK_L6[li6] || TK_L6[0]).m, tr = tkL6Traits(M6);
-    dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; }   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
+    dBg *= tr.deep; dSk *= tr.deep; tl *= tr.teal; cm *= tr.calm; P._l6Tr = tr; var tr6 = tr; }
+  var trH = tr6 && P.l6BlueHue !== 0 ? tr6 : null, hS6 = trH ? Math.round(trH.hS) : 252, hM6 = trH ? Math.round(trH.hM) : 248, kS6 = trH ? Math.round(trH.kS * 20) / 20 : 1, hH6 = trH ? Math.round(trH.hH) : 252;   // 全体の鮮やかさは見本の実測値で合わせるので、色ごとの落ち着きは補助（半分）
   if (P._tung){ tl *= 1 - P._tung; }   /* 電球色の写真は濃い青・青緑を控える */
   dBg = Math.round(dBg * 100) / 100; dSk = Math.round(dSk * 100) / 100; tl = Math.round(tl * 100) / 100; cm = Math.round(cm * 100) / 100;
   if (dBg <= 0 && dSk <= 0 && tl <= 0 && cm <= 0) return;
-  var kBk = P.l6Person ? 'bg' : 'bgn', kB = kBk + dBg + ',' + tl + ',' + cm, kS = 's' + dSk;
-  if (TK_LUTC.l6bK !== kB){ TK_LUTC.l6bK = kB; TK_LUTC.l6b = (dBg > 0 || tl > 0 || cm > 0) ? tkL6DeepLut2(dBg, kBk, tl, cm) : null; }
-  if (TK_LUTC.l6sK !== kS){ TK_LUTC.l6sK = kS; TK_LUTC.l6s = dSk > 0 ? tkL6DeepLut2(dSk, 'skin', 0, 0) : null; }
+  var kBk = P.l6Person ? 'bg' : 'bgn', kB = kBk + dBg + ',' + tl + ',' + cm + ',' + hS6 + ',' + hM6 + ',' + kS6 + ',' + hH6, kS = 's' + dSk + ',' + hS6 + ',' + hM6 + ',' + hH6;
+  if (TK_LUTC.l6bK !== kB){ TK_LUTC.l6bK = kB; TK_LUTC.l6b = (dBg > 0 || tl > 0 || cm > 0) ? tkL6DeepLut2(dBg, kBk, tl, cm, hS6, hM6, kS6, hH6) : null; }
+  if (TK_LUTC.l6sK !== kS){ TK_LUTC.l6sK = kS; TK_LUTC.l6s = dSk > 0 ? tkL6DeepLut2(dSk, 'skin', 0, 0, hS6, hM6, 1, hH6) : null; }
   if (!(w && h)){ if (TK_LUTC.l6b) tkApplyLut3(img, n, TK_LUTC.l6b, 33); return; }
   var sm = null; (P.lm || []).forEach(function(x){ if (x.l6skin) sm = x; });
   // 人物がいない写真（手で肌を塗っていない時）は肌の範囲なし＝全部背景（木・猫の毛など肌に近い色も背景として扱う）
@@ -3917,8 +3930,8 @@ function tkL6Stable(img, I0, n, w, h, k){
 //   色ごとの規則（LUT）なので場所による割れは出ない。暗い所・空・白には入れない
 // 青の入れ方：見本（植物・森・物・街）の実測＝青は色相240〜250°（藍）、画素の鮮やかさ0.03〜0.06。黒は浮かせない
 //   暖かい色（花・木の幹・肌に近い色）は青くしない＝主役の色は残る。緑は青緑の方へ回す（灰色に寄せない）
-function tkL6BlueLut(mode, amt){
-  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = 245 * Math.PI / 180;
+function tkL6BlueLut(mode, amt, hB){
+  var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), o = [0, 0, 0], p = 0, ih = (hB == null ? 245 : hB) * Math.PI / 180;   // v188：足す青の色相は見本から
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
     var L = o[0], A = o[1], B = o[2], C = Math.sqrt(A * A + B * B), H = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
@@ -3949,14 +3962,15 @@ function tkL6BlueLut(mode, amt){
 //   いちばん暗い所（0.04〜0.18）に青みが入るのは4枚に1枚ほど＝選んだ見本の暗い所が青い時だけ藍を差す
 var TK_L6_TUNG_SH = { H: 78, C: 0.008, blue: 0.24 };
 var TK_L6_FOL = { L: 0.39, H: 149 };   // v138：植物の見本（本人の投稿のみ）の葉の明るさ中央0.39・色相147°（以前の0.40・150°からの差を反映）
-function tkL6Foliage(img, n, amt){
+function tkL6Foliage(img, n, amt, tgtL){
+  var FL = tgtL != null ? tgtL : TK_L6_FOL.L;   // v188：葉を沈める先の明るさ。見本が植物の見本の中央より明るい時は、その分だけ明るく（明るい見本を選んだのに葉だけ暗く沈むのを防ぐ）
   var o = [0, 0, 0], Ls = [], cnt = 0, tot = 0;
   for (var i = 0; i < n; i += 7){ var j = i * 3; tkToOk(img[j], img[j + 1], img[j + 2], o); var C = Math.sqrt(o[1] * o[1] + o[2] * o[2]), H = (Math.atan2(o[2], o[1]) * 180 / Math.PI + 360) % 360; tot++;
     if (H > 95 && H < 200 && C > 0.02){ Ls.push(o[0]); cnt++; } }
   if (cnt < tot * 0.06) return;
   Ls.sort(function(a, b){ return a - b; }); var gL = Ls[Ls.length >> 1];
-  if (gL <= TK_L6_FOL.L + 0.02) return;
-  var r = Math.max(0.68, (TK_L6_FOL.L + 0.03) / gL), rr = 1 + (r - 1) * amt;
+  if (gL <= FL + 0.02) return;
+  var r = Math.max(0.68, (FL + 0.03) / gL), rr = 1 + (r - 1) * amt;
   var N3 = 33, LUT = new Float32Array(N3 * N3 * N3 * 3), p = 0;
   for (var bi = 0; bi < N3; bi++) for (var gi = 0; gi < N3; gi++) for (var ri = 0; ri < N3; ri++){
     tkToOk(ri / 32, gi / 32, bi / 32, o);
@@ -6642,20 +6656,42 @@ function tkLook2(img, n, P, w, h){
   function softMatchFrom(im){
     if (!img || MSOFT_BUSY) return;
     MSOFT_BUSY = true; MSOFT = null;
-    var L = 540, rp = smallPixels(im, L), rs = tkSoftStats(rp.data, rp.w, rp.h), sz = sizeFor(L), own = readPixels(sz[0], sz[1]);
+    // v188：投稿で見る大きさ（長辺1080。見本がそれより小さければ見本の大きさ）にそろえて測る。以前は540で測っていたので、輪郭の細かい硬さ（縁取り・芯）が写らず、値が当てずっぽうになっていた
+    var L = Math.max(480, Math.min(1080, Math.max(im.naturalWidth || im.width, im.naturalHeight || im.height))), rp = smallPixels(im, L), sz = sizeFor(L), own = readPixels(sz[0], sz[1]), sc = L / 2000;
+    // 比べる「この写真」は、色を仕上げた後・柔らかさをかける前の状態（以前は元の写真で比べていた）
+    try{ var Pb = JSON.parse(JSON.stringify(P)); Pb.on.fsoft = 0; Pb.on.fsh = 0; Pb.on.fblk = 0; Object.keys(MANUAL_FX).forEach(function(k){ Pb.on[k] = 0; }); Pb.on.grain = 0; Pb.on.glow = 0; Pb.on.hal = 0;
+      var ob = tkProcess(own, sz[0], sz[1], Pb); if (ob && ob.length === own.length) own = ob; }catch(e){}
+    // 測るのは、見本もこの写真も、くっきりした境目がいちばん多い一部（540px四方まで）＝同じ条件で比べる。黒と白は写真全体で
+    function bestCrop(px, W0, H0){
+      var cw = Math.min(540, W0), chh = Math.min(540, H0); if (cw >= W0 && chh >= H0) return { d: px, w: W0, h: H0 };
+      var bestE = -1, cx0 = 0, cy0 = 0, gx, gy;
+      for (gy = 0; gy <= 3; gy++) for (gx = 0; gx <= 3; gx++){
+        var x0 = Math.round((W0 - cw) * gx / 3), y0 = Math.round((H0 - chh) * gy / 3), e = 0;
+        for (var yy = y0 + 2; yy < y0 + chh - 2; yy += 3) for (var xx = x0 + 2; xx < x0 + cw - 2; xx += 3){ var q = (yy * W0 + xx) * 4, d1 = Math.abs(px[q + 1] - px[q + 9]) + Math.abs(px[q + 1] - px[q + W0 * 8 + 1]); if (d1 > 40) e += d1; }   /* 強い段差だけ数える */
+        if (e > bestE){ bestE = e; cx0 = x0; cy0 = y0; }
+      }
+      var d = new Uint8ClampedArray(cw * chh * 4);
+      for (var ry = 0; ry < chh; ry++) d.set(px.subarray(((cy0 + ry) * W0 + cx0) * 4, ((cy0 + ry) * W0 + cx0 + cw) * 4), ry * cw * 4);
+      return { d: d, w: cw, h: chh };
+    }
+    var rc = bestCrop(rp.data, rp.w, rp.h), rs = tkSoftStats(rc.d, rc.w, rc.h), rAll = tkSoftStats(rp.data, rp.w, rp.h); rs.p1 = rAll.p1; rs.p995 = rAll.p995; rs.noise = rAll.noise;
+    var ownAll = tkSoftStats(own, sz[0], sz[1]), oc = bestCrop(own, sz[0], sz[1]), crop = oc.d, cw = oc.w, chh = oc.h;
     if (XE.mSoft){ XE.mSoft.innerHTML = ''; XE.mSoft.style.display = ''; XE.mSoft.appendChild(xel('div', 'msoft-n', '柔らかさを測っています… 0%')); }
     if (rs.edges < 150){
       MSOFT_BUSY = false; MSOFT = { few: true, ref: rs }; updateExtras();
       toast('参考写真の色に寄せました（柔らかさは測れませんでした）'); return;
     }
-    tkSoftMatch(rs, own, sz[0], sz[1], function(f){ var e = XE.mSoft && XE.mSoft.querySelector('.msoft-n'); if (e) e.textContent = '柔らかさを測っています… ' + Math.round(f * 100) + '%'; }).then(function(r){
+    tkSoftMatch(rs, crop, cw, chh, function(f){ var e = XE.mSoft && XE.mSoft.querySelector('.msoft-n'); if (e) e.textContent = '柔らかさを測っています… ' + Math.round(f * 100) + '%'; }, sc).then(function(r){
       MSOFT_BUSY = false;
       ['fsAmt', 'fsRad', 'fsEdge', 'fsFine', 'fsCol'].forEach(function(k){ setVal(k, r.p[k]); });
+      var softOn = r.t > 0 || r.p.fsCol > 0;
       // 白の上限：見本の白が飛んでいなければ、その手前で丸める／黒の底：見本の黒が霞んでいれば、その高さまで
-      var ownS = r.own, sh = rs.p995 < 0.97 ? Math.max(0, Math.min(100, Math.round((1 - rs.p995) / 0.12 * 100))) : 0;
+      // 白：この写真の白の上限が見本より高い時だけ、見本の高さになる量の肩をかける（肩の式を逆に解く）／黒：この写真の黒の底が見本より深い時だけ、見本の高さまで
+      var ownS = ownAll, sh = 0; r.own.p1 = ownAll.p1; r.own.p995 = ownAll.p995;   /* 黒と白は写真全体で */
+      if (ownS.p995 > rs.p995 + 0.015){ var lo = 0, hi = 100, kn = 0.62; for (var it = 0; it < 12; it++){ var md = (lo + hi) / 2, cap = 1 - 0.12 * md / 100, yv = ownS.p995 > kn ? kn + (cap - kn) * Math.tanh((ownS.p995 - kn) / (cap - kn)) : ownS.p995; if (yv > rs.p995) lo = md; else hi = md; } sh = Math.round(hi); }
       setVal('fsSh', sh); P.on.fsh = sh > 0 ? 1 : 0; syncGroup('fsh');
-      if (rs.p1 > 0.04){ P.fsBlkT = rs.p1; setVal('fsBlk', 100); P.on.fblk = 1; } else { P.fsBlkT = 0; setVal('fsBlk', 0); P.on.fblk = 0; } syncGroup('fblk');
-      P.on.fsoft = 1; syncGroup('fsoft');
+      if (rs.p1 > 0.04 && ownS.p1 < rs.p1 - 0.01){ P.fsBlkT = rs.p1; setVal('fsBlk', 100); P.on.fblk = 1; } else { P.fsBlkT = 0; P.on.fblk = 0; } syncGroup('fblk');
+      P.on.fsoft = softOn ? 1 : 0; syncGroup('fsoft');
       MSOFT = r; updateExtras(); clearPresetMark(); schedule();
       toast('参考写真の色と柔らかさに寄せました');
     }, function(){ MSOFT_BUSY = false; toast('柔らかさを測れませんでした'); });
@@ -6667,7 +6703,7 @@ function tkLook2(img, n, P, w, h){
     T.innerHTML = '';
     if (!MSOFT || P.mSoft === 0 || !P.mref || XE.mThumbSrc !== 'img'){ T.style.display = 'none'; return; }
     T.style.display = '';
-    T.appendChild(xel('div', 'msoft-h', '柔らかさ（見本とこの写真、くっきりした境目の断面で比べています）'));
+    T.appendChild(xel('div', 'msoft-h', '柔らかさ（投稿で見る大きさにそろえ、ピントの合った境目で比べています）'));
     if (MSOFT.few){ T.appendChild(xel('div', 'msoft-n', '参考写真にくっきりした境目が少なく（ボケや霧が多い写真）、柔らかさを正確に測れませんでした。色だけ合わせています。「柔らかさ」は手で調整してください。')); return; }
     function row(c, cls){ var r = xel('div', 'mtr c5' + (cls ? ' ' + cls : '')); c.forEach(function(x){ r.appendChild(xel('span', x[1] || '', x[0])); }); T.appendChild(r); }
     row([['項目'], ['見本'], ['この写真'], ['合わせた後'], ['判定']], 'mth');
@@ -6677,15 +6713,16 @@ function tkLook2(img, n, P, w, h){
     [['縁取り', 'ov', pc, 0.04, -1], ['立ち上がり幅', 'wd', function(v){ return f1(v) + 'px'; }, 0.6, 1], ['芯の急さ', 'sharp', f2, 0.1, -1], ['裾', 'tail', pc, 0.03, 1], ['細かい凹凸', 'fine', f2, -0.15, -1], ['色の輪郭', 'csharp', f2, 0.08, -1]].forEach(function(d){
       var a = R[d[1]], b = O[d[1]], c = F[d[1]], ok = (d[3] < 0 ? Math.abs(c / a - 1) <= -d[3] : Math.abs(c - a) <= d[3]) || Math.abs(c - a) <= 0.25 * Math.abs(b - a);   // 範囲内、または差を4分の3以上縮めた
       var harder = (a - b) * d[4] < 0 && !ok;   // 見本の方がくっきり（柔らかさでは硬くできない）
-      if (harder) crisp++;
-      row([[d[0]], [d[2](a), 'num'], [d[2](b), 'num'], [d[2](c), 'num'], ok ? ['OK', 'ok'] : harder ? ['そのまま', ''] : ['要確認', 'ng']]);
+      if (harder && !(d[1] === 'ov' || d[1] === 'tail' || d[1] === 'fine')) crisp++;
+      var refOnly = d[1] === 'ov' || d[1] === 'tail' || d[1] === 'fine';   // 被写体で変わる項目＝合わせる基準にしていない
+      row([[d[0]], [d[2](a), 'num'], [d[2](b), 'num'], [d[2](c), 'num'], refOnly ? ['参考', ''] : ok ? ['OK', 'ok'] : harder ? ['そのまま', ''] : ['要確認', 'ng']]);
     });
     row([['黒の底'], [Math.round(R.p1 * 100) + '', 'num'], [Math.round(O.p1 * 100) + '', 'num'], [P.on.fblk && P.fsBlk > 0 ? Math.round(R.p1 * 100) + 'まで' : 'そのまま', 'num'], ['OK', 'ok']]);
     row([['白の上限'], [Math.round(R.p995 * 100) + '', 'num'], [Math.round(O.p995 * 100) + '', 'num'], [P.on.fsh && P.fsSh > 0 ? '肩 ' + P.fsSh : 'そのまま', 'num'], ['OK', 'ok']]);
     var notes = [];
     if (crisp) notes.push('「そのまま」は、見本の方がこの写真よりくっきりしている項目です（柔らかさでは硬くできないので、何もしていません）。');
     if (R.noise > O.noise * 1.6 && R.noise > 0.012) notes.push('見本には粒がありそうです。粒は自動では入れないので、「柔らかさ」のフィルムの粒を手で上げてください。');
-    if (Math.abs(F.fine / R.fine - 1) > 0.15) notes.push('細かい凹凸は写っている物に左右されるので、控えめに合わせています（見本と被写体が違うと差が残ります）。');
+    notes.push('合わせているのは、ピントの合った境目の幅と急さ、色の輪郭です。「参考」の項目（縁取り・裾・細かい凹凸）は写っている物で値が変わるので、基準にはしていません。');
     notes.push('ピントからボケへの抜け方は、見本からは合わせられません（撮影で作る部分です）。');
     T.appendChild(xel('div', 'msoft-n', notes.join(' ')));
   }
@@ -7897,6 +7934,14 @@ function tkLook2(img, n, P, w, h){
     bx.appendChild(l6Slider('質感を柔らかく（上げすぎるとのっぺり）', 'l6Soft', 0, '', ''));
     bx.appendChild(l6Slider(A6.person ? '濃い青・背景（肌の範囲の外）' : '濃い青', 'l6DeepBg', 30, '', ''));
     if (A6.person) bx.appendChild(l6Slider('濃い青・肌（肌の範囲の中）', 'l6DeepSk', 0, '', ''));
+    // v188：足す青の色相。見本に合わせる（初期）／藍に固定（v187までの色）
+    try{ var segH = xel('div', 'seg'), trHh = tkL6Traits(A6.custom || (TK_L6[A6.idx] || TK_L6[0]).m);
+      [[1, '青の色相：見本に合わせる'], [0, '藍に固定（以前）']].forEach(function(m){
+        var bt = xel('button', (P.l6BlueHue === 0 ? 0 : 1) === m[0] ? 'on' : '', m[1]); bt.type = 'button';
+        bt.addEventListener('click', function(){ P.l6BlueHue = m[0]; l6Render(); schedule(); });
+        segH.appendChild(bt); });
+      bx.appendChild(segH);
+      bx.appendChild(xel('div', 'hint', '見本に合わせる＝足す青を、選んだ見本の青の色相にします（この見本：影 ' + Math.round(trHh.hS) + '°・中間 ' + Math.round(trHh.hM) + '°・明るい所 ' + Math.round(trHh.hH) + '°。数字が小さいほど青緑寄り、大きいほど藍寄り）。影の青みの量も見本の量までにします。藍に固定＝どの見本でも藍（252°）を足す、以前の色です。')); }catch(e){}
     bx.appendChild(l6Slider('空の仕上げ（晴れは深い青・曇りは淡く）', 'l6Sky', 100, '', ''));
     bx.appendChild(xel('div', 'hint', '空が割れる・合わない時は弱めるか0に。空の範囲は「範囲 → マスク → ＋ 空」で決めると、その範囲を空として仕上げます。'));
     bx.appendChild(l6Slider('緑を青緑へ（草木を沈める）', 'l6Teal', 40, '', ''));
