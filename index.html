@@ -519,7 +519,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v194</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v195</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -818,6 +818,7 @@ function tkProcess(src, w, h, P){
   // 5.9) 色のまとまり（彩度の散らかりを抑える）
   if (P.on.calm) tkCalm(img, w, h, P);
   // 5.95) フィルム・中判の柔らかさ（ピントは合ったまま、輪郭と質感を柔らかく。光の効果より前＝グローなどの光はこの後に足す）
+  if (P.on.bokeh && TK_REG && TK_REG.dep && (!P.reg || TK_REG.ver === P.reg.ver)) tkBokehDeep(img, w, h, P);
   if (P.on.fsoft || P.on.fsh || P.on.fblk) tkFilmSoft(img, w, h, P, { soft: !!P.on.fsoft, sh: !!P.on.fsh, blk: !!P.on.fblk });
 
   var doDiff = P.on.diff && P.diff > 0, doGlow = P.on.glow && P.glow > 0, doHal = P.on.hal && P.hal > 0, doMist = P.on.mist && P.mist > 0;
@@ -2550,6 +2551,48 @@ function tkGauss1(src, w, h, sigma){
     }
   }
   return d;
+}
+// v195：ピントの浅さ（中判の大きなボケ）。奥行きAI（MiDaS）と主役AIの地図から、ピント面より遠い所・近い所ほど大きくぼかす
+//   ピント面＝タップした所の奥行き。指定がなければ主役の奥行き。主役は丸ごと守る（自動の時）
+//   ぼかしは「ぼかす側の画素だけ」を材料にする（主役の色が背景へにじまない）。白飛びした小さな光は明るさを見積もって、ぼけても光の玉として残す
+function tkBokehMap(P, lw, lh){
+  var M = TK_REG; if (!M || !M.dep || !M.data) return null;
+  var mw = M.mw, mh = M.mh, nn = M.n, n2 = lw * lh, D = new Float32Array(n2), S = new Float32Array(n2), x, y, j;
+  for (y = 0; y < lh; y++){ var my = Math.min(mh - 1, Math.floor((y + 0.5) * mh / lh)); for (x = 0; x < lw; x++){ var mx = Math.min(mw - 1, Math.floor((x + 0.5) * mw / lw)), q = my * mw + mx; D[y * lw + x] = M.dep[q] / 255; S[y * lw + x] = M.data[q * nn] / 255; } }
+  var mid, tol, auto = !(P.bkx >= 0 && P.bky >= 0);
+  if (!auto){ var fx = Math.round(P.bkx * (lw - 1)), fy = Math.round(P.bky * (lh - 1)), r = Math.max(2, Math.round(lw * 0.02)), vs = [];
+    for (y = Math.max(0, fy - r); y <= Math.min(lh - 1, fy + r); y++) for (x = Math.max(0, fx - r); x <= Math.min(lw - 1, fx + r); x++) vs.push(D[y * lw + x]);
+    vs.sort(function(a, b){ return a - b; }); mid = vs[vs.length >> 1]; tol = 0.06;
+  } else { var ds = []; for (j = 0; j < n2; j++) if (S[j] > 0.5) ds.push(D[j]);
+    if (ds.length < n2 * 0.01) return { none: 1 };   /* 主役が見つからない＝ピント位置をタップしてもらう */
+    ds.sort(function(a, b){ return a - b; }); var lo = ds[Math.floor(ds.length * 0.15)], hi = ds[Math.floor(ds.length * 0.85)]; mid = (lo + hi) / 2; tol = Math.max(0.05, (hi - lo) / 2 + 0.03); }
+  var C = new Float32Array(n2);
+  for (j = 0; j < n2; j++){ var c = Math.min(1, Math.max(0, (Math.abs(D[j] - mid) - tol) / 0.3)); if (auto) c *= 1 - Math.min(1, Math.max(0, (S[j] - 0.35) / 0.3)) * (1 - Math.min(1, Math.max(0, (c - 0.5) / 0.4))); C[j] = c; }
+  return { C: tkBlur1(C, lw, lh, Math.max(0.6, lw * 0.004)) };
+}
+function tkBokehDeep(img, w, h, P){
+  var amt = (P.bkAmt == null ? 50 : P.bkAmt) / 100 * 0.9; if (amt <= 0) return;
+  var L = Math.max(w, h), sc = Math.min(1, 720 / L), lw = Math.max(8, Math.round(w * sc)), lh = Math.max(8, Math.round(h * sc)), n2 = lw * lh, x, y, i, j, c;
+  var BM = tkBokehMap(P, lw, lh); if (!BM || BM.none) return; var C = BM.C;
+  tkLinTables();
+  var ch = [new Float32Array(n2), new Float32Array(n2), new Float32Array(n2)], CN = new Float32Array(n2);
+  for (y = 0; y < h; y++){ var gy = Math.min(lh - 1, (y * sc) | 0); for (x = 0; x < w; x++){ i = (y * w + x) * 3; j = gy * lw + Math.min(lw - 1, (x * sc) | 0);
+    var r = img[i], g = img[i + 1], b = img[i + 2], m = r > g ? (r > b ? r : b) : (g > b ? g : b), bo = (m - 0.86) / 0.12; bo = bo <= 0 ? 1 : 1 + 4 * (bo > 1 ? 1 : bo * bo);
+    ch[0][j] += tkLinF(r) * bo; ch[1][j] += tkLinF(g) * bo; ch[2][j] += tkLinF(b) * bo; CN[j]++; } }
+  var Wt = new Float32Array(n2), t = new Float32Array(n2); for (j = 0; j < n2; j++){ var cn = CN[j] || 1; ch[0][j] /= cn; ch[1][j] /= cn; ch[2][j] /= cn; Wt[j] = Math.min(1, Math.max(0.02, C[j] * 3)); }
+  var sig = [lw * 0.004 * amt, lw * 0.009 * amt, lw * 0.018 * amt], LY = [];   /* 3段のぼけ。LY[k][c] */
+  for (var k = 0; k < 3; k++){ var sg = Math.max(0.6, sig[k]), wb = tkBlur1(Wt, lw, lh, sg), one = [];
+    for (c = 0; c < 3; c++){ for (j = 0; j < n2; j++) t[j] = ch[c][j] * Wt[j]; var bl = tkBlur1(t, lw, lh, sg), o = new Float32Array(n2); for (j = 0; j < n2; j++) o[j] = bl[j] / Math.max(1e-4, wb[j]); one.push(o); }
+    LY.push(one); }
+  var a3 = [0, 0, 0], b3 = [0, 0, 0];
+  function smp(A, q0, q1, q2, q3, w0, w1, w2, w3){ return A[q0] * w0 + A[q1] * w1 + A[q2] * w2 + A[q3] * w3; }
+  for (y = 0; y < h; y++){ var fy = Math.min(lh - 1.001, Math.max(0, (y + 0.5) * sc - 0.5)), y0 = fy | 0, ty = fy - y0, ra = y0 * lw, rb = Math.min(lh - 1, y0 + 1) * lw;
+    for (x = 0; x < w; x++){ var fx = Math.min(lw - 1.001, Math.max(0, (x + 0.5) * sc - 0.5)), x0 = fx | 0, tx = fx - x0, x1 = Math.min(lw - 1, x0 + 1);
+      var q0 = ra + x0, q1 = ra + x1, q2 = rb + x0, q3 = rb + x1, w0 = (1 - tx) * (1 - ty), w1 = tx * (1 - ty), w2 = (1 - tx) * ty, w3 = tx * ty;
+      var cv = smp(C, q0, q1, q2, q3, w0, w1, w2, w3); if (cv < 0.01) continue;
+      var tt = cv * 3, i0 = tt >= 2 ? 2 : tt | 0, f = tt - i0; if (f > 1) f = 1; i = (y * w + x) * 3;
+      for (c = 0; c < 3; c++){ var lo = i0 === 0 ? tkLinF(img[i + c]) : smp(LY[i0 - 1][c], q0, q1, q2, q3, w0, w1, w2, w3), hi = smp(LY[i0][c], q0, q1, q2, q3, w0, w1, w2, w3), v = lo + (hi - lo) * f; img[i + c] = tkGamF(v > 1 ? 1 : v); }
+    } }
 }
 function tkFilmSoft(img, w, h, P, on){
   on = on || { soft: 1, sh: 1, blk: 1 };   // v187：柔らかさ・白の肩・霞んだ黒は別々にオンオフ（白の肩は光タブ、霞んだ黒はトーンへ移した）
@@ -4480,6 +4523,9 @@ function tkLook2(img, n, P, w, h){
     { key: 'fsoft', title: 'フィルム・中判の柔らかさ', sub: 'ピントは合ったまま、すべての輪郭と質感を柔らかく（芯と裾・縁取り・細かい凹凸・色のにじみ）',
       sliders: [['fsAmt','芯と裾（にじみ）',0,100,40],['fsRad','裾の広がり',1,20,7],['fsEdge','縁取りを消す',0,100,60],['fsFine','細かい凹凸を緩める',0,100,30],['fsCol','色のにじみ',0,100,50]],
       hint: 'ぼかしではありません。輪郭の切れ（いちばん細かい明暗）だけをなだらかにし、形を作る明暗は残します＝ピントは合ったまま縁が柔らかい、中判やフィルムの写り。白いもやは作りません（光のにじみはミスト・グローで）。\n縁取りを消す＝シャープで付いた明暗の縁を消す。細かい凹凸＝強い輪郭は残し、タイルや砂利の細かいざらつきだけ緩める。色のにじみ＝色の輪郭だけ柔らかく。\n【下の2つとの違い】柔らかさ＝明るさに関係なく、すべての輪郭（芯は細いまま）。ミスト＝明るい所の縁から、暗い側へだけ光がにじむ（暗い輪郭はそのまま）。フォギー＝画面全体を薄くぼかして混ぜる（芯も少し甘くなる）。' },
+    { key: 'bokeh', title: 'ピントの浅さ（中判の大きなボケ）', sub: 'AIが奥行きを測り、ピント面から離れた所ほど大きくぼかす（主役はそのまま）', custom: buildBokehExtra,
+      sliders: [['bkAmt','ぼけの大きさ',0,100,50]],
+      hint: '絞りを開けた中判の写りに近づけます。ピントは主役に自動で合います。主役がはっきりしない写真（一面の葉・風景など）は「ピント位置をタップ」で指定してください。\n【柔らかさとの違い】柔らかさは輪郭の切れだけを緩めます。こちらは背景や手前そのものをぼかします。\n初回はAIの読み込みに時間がかかります。細い髪や枝の縁は甘くなることがあります。' },
     { key: 'diff', title: 'ミスト（輪郭ソフト）', sub: 'ブラック＝光の縁だけにじむ／ホワイト＝全体がふんわり淡く', custom: buildDiffExtra,
       sliders: [['diff','強さ',0,100,50],['diffR','広がり',1,20,7]],
       hint: '人物の輪郭・窓枠・逆光の縁がふんわりします。画面全体はぼかしません。\n【柔らかさとの違い】ミストは明るい所の縁だけ。暗い所どうしの輪郭は硬いままです。全部の輪郭をフィルムのように柔らかくするのは上の「柔らかさ」です。' },
@@ -4590,9 +4636,9 @@ function tkLook2(img, n, P, w, h){
   // Lightroomでもできる処理は既定でOFF（プリセットでもONにしない。値だけ入れておく）
   var LR_KEYS = { bright: 1, tone: 1, split: 1, grain: 1 };
   // 既定でOFFにする項目（Lightroomでもできる処理＋濃さ）
-  var OFF_KEYS = { fsoft: 1, fsh: 1, fblk: 1, cross: 1, ana: 1, bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1, glow: 1, hal: 1, diff: 1, mist: 1, look2: 1, look3: 1 };   // v146：自動の仕上げ（look2・look3）は、選んだ時だけ。リセットや「なし（手動）」で勝手に戻らない
+  var OFF_KEYS = { bokeh: 1, fsoft: 1, fsh: 1, fblk: 1, cross: 1, ana: 1, bright: 1, tone: 1, split: 1, grain: 1, dens: 1, reg: 1, ray: 1, lens: 1, grad: 1, match: 1, skin: 1, glow: 1, hal: 1, diff: 1, mist: 1, look2: 1, look3: 1 };   // v146：自動の仕上げ（look2・look3）は、選んだ時だけ。リセットや「なし（手動）」で勝手に戻らない
   // グロー・粒子などの光と質感は自分で入れる時だけ（仕上げ・おまかせでは入れない／今の設定にも触らない）
-  var MANUAL_FX = { fsoft: 1, fsh: 1, fblk: 1, cross: 1, ana: 1, glow: 1, hal: 1, diff: 1, mist: 1, grain: 1, ray: 1, lens: 1 }, MANUAL_FX_KEYS = {};
+  var MANUAL_FX = { bokeh: 1, fsoft: 1, fsh: 1, fblk: 1, cross: 1, ana: 1, glow: 1, hal: 1, diff: 1, mist: 1, grain: 1, ray: 1, lens: 1 }, MANUAL_FX_KEYS = {};
   function crvBlank(){ return { rgb: [[0,0],[1,1]], r: [[0,0],[1,1]], g: [[0,0],[1,1]], b: [[0,0],[1,1]] }; }
   P.crv = crvBlank();
   P.lm = []; P.on.lm = 1;
@@ -4657,7 +4703,7 @@ function tkLook2(img, n, P, w, h){
     if (g.hint){ var h = document.createElement('div'); h.className = 'hint'; h.textContent = g.hint; body.appendChild(h); }
     box.appendChild(head); box.appendChild(body); host.appendChild(box);
     var tg = head.querySelector('.tg');
-    if (tg) tg.addEventListener('click', function(e){ e.stopPropagation(); P.on[g.key] = P.on[g.key] ? 0 : 1; syncGroup(g.key); clearPresetMark(); if (g.key === 'reg'){ if (P.on.reg && !REG.ready && img) runSegmentation(); drawOverlay(); } schedule(); });
+    if (tg) tg.addEventListener('click', function(e){ e.stopPropagation(); P.on[g.key] = P.on[g.key] ? 0 : 1; syncGroup(g.key); clearPresetMark(); if (g.key === 'reg'){ if (P.on.reg && !REG.ready && img) runSegmentation(); drawOverlay(); } if (g.key === 'bokeh') bokehEnsure(); schedule(); });
     head.addEventListener('click', function(){ box.classList.toggle('open'); });
   });
   ['diff','glow'].forEach(function(k){ $('g-' + k).classList.add('open'); });
@@ -5464,7 +5510,7 @@ function tkLook2(img, n, P, w, h){
     updateRegUI();
   }
   function regNewPhoto(){
-    REG.ready = false; REG.data = null; REG.auto = null; REG.emb = null; REG.det = null;
+    REG.ready = false; REG.data = null; REG.auto = null; REG.emb = null; REG.det = null; REG.dep = null; REG.bkTried = 0;
     REG.adds = nulls(); REG.erases = nulls();
     REG.cfg.forEach(function(c){ c.grow = 0; c.feather = 20; });
     REG.tool = 'off'; document.body.classList.remove('brushing'); REG.pickDodge = false;
@@ -5604,7 +5650,7 @@ function tkLook2(img, n, P, w, h){
       u2s = new Float32Array(n); for (var j = 0; j < n; j++) u2s[j] = tkSS2(0.35, 0.65, q[j]);
     }, function(e){ notes.push('主役'); why(e); })
     .then(function(){ step('② 奥行きを測っています…'); return ensureModel('midas').then(runDepth); })
-    .then(function(d){ depth = tkBlur1(upsample(d, 256, 256, REG.mw, REG.mh), REG.mw, REG.mh, 3); }, function(e){ notes.push('奥行き'); why(e); })
+    .then(function(d){ var du = upsample(d, 256, 256, REG.mw, REG.mh); depth = tkBlur1(du, REG.mw, REG.mh, 3); try{ var dg = tkGuided(G, du, REG.mw, REG.mh, Math.max(3, Math.round(MR * 0.024)), 1e-3), d8 = new Uint8Array(n); for (var j9 = 0; j9 < n; j9++) d8[j9] = Math.max(0, Math.min(255, Math.round(dg[j9] * 255))); REG.dep = d8; }catch(e9){ REG.dep = null; } }, function(e){ notes.push('奥行き'); why(e); })
     .then(function(){ step('③ 物の形を読んでいます…'); return ensureModel('samenc').then(function(){ return ensureModel('samdec'); }).then(runSamEncoder); })
     .then(function(emb){
       REG.emb = emb; REG.hasSam = true;
@@ -5656,7 +5702,7 @@ function tkLook2(img, n, P, w, h){
     if (!REG.ready) return;
     REG.data = tkComposeMasks(REG.auto, REG.adds, REG.erases, REG.cfg, REG.mw, REG.mh);
     REG.ver++; P.reg.ver = REG.ver;
-    var r = { mw: REG.mw, mh: REG.mh, n: RN, data: REG.data, ver: REG.ver };
+    var r = { mw: REG.mw, mh: REG.mh, n: RN, data: REG.data, ver: REG.ver, dep: REG.dep || null };
     tkSetRegions(r);                               // 同期処理用
     if (worker) worker.postMessage({ type: 'reg', r: r });
     drawOverlay(); schedule();
@@ -5773,6 +5819,12 @@ function tkLook2(img, n, P, w, h){
   function xbtn(txt, cls, fn){ var b = xel('button', 'rbtn' + (cls ? ' ' + cls : ''), txt); b.type = 'button'; b.addEventListener('click', fn); return b; }
   function rowOf(key){ var r = document.getElementById('s-' + key); return r ? r.closest('.row') : null; }
   // ---- 光の差し込み ----
+  function bokehEnsure(){ if (P.on.bokeh && img && !REG.ready && !REG.busy){ var pr = runSegmentation(); updateExtras(); if (pr && pr.then) pr.then(function(){ updateExtras(); schedule(); }, function(){ updateExtras(); }); } else updateExtras(); }
+  function buildBokehExtra(body){
+    XE.bkPick = xbtn('ピント位置をタップで指定', 'ghost', function(){ startPick('focus'); }); body.appendChild(XE.bkPick);
+    XE.bkAuto = xbtn('自動（主役にピント）に戻す', 'ghost', function(){ P.bkx = -1; P.bky = -1; updateExtras(); clearPresetMark(); schedule(); }); body.appendChild(XE.bkAuto);
+    XE.bkNote = xel('div', 'hint', ''); body.appendChild(XE.bkNote);
+  }
   function buildDiffExtra(body){
     var seg = xel('div', 'seg'); XE.diffSeg = seg;
     [['black','ブラックミスト'],['white','ホワイトミスト']].forEach(function(m){
@@ -7115,8 +7167,9 @@ function tkLook2(img, n, P, w, h){
     if (PICK === 'grad' && !P.on.grad){ P.on.grad = 1; syncGroup('grad'); }
     if (PICK === 'ray' && !P.on.ray){ P.on.ray = 1; syncGroup('ray'); }
     if (PICK === 'flare' && !P.on.flare){ P.on.flare = 1; syncGroup('flare'); }
+    if (PICK === 'focus' && !P.on.bokeh){ P.on.bokeh = 1; syncGroup('bokeh'); }
     document.body.classList.toggle('picking', !!PICK);
-    if (PICK) toast(PICK === 'flare' ? '光源の位置をタップ（端に寄せるほどゴーストが長く並びます）' : PICK === 'grad' ? '写真の上で、始点から終点へドラッグ' : (P.rMode === 'leak' ? '光らせたい端をタップ' : '光の来る所から、差し込む向きへドラッグ'));
+    if (PICK) toast(PICK === 'focus' ? 'ピントを合わせたい所をタップ' : PICK === 'flare' ? '光源の位置をタップ（端に寄せるほどゴーストが長く並びます）' : PICK === 'grad' ? '写真の上で、始点から終点へドラッグ' : (P.rMode === 'leak' ? '光らせたい端をタップ' : '光の来る所から、差し込む向きへドラッグ'));
     updateExtras(); drawGuide(); schedule();
   }
   function placeGuide(){
@@ -7175,6 +7228,8 @@ function tkLook2(img, n, P, w, h){
       if (!b) return;
       var d = Math.hypot((b.u - a.u) * a.rc.width, (b.v - a.v) * a.rc.height); if (d < 12) return;
       P.gx0 = a.u; P.gy0 = a.v; P.gx1 = b.u; P.gy1 = b.v;
+    } else if (PICK === 'focus'){
+      P.bkx = Math.round(a.u * 10000) / 10000; P.bky = Math.round(a.v * 10000) / 10000;
     } else if (PICK === 'flare'){
       P.flx = Math.round(a.u * 10000) / 10000; P.fly = Math.round(a.v * 10000) / 10000;
     } else if (PICK === 'ray'){
@@ -7241,6 +7296,10 @@ function tkLook2(img, n, P, w, h){
   ['rAng'].forEach(function(k){ var r = $('s-' + k); if (r) r.addEventListener('input', function(){ flashGuide('ray'); }); });
   // ---- 表示の同期 ----
   function updateExtras(){
+    try{ if (P.on.bokeh && img && !REG.ready && !REG.busy && !REG.bkTried){ REG.bkTried = 1; setTimeout(bokehEnsure, 0); }
+      if (XE.bkNote){ var manual = P.bkx >= 0 && P.bky >= 0, hasSub = false; if (REG.ready && REG.auto && REG.auto[0]){ var a0 = REG.auto[0], cnt0 = 0; for (var q0 = 0; q0 < a0.length; q0 += 7) if (a0[q0] > 0.5) cnt0++; hasSub = cnt0 * 7 > a0.length * 0.01; }
+        XE.bkNote.textContent = !P.on.bokeh ? '' : REG.busy ? '奥行きを測っています…' : !REG.ready ? '奥行きをまだ測れていません。' : !REG.dep ? 'この環境では奥行きのAIが使えないため、効果はかかりません。' : manual ? 'ピント：タップした位置' : hasSub ? 'ピント：自動（主役）' : '主役が見つかりません。「ピント位置をタップで指定」でピントを決めてください（指定するまで効果はかかりません）。';
+        if (XE.bkAuto) XE.bkAuto.style.display = manual ? '' : 'none'; if (XE.bkPick) XE.bkPick.textContent = PICK === 'focus' ? '完了（タップを終える）' : 'ピント位置をタップで指定'; } }catch(e){}
     try{ drawCurve(); }catch(e){}
     try{ syncGrade(); }catch(e){}
     try{ syncGeo(); present(); }catch(e){}
@@ -7302,7 +7361,7 @@ function tkLook2(img, n, P, w, h){
     { key: 'look', label: '自動' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone','fblk']],['comp','白飛び・霞',['comp','fsh']]] },
     { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['calm','まとまり',['calm']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
-    { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['fsoft','柔らかさ',['fsoft','diff','mist']],['glow','グロー',['glow']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['flare','フレア',['flare']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
+    { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['fsoft','柔らかさ',['fsoft','bokeh','diff','mist']],['glow','グロー',['glow']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['flare','フレア',['flare']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
