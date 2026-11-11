@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v197</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v198</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4638,9 +4638,9 @@ function tkLook2(img, n, P, w, h){
       sliders: [['gAtemp','始点側 色温度',-100,100,40],['gAtint','始点側 色かぶり',-100,100,12],['gAev','始点側 明るさ',-100,100,5],
                 ['gBtemp','終点側 色温度',-100,100,-40],['gBtint','終点側 色かぶり',-100,100,-6],['gBev','終点側 明るさ',-100,100,-12]],
       hint: '光の来る側を始点にすると、光は暖かく、影側の環境は青緑に。肌は赤み、環境は冷たく、という寒暖の対比が作れます。' },
-    { key: 'match', title: 'カラーマッチ', sub: '参考写真の色と明るさに寄せる', custom: buildMatchExtra,
+    { key: 'match', title: '見本に寄せる', sub: '参考写真を測って、明るさ・コントラスト・色・柔らかさのバーを自動で動かす', custom: buildMatchExtra,
       sliders: [['mAmt','色を寄せる',0,100,70],['mLum','明るさも寄せる',0,100,25]],
-      hint: '影・中間・光の3つの明るさごとに、色かぶりと色の幅を合わせます。フィードの統一に。' },
+      hint: 'バーで寄せる：見本の明るさの分布・コントラスト・影と光の色・色の濃さ・柔らかさ・粒子を測り、ライト／カラー／グレーディングなどのバーを動かします。動いたバーは一覧に出るので、そのあと自分の目で直せます。\n下の「色を寄せる・明るさも寄せる」は、色の上乗せ（または「色を一括で写す」）を使う時だけ効きます。' },
     { key: 'skin', title: '肌', sub: '肌の色ムラをそろえる・肌をなめらかに',
       sliders: [['skAmt','そろえる',0,100,50],['skShift','赤み ← → 黄み',-20,20,0],['skSm','なめらかに',0,100,0],['skTx','質感を残す',0,100,50]],
       hint: '肌色に近い色相だけに効きます。人物の顔のムラ、茶トラの毛色のばらつきに。' },
@@ -6861,6 +6861,15 @@ function tkLook2(img, n, P, w, h){
     rr.appendChild(xbtn('参考写真を選ぶ', 'ghost', function(){ fi.click(); }));
     XE.mFeed = xbtn('フィードの写真に合わせる', 'ghost', matchFromFeed); rr.appendChild(XE.mFeed);
     col.appendChild(XE.mStat); col.appendChild(rr); row.appendChild(XE.mThumb); row.appendChild(col); body.appendChild(row);
+    var seg0 = xel('div', 'seg'); XE.mFitBtns = [];
+    [[1, 'バーで寄せる（おすすめ）'], [0, '色を一括で写す（以前）']].forEach(function(m){
+      var bt = xel('button', '', m[1]); bt.type = 'button'; bt.dataset.v = m[0];
+      bt.addEventListener('click', function(){ P.mFit = m[0]; if (XE.mLastRef && img){ if (m[0]){ setMatchFromImage(XE.mLastRef); } else { if (MFIT) fitUndo(); P.on.match = 1; syncGroup('match'); updateExtras(); schedule(); } } else updateExtras(); });
+      seg0.appendChild(bt); XE.mFitBtns.push(bt);
+    });
+    body.appendChild(seg0);
+    XE.mFitTbl = xel('div', 'mtable'); XE.mFitTbl.style.display = 'none'; body.appendChild(XE.mFitTbl);
+    XE.mOver = xbtn('さらに色を寄せる（見本の色を上乗せ）', 'ghost', function(){ P.on.match = P.on.match ? 0 : 1; syncGroup('match'); updateExtras(); clearPresetMark(); schedule(); }); XE.mOver.style.display = 'none'; body.appendChild(XE.mOver);
     // 合わせ方：部分ごと（肌は肌へ、植物は植物へ）／全体
     var seg = xel('div', 'seg'); XE.mModeBtns = [];
     [['part', '部分ごとに合わせる'], ['all', '全体で合わせる']].forEach(function(m){
@@ -6917,11 +6926,90 @@ function tkLook2(img, n, P, w, h){
     var sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height, s = Math.max(W / sw, H / sh);
     ctx.drawImage(src, (W - sw * s) / 2, (H - sh * s) / 2, sw * s, sh * s);
   }
+  // ---------- v198：見本にバーで寄せる。見本の明るさの分布・コントラスト・影と光の色・色の濃さを測り、この写真に実際にかけて測り直しながらバーを動かす ----------
+  var MFIT = null, MFIT_BUSY = false;
+  var MFIT_NAME = { bExp: '露光量', bCon: 'コントラスト', bBl: '黒レベル', bWh: '白レベル', bTemp: '色温度', bTint: '色かぶり', bSat: '彩度', cgsH: '影の色', cgsS: '影の色の濃さ', cghH: '光の色', cghS: '光の色の濃さ', grain: '粒子' };
+  function fitStats(px, n){
+    // 色かぶり（全体・影・光）は「色の薄い所（白・灰・影など）」だけで測る＝花や葉など被写体そのものの色を、色かぶりと取り違えない
+    var o = [0, 0, 0], st = Math.max(1, Math.floor(n / 12000)), Ls = [], A = [], B = [], Cs = [], i;
+    for (i = 0; i < n; i += st){ tkToOk(px[i * 4] / 255, px[i * 4 + 1] / 255, px[i * 4 + 2] / 255, o); Ls.push(o[0]); A.push(o[1]); B.push(o[2]); Cs.push(Math.sqrt(o[1] * o[1] + o[2] * o[2])); }
+    var srt = Ls.slice().sort(function(a, b){ return a - b; }), q = function(f){ return srt[Math.min(srt.length - 1, Math.floor(srt.length * f))]; }, t1 = q(0.3), t2 = q(0.7);
+    var z = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], cs = Cs.slice().sort(function(a, b){ return a - b; });
+    for (i = 0; i < Ls.length; i++){ if (Cs[i] > 0.05) continue; var k = Ls[i] < t1 ? 0 : Ls[i] < t2 ? 1 : 2; z[k][0] += A[i]; z[k][1] += B[i]; z[k][2]++; }
+    var N = Ls.length, nz = z.map(function(v){ return v[2] / N; }); z.forEach(function(v){ var c = v[2] || 1; v[0] /= c; v[1] /= c; });
+    var all = [(z[0][0] * z[0][2] + z[1][0] * z[1][2] + z[2][0] * z[2][2]) / Math.max(1, z[0][2] + z[1][2] + z[2][2]), (z[0][1] * z[0][2] + z[1][1] * z[1][2] + z[2][1] * z[2][2]) / Math.max(1, z[0][2] + z[1][2] + z[2][2])];
+    return { L2: q(0.02), L25: q(0.25), L50: q(0.5), L75: q(0.75), L98: q(0.98), am: all[0], bm: all[1], sa: z[0][0] - all[0], sb: z[0][1] - all[1], ha: z[2][0] - all[0], hb: z[2][1] - all[1], C: cs[Math.floor(cs.length * 0.85)], nAll: nz[0] + nz[1] + nz[2], nS: nz[0], nH: nz[2] };
+  }
+  function fitMeasure(sm){
+    var q = JSON.parse(JSON.stringify(P)); q.lm = []; q.on.reg = 0; q.on.match = 0; Object.keys(MANUAL_FX).forEach(function(k){ q.on[k] = 0; });
+    var out = tkProcess(sm.px, sm.w, sm.h, q); return fitStats(out, sm.w * sm.h);
+  }
+  function fitTick(){ return new Promise(function(r){ setTimeout(r, 0); }); }
+  function fitFrom(im){
+    if (!img || MFIT_BUSY) return Promise.resolve();
+    MFIT_BUSY = true;
+    var rp = smallPixels(im, 200), R = fitStats(rp.data, rp.w * rp.h), sz = sizeFor(200), sm = { px: readPixels(sz[0], sz[1]), w: sz[0], h: sz[1] };
+    var keys = ['bExp', 'bCon', 'bBl', 'bWh', 'bTemp', 'bTint', 'bSat', 'cgsH', 'cgsS', 'cghH', 'cghS'], before = {}; keys.forEach(function(k){ before[k] = P[k] || 0; });
+    var snap = { vals: before, on: { basic: P.on.basic, wb: P.on.wb, cg: P.on.cg, grain: P.on.grain }, grain: P.grain };
+    P.on.basic = 1; P.on.wb = 1; P.on.cg = 1; ['basic', 'wb', 'cg'].forEach(syncGroup);
+    var S0 = fitMeasure(sm), first = S0;
+    function note(t){ if (XE.mFitTbl){ XE.mFitTbl.style.display = ''; XE.mFitTbl.innerHTML = ''; XE.mFitTbl.appendChild(xel('div', 'msoft-n', t)); } }
+    // 1本ずつ：少し動かして効き方を測り、見本の値になる所へ
+    // 範囲は控えめ（±35前後）。写っている物で変わる値（明るさの中央・色の濃さ）は見本との差の7割まで
+    var wbOk = R.nAll > 0.08 && S0.nAll > 0.08;
+    var LIST = [ ['bExp', function(s){ return s.L50; }, 10, -35, 35, 0.7], ['bCon', function(s){ return s.L75 - s.L25; }, 15, -35, 35, 0.8], ['bBl', function(s){ return s.L2; }, 15, -45, 45, 1], ['bWh', function(s){ return s.L98; }, 15, -45, 45, 1] ];
+    if (wbOk){ LIST.push(['bTemp', function(s){ return s.bm; }, 10, -30, 30, 0.9]); LIST.push(['bTint', function(s){ return s.am; }, 10, -30, 30, 0.9]); }
+    LIST.push(['bSat', function(s){ return s.C; }, 15, -40, 25, 0.7]);
+    var TG = {}; LIST.forEach(function(d){ TG[d[0]] = d[1](first) + (d[1](R) - d[1](first)) * d[5]; });
+    function one(d){
+      var k = d[0], f = d[1], v0 = P[k] || 0, s0 = f(S0), tg = TG[k]; if (Math.abs(tg - s0) < 0.002) return;
+      var v1 = Math.max(d[3], Math.min(d[4], v0 + (v0 + d[2] > d[4] ? -d[2] : d[2]))); P[k] = v1; var s1 = f(fitMeasure(sm)), sl = (s1 - s0) / (v1 - v0);
+      var vn = Math.abs(sl) < 1e-5 ? v0 : Math.max(d[3], Math.min(d[4], Math.round(v0 + (tg - s0) / sl))); P[k] = vn; S0 = fitMeasure(sm);
+    }
+    function zone(r, fa, fb){   // 影（s）・光（h）の色：色相0°と90°の効き方から、見本との差を埋める色相と濃さを解く
+      var kH = 'cg' + r + 'H', kS = 'cg' + r + 'S'; if (!wbOk || (r === 's' ? Math.min(R.nS, first.nS) : Math.min(R.nH, first.nH)) < 0.03) return;   /* 色の薄い影（光）が両方に無ければ測れない＝動かさない */
+      P[kS] = 0; var b0 = fitMeasure(sm), ta = fa(R) - fa(b0), tb = fb(R) - fb(b0);
+      if (Math.hypot(ta, tb) < 0.003){ S0 = b0; return; }
+      P[kH] = 0; P[kS] = 25; var u = fitMeasure(sm), ua = fa(u) - fa(b0), ub = fb(u) - fb(b0); P[kH] = 90; var v = fitMeasure(sm), va = fa(v) - fa(b0), vb = fb(v) - fb(b0);
+      var det = ua * vb - ub * va; if (Math.abs(det) < 1e-9){ P[kS] = 0; S0 = b0; return; }
+      var x = (ta * vb - tb * va) / det, y = (ua * tb - ub * ta) / det; P[kH] = Math.round((Math.atan2(y, x) * 180 / Math.PI + 360) % 360); P[kS] = Math.max(0, Math.min(30, Math.round(25 * Math.hypot(x, y)))); S0 = fitMeasure(sm);
+    }
+    var steps = [];
+    for (var pass = 0; pass < 2; pass++){ LIST.forEach(function(d){ steps.push(function(){ one(d); }); });
+      steps.push(function(){ zone('s', function(s){ return s.sa; }, function(s){ return s.sb; }); }); steps.push(function(){ zone('h', function(s){ return s.ha; }, function(s){ return s.hb; }); }); }
+    var idx = 0;
+    function run(){ if (idx >= steps.length) return Promise.resolve(); note('見本を測ってバーを動かしています… ' + Math.round(idx / steps.length * 100) + '%'); return fitTick().then(function(){ steps[idx++](); return run(); }); }
+    return run().then(function(){
+      keys.forEach(function(k){ setVal(k, P[k]); }); try{ syncGrade(); }catch(e){}
+      var err = function(s){ return Math.abs(s.L50 - R.L50) + Math.abs((s.L75 - s.L25) - (R.L75 - R.L25)) + Math.abs(s.L2 - R.L2) + Math.abs(s.L98 - R.L98) + 3 * (Math.hypot(s.am - R.am, s.bm - R.bm) + Math.hypot(s.sa - R.sa, s.sb - R.sb) + Math.hypot(s.ha - R.ha, s.hb - R.hb)) + 2 * Math.abs(s.C - R.C); };
+      MFIT = { before: snap, after: {}, e0: err(first), e1: err(S0) }; keys.forEach(function(k){ MFIT.after[k] = P[k] || 0; });
+      MFIT_BUSY = false; clearPresetMark(); renderFitTable(); schedule();
+    }, function(){ MFIT_BUSY = false; note('測れませんでした'); });
+  }
+  function fitUndo(){
+    if (!MFIT) return; var b = MFIT.before; Object.keys(b.vals).forEach(function(k){ setVal(k, b.vals[k]); }); ['basic', 'wb', 'cg', 'grain'].forEach(function(k){ P.on[k] = b.on[k]; syncGroup(k); }); if (b.grain != null) setVal('grain', b.grain);
+    try{ syncGrade(); }catch(e){} MFIT = null; renderFitTable(); clearPresetMark(); schedule(); toast('バーを寄せる前に戻しました');
+  }
+  function renderFitTable(){
+    var T = XE.mFitTbl; if (!T) return; (XE.mFitBtns || []).forEach(function(b){ b.classList.toggle('on', String(P.mFit === 0 ? 0 : 1) === b.dataset.v); });
+    if (XE.mOver){ XE.mOver.style.display = (P.mref && P.mFit !== 0) ? '' : 'none'; XE.mOver.textContent = P.on.match ? '色の上乗せをやめる（バーだけにする）' : 'さらに色を寄せる（見本の色を上乗せ）'; }
+    if (MFIT_BUSY) return; T.innerHTML = ''; if (!MFIT || !P.mref){ T.style.display = 'none'; return; } T.style.display = '';
+    var hue = function(k, v){ return slHueName(v) + '（' + v + '°）'; }, rows = 0;
+    T.appendChild(xel('div', 'msoft-n', '動かしたバー（見本との差 ' + Math.round((1 - MFIT.e1 / Math.max(1e-6, MFIT.e0)) * 100) + '% を埋めました）'));
+    Object.keys(MFIT.after).forEach(function(k){ var a = MFIT.before.vals[k], b = MFIT.after[k]; if (a === b) return; if ((k === 'cgsH' && !MFIT.after.cgsS) || (k === 'cghH' && !MFIT.after.cghS)) return;
+      var r = xel('div', 'mrow'); r.style.cssText = 'display:flex;justify-content:space-between;font-size:12px;padding:3px 0'; var isH = k === 'cgsH' || k === 'cghH';
+      r.appendChild(xel('span', '', MFIT_NAME[k])); r.appendChild(xel('span', 'num', isH ? hue(k, b) : ((a > 0 ? '+' : '') + a + ' → ' + (b > 0 ? '+' : '') + b))); T.appendChild(r); rows++; });
+    if (MFIT.grain != null){ var r2 = xel('div', 'mrow'); r2.style.cssText = 'display:flex;justify-content:space-between;font-size:12px;padding:3px 0'; r2.appendChild(xel('span', '', '粒子')); r2.appendChild(xel('span', 'num', MFIT.grain > 0 ? 'オン（量 ' + MFIT.grain + '）' : '変更なし')); T.appendChild(r2); }
+    if (!rows) T.appendChild(xel('div', 'hint', 'すでに見本に近いので、バーは動かしていません。'));
+    T.appendChild(xbtn('寄せる前に戻す', 'ghost', fitUndo));
+    T.appendChild(xel('div', 'hint', 'ここからは目で見て、光・色のバーを直接動かして仕上げてください。写っている物が見本と大きく違うと、色は寄りすぎることがあります。'));
+  }
   function setMatchFromImage(im){
     var sp = smallPixels(im, 400);
     P.mref = tkColorStats(sp.data, sp.w * sp.h, true);
     var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112); drawCover(x, im, 112, 112);
     XE.mThumbSrc = 'img'; XE.mLastRef = im;
+    if (P.mFit !== 0){ P.on.match = 0; syncGroup('match'); updateExtras(); fitFrom(im).then(function(){ if (P.mSoft !== 0) softMatchFrom(im); else toast('見本に合わせてバーを動かしました'); }); return; }
     P.on.match = 1; syncGroup('match'); updateExtras(); clearPresetMark(); schedule();
     if (P.mSoft !== 0) softMatchFrom(im); else toast('参考写真の色に寄せました');
   }
@@ -6966,8 +7054,11 @@ function tkLook2(img, n, P, w, h){
       setVal('fsSh', sh); P.on.fsh = sh > 0 ? 1 : 0; syncGroup('fsh');
       if (rs.p1 > 0.04 && ownS.p1 < rs.p1 - 0.01){ P.fsBlkT = rs.p1; setVal('fsBlk', 100); P.on.fblk = 1; } else { P.fsBlkT = 0; P.on.fblk = 0; } syncGroup('fblk');
       P.on.fsoft = softOn ? 1 : 0; syncGroup('fsoft');
+      try{ if (P.mFit !== 0 && MFIT){ MFIT.grain = 0;
+        if (rAll.noise > ownAll.noise * 1.4 && rAll.noise > 0.01){ var Pg = JSON.parse(JSON.stringify(Pb)); Pg.on.grain = 1; Pg.grain = 20; var og = tkProcess(readPixels(sz[0], sz[1]), sz[0], sz[1], Pg), n20 = tkSoftStats(og, sz[0], sz[1]).noise;
+          if (n20 > ownAll.noise + 1e-4){ var gv = Math.max(0, Math.min(25, Math.round(20 * 0.7 * (rAll.noise - ownAll.noise) / (n20 - ownAll.noise)))); if (gv >= 3){ setVal('grain', gv); P.on.grain = 1; syncGroup('grain'); MFIT.grain = gv; } } } } }catch(eg){}
       MSOFT = r; updateExtras(); clearPresetMark(); schedule();
-      toast('参考写真の色と柔らかさに寄せました');
+      toast(P.mFit !== 0 ? '見本に合わせてバーを動かしました' : '参考写真の色と柔らかさに寄せました');
     }, function(){ MSOFT_BUSY = false; toast('柔らかさを測れませんでした'); });
   }
   function renderSoftTable(){
@@ -7396,7 +7487,7 @@ function tkLook2(img, n, P, w, h){
     if (XE.mStat){
       XE.mStat.textContent = P.mref ? (XE.mThumbSrc === 'ref' ? '見本ルックの色に寄せています。' : XE.mThumbSrc === 'feed' ? 'フィード' + FEED.length + '枚の色に寄せています。' : '参考写真の色に寄せています。') : '参考写真が未選択です。';
       if (!P.mref){ var x = XE.mThumb.getContext('2d', { colorSpace: CS }); x.clearRect(0, 0, 112, 112); }
-      renderMatchTable(); renderSoftTable();
+      renderMatchTable(); renderSoftTable(); try{ renderFitTable(); }catch(e){}
       XE.mFeed.disabled = !FEED.length;
     }
     if (XE.fSeg){
@@ -7434,7 +7525,7 @@ function tkLook2(img, n, P, w, h){
   var TABS = [
     { key: 'look', label: '自動' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone','fblk']],['comp','白飛び・霞',['comp','fsh']]] },
-    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg','split']],['mix','ミキサー',['mix']],['calm','まとまり・濃さ',['calm','dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
+    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg','split']],['mix','ミキサー',['mix']],['calm','まとまり・濃さ',['calm','dens']],['grad','寒暖',['grad']],['match','見本に寄せる',['match']],['skin','肌',['skin']]] },
     { key: 'adj', label: '調整', chips: [['fx','質感',['fx','det']],['fsoft','柔らかさ・奥行き',['fsoft','depth','bokeh']],['glow','光のにじみ',['glow','hal','diff','mist']],['ana','光の線・フレア',['cross','ana','flare','ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
