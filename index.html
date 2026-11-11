@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v199</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v200</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -6989,7 +6989,7 @@ function tkLook2(img, n, P, w, h){
     }, function(){ MFIT_BUSY = false; note('測れませんでした'); });
   }
   function fitUndo(){
-    if (!MFIT) return; var b = MFIT.before; Object.keys(b.vals).forEach(function(k){ setVal(k, b.vals[k]); }); ['basic', 'wb', 'cg', 'grain'].forEach(function(k){ P.on[k] = b.on[k]; syncGroup(k); }); if (b.grain != null) setVal('grain', b.grain);
+    if (!MFIT) return; var b = MFIT.before; Object.keys(b.vals).forEach(function(k){ setVal(k, b.vals[k]); }); ['basic', 'wb', 'cg'].forEach(function(k){ P.on[k] = b.on[k]; syncGroup(k); });
     P.on.look2 = b.look2 || 0; P.on.look3 = b.look3 || 0;
     try{ syncGrade(); }catch(e){} MFIT = null; renderFitTable(); clearPresetMark(); schedule(); toast('バーを寄せる前に戻しました');
   }
@@ -7058,9 +7058,6 @@ function tkLook2(img, n, P, w, h){
       setVal('fsSh', sh); P.on.fsh = sh > 0 ? 1 : 0; syncGroup('fsh');
       if (rs.p1 > 0.04 && ownS.p1 < rs.p1 - 0.01){ P.fsBlkT = rs.p1; setVal('fsBlk', 100); P.on.fblk = 1; } else { P.fsBlkT = 0; P.on.fblk = 0; } syncGroup('fblk');
       P.on.fsoft = softOn ? 1 : 0; syncGroup('fsoft');
-      try{ if (P.mFit !== 0 && MFIT){ MFIT.grain = 0;
-        if (rAll.noise > ownAll.noise * 1.8 && rAll.noise > 0.014){ var Pg = JSON.parse(JSON.stringify(Pb)); Pg.on.grain = 1; Pg.grain = 20; var og = tkProcess(readPixels(sz[0], sz[1]), sz[0], sz[1], Pg), n20 = tkSoftStats(og, sz[0], sz[1]).noise;
-          if (n20 > ownAll.noise + 1e-4){ var gv = Math.max(0, Math.min(14, Math.round(20 * 0.45 * (rAll.noise - ownAll.noise) / (n20 - ownAll.noise)))); if (gv >= 3){ setVal('grain', gv); P.on.grain = 1; syncGroup('grain'); MFIT.grain = gv; } } } } }catch(eg){}
       MSOFT = r; updateExtras(); clearPresetMark(); schedule();
       toast(P.mFit !== 0 ? '見本に合わせてバーを動かしました' : '参考写真の色と柔らかさに寄せました');
     }, function(){ MSOFT_BUSY = false; toast('柔らかさを測れませんでした'); });
