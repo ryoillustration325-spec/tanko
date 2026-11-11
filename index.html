@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v198</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v199</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -6950,7 +6950,9 @@ function tkLook2(img, n, P, w, h){
     MFIT_BUSY = true;
     var rp = smallPixels(im, 200), R = fitStats(rp.data, rp.w * rp.h), sz = sizeFor(200), sm = { px: readPixels(sz[0], sz[1]), w: sz[0], h: sz[1] };
     var keys = ['bExp', 'bCon', 'bBl', 'bWh', 'bTemp', 'bTint', 'bSat', 'cgsH', 'cgsS', 'cghH', 'cghS'], before = {}; keys.forEach(function(k){ before[k] = P[k] || 0; });
-    var snap = { vals: before, on: { basic: P.on.basic, wb: P.on.wb, cg: P.on.cg, grain: P.on.grain }, grain: P.grain };
+    var snap = { vals: before, on: { basic: P.on.basic, wb: P.on.wb, cg: P.on.cg, grain: P.on.grain }, grain: P.grain, look2: P.on.look2, look3: P.on.look3 };
+    // v199：見本を入れたら、自動の仕上げ（見本寄せ）はオフにしてバーだけで寄せる（両方かけると引っ張り合って、バーが上限に張り付く）
+    var lookWas = !!(P.on.look2 || P.on.look3); P.on.look2 = 0; P.on.look3 = 0; snap.lookWas = lookWas;
     P.on.basic = 1; P.on.wb = 1; P.on.cg = 1; ['basic', 'wb', 'cg'].forEach(syncGroup);
     var S0 = fitMeasure(sm), first = S0;
     function note(t){ if (XE.mFitTbl){ XE.mFitTbl.style.display = ''; XE.mFitTbl.innerHTML = ''; XE.mFitTbl.appendChild(xel('div', 'msoft-n', t)); } }
@@ -6988,6 +6990,7 @@ function tkLook2(img, n, P, w, h){
   }
   function fitUndo(){
     if (!MFIT) return; var b = MFIT.before; Object.keys(b.vals).forEach(function(k){ setVal(k, b.vals[k]); }); ['basic', 'wb', 'cg', 'grain'].forEach(function(k){ P.on[k] = b.on[k]; syncGroup(k); }); if (b.grain != null) setVal('grain', b.grain);
+    P.on.look2 = b.look2 || 0; P.on.look3 = b.look3 || 0;
     try{ syncGrade(); }catch(e){} MFIT = null; renderFitTable(); clearPresetMark(); schedule(); toast('バーを寄せる前に戻しました');
   }
   function renderFitTable(){
@@ -7001,6 +7004,7 @@ function tkLook2(img, n, P, w, h){
       r.appendChild(xel('span', '', MFIT_NAME[k])); r.appendChild(xel('span', 'num', isH ? hue(k, b) : ((a > 0 ? '+' : '') + a + ' → ' + (b > 0 ? '+' : '') + b))); T.appendChild(r); rows++; });
     if (MFIT.grain != null){ var r2 = xel('div', 'mrow'); r2.style.cssText = 'display:flex;justify-content:space-between;font-size:12px;padding:3px 0'; r2.appendChild(xel('span', '', '粒子')); r2.appendChild(xel('span', 'num', MFIT.grain > 0 ? 'オン（量 ' + MFIT.grain + '）' : '変更なし')); T.appendChild(r2); }
     if (!rows) T.appendChild(xel('div', 'hint', 'すでに見本に近いので、バーは動かしていません。'));
+    if (MFIT.before.lookWas) T.appendChild(xel('div', 'hint', '自動の仕上げ（見本寄せ）はオフにしました。入れた見本だけに寄せています。「寄せる前に戻す」で元の仕上げに戻ります。'));
     T.appendChild(xbtn('寄せる前に戻す', 'ghost', fitUndo));
     T.appendChild(xel('div', 'hint', 'ここからは目で見て、光・色のバーを直接動かして仕上げてください。写っている物が見本と大きく違うと、色は寄りすぎることがあります。'));
   }
@@ -7055,8 +7059,8 @@ function tkLook2(img, n, P, w, h){
       if (rs.p1 > 0.04 && ownS.p1 < rs.p1 - 0.01){ P.fsBlkT = rs.p1; setVal('fsBlk', 100); P.on.fblk = 1; } else { P.fsBlkT = 0; P.on.fblk = 0; } syncGroup('fblk');
       P.on.fsoft = softOn ? 1 : 0; syncGroup('fsoft');
       try{ if (P.mFit !== 0 && MFIT){ MFIT.grain = 0;
-        if (rAll.noise > ownAll.noise * 1.4 && rAll.noise > 0.01){ var Pg = JSON.parse(JSON.stringify(Pb)); Pg.on.grain = 1; Pg.grain = 20; var og = tkProcess(readPixels(sz[0], sz[1]), sz[0], sz[1], Pg), n20 = tkSoftStats(og, sz[0], sz[1]).noise;
-          if (n20 > ownAll.noise + 1e-4){ var gv = Math.max(0, Math.min(25, Math.round(20 * 0.7 * (rAll.noise - ownAll.noise) / (n20 - ownAll.noise)))); if (gv >= 3){ setVal('grain', gv); P.on.grain = 1; syncGroup('grain'); MFIT.grain = gv; } } } } }catch(eg){}
+        if (rAll.noise > ownAll.noise * 1.8 && rAll.noise > 0.014){ var Pg = JSON.parse(JSON.stringify(Pb)); Pg.on.grain = 1; Pg.grain = 20; var og = tkProcess(readPixels(sz[0], sz[1]), sz[0], sz[1], Pg), n20 = tkSoftStats(og, sz[0], sz[1]).noise;
+          if (n20 > ownAll.noise + 1e-4){ var gv = Math.max(0, Math.min(14, Math.round(20 * 0.45 * (rAll.noise - ownAll.noise) / (n20 - ownAll.noise)))); if (gv >= 3){ setVal('grain', gv); P.on.grain = 1; syncGroup('grain'); MFIT.grain = gv; } } } } }catch(eg){}
       MSOFT = r; updateExtras(); clearPresetMark(); schedule();
       toast(P.mFit !== 0 ? '見本に合わせてバーを動かしました' : '参考写真の色と柔らかさに寄せました');
     }, function(){ MSOFT_BUSY = false; toast('柔らかさを測れませんでした'); });
