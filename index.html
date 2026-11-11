@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v210</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v211</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4096,6 +4096,7 @@ function tkL6KeepGreen(img, I0, n, amt, teal, mode, w, h){
       var Hg = 168 + tsh, Cg = Math.min(Cb, Math.max(Ca * 0.92, 0.014)), Cn2 = Cb + (Cg - Cb) * wn, Hn2 = Hb + tkHueDist(Hg, Hb) * wn * tkSS((tkHd(Hb, Hg) - 12) / 20);
       tkFromOk(b[0], Math.cos(Hn2 * Math.PI / 180) * Cn2, Math.sin(Hn2 * Math.PI / 180) * Cn2, b); img[j2] = tkClamp01(b[0]); img[j2 + 1] = tkClamp01(b[1]); img[j2 + 2] = tkClamp01(b[2]); } }
 }
+var TK_SUN = 0;
 function tkL6CastShape(img, I0, n, amt, wk, sep, ownK){
   // v202：色かぶりを「上から載せたフィルター」にしない。色の薄い物（白い服・帽子・壁・雲）に乗る色かぶりを、明るい所ほど弱める
   // v203（sep）：色かぶりを一様にしない。影は見本どおり、中間は少し弱く。元から暖かい色味の物（木・布・生成り）は暖かさを残す＝冷たい影と暖かい物の差が残る
@@ -4106,10 +4107,15 @@ function tkL6CastShape(img, I0, n, amt, wk, sep, ownK){
   var own = 0; if (ownK > 0){ var sa = 0, sb = 0, sn = 0, st = Math.max(1, Math.floor(n / 20000));
     for (var p0 = 0; p0 < n; p0 += st){ var j0 = p0 * 3; tkToOk(I0[j0], I0[j0 + 1], I0[j0 + 2], a); if (a[0] < 0.1 || a[0] > 0.95 || a[1] * a[1] + a[2] * a[2] > 0.0025) continue; sa += a[1]; sb += a[2]; sn++; }
     if (sn > n / st * 0.25){ sa /= sn; sb /= sn; var m0 = Math.sqrt(sa * sa + sb * sb), h0 = (Math.atan2(sb, sa) * 180 / Math.PI + 360) % 360; own = ownK * tkSS((m0 - 0.006) / 0.008) * tkSS((h0 - 150) / 25) * (1 - tkSS((h0 - 255) / 25)); } }
+  // v211：日なたの写真（影や暗い所がもともと暖かい色＝日が差している）には、冷たい色かぶりを控えめに。本人の晴れた昼の写真の影は、青ではなく、ほぼ無彩色〜わずかに緑寄り（濃さ0.009〜0.011・色相160〜168°）
+  var sun = 0; if (ownK > 0){ var ua = 0, ub = 0, un = 0, ut = Math.max(1, Math.floor(n / 20000)), uall = 0;
+    for (var p1 = 0; p1 < n; p1 += ut){ var j1 = p1 * 3; tkToOk(I0[j1], I0[j1 + 1], I0[j1 + 2], a); uall++; if (a[0] < 0.1 || a[0] > 0.5 || a[1] * a[1] + a[2] * a[2] > 0.0025) continue; ua += a[1]; ub += a[2]; un++; }
+    if (un > uall * 0.08){ ua /= un; ub /= un; var um = Math.sqrt(ua * ua + ub * ub), uh = (Math.atan2(ub, ua) * 180 / Math.PI + 360) % 360; sun = ownK * tkSS((um - 0.003) / 0.006) * (1 - tkSS((tkHd(uh, 85) - 40) / 30)); } }
+  TK_SUN = sun;
   for (var p = 0; p < n; p++){
     var j = p * 3; tkToOk(I0[j], I0[j + 1], I0[j + 2], a); var C0 = Math.sqrt(a[1] * a[1] + a[2] * a[2]), H0 = (Math.atan2(a[2], a[1]) * 180 / Math.PI + 360) % 360;
     var warm = sep > 0 ? tkSS((C0 - 0.012) / 0.02) * Math.exp(-Math.pow(tkHd(H0, 65) / 40, 2)) : 0, nz = 1 - tkSS((C0 - 0.03 - 0.04 * warm * sep) / 0.04); if (nz <= 0.01) continue;
-    var keep = amt * (1 - wk * tkSS((a[0] - 0.45) / 0.3)) * (1 - sep * (0.3 * tkSS((a[0] - 0.28) / 0.2) + 0.45 * warm)), cut = (1 - Math.max(0, keep)) * nz; if (cut <= 0.01 && own <= 0.01) continue;
+    var keep = amt * (1 - wk * tkSS((a[0] - 0.45) / 0.3)) * (1 - sep * (0.3 * tkSS((a[0] - 0.28) / 0.2) + 0.45 * warm)) * (1 - 0.65 * sun), cut = (1 - Math.max(0, keep)) * nz; if (cut <= 0.01 && own <= 0.01) continue;
     tkToOk(img[j], img[j + 1], img[j + 2], b); b[1] -= (b[1] - a[1]) * cut; b[2] -= (b[2] - a[2]) * cut;
     if (own > 0.01 && C0 > 0.004){ var C1 = Math.sqrt(b[1] * b[1] + b[2] * b[2]), cool = tkSS((H0 - 150) / 25) * (1 - tkSS((H0 - 265) / 25)), kq = own * nz * cool * tkSS((C0 - 0.004) / 0.006);
       if (kq > 0.01 && C1 > 1e-4){ var H1 = (Math.atan2(b[2], b[1]) * 180 / Math.PI + 360) % 360, dh = tkHueDist(H0, H1), lim = 14, Hn = Math.abs(dh) > lim ? H1 + (dh - (dh > 0 ? lim : -lim)) * kq : H1, Cc = Math.max(C0 * 1.6, C0 + 0.006), Cn = C1 > Cc ? C1 + (Cc - C1) * kq : C1;
