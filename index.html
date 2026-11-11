@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v208</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v209</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -4127,7 +4127,7 @@ function tkL6HueGuard(img, I0, n, amt){
     tkFromOk(b[0], Math.cos(Hn * Math.PI / 180) * Cn, Math.sin(Hn * Math.PI / 180) * Cn, b); img[j] = tkClamp01(b[0]); img[j + 1] = tkClamp01(b[1]); img[j + 2] = tkClamp01(b[2]);
   }
 }
-var P_SKD = 1;   /* v207：空の青を本人の空（落ち着いた青）へ。0で以前 */
+var P_SKD = 1;   /* v207：空の青を本人の空（落ち着いた青）へ。0で以前。v209：本人の見本は明け方・曇りの空なので、もともと淡い空（明け方・夕方・薄曇り）にだけ効かせ、昼間の濃い青空は以前のまま */
 function tkL6SkyFix(img, I0, n, w, h, onlyBlue, amt, UW){
   amt = amt == null ? 1 : amt; if (amt <= 0) return;
   var s = 400 / Math.max(w, h), W = Math.max(8, Math.round(w * s)), H = Math.max(8, Math.round(h * s)), m = W * H, k = [0, 0, 0];
@@ -4165,7 +4165,7 @@ function tkL6SkyFix(img, I0, n, w, h, onlyBlue, amt, UW){
     var wz = M[g]; if (wz < 0.02) continue; var gx0 = g % W, gy0 = (g - gx0) / W, sxg = Math.min(w - 1, Math.floor((gx0 + 0.5) * w / W)), syg = Math.min(h - 1, Math.floor((gy0 + 0.5) * h / H)), q0 = (syg * w + sxg) * 3;
     a[0] = L[g]; a[1] = A[g]; a[2] = B[g]; var ws = wz * simA(a[0], a[1], a[2]); if (ws < 0.02) continue; tkToOk(img[q0], img[q0 + 1], img[q0 + 2], b);
     var C0 = Math.sqrt(a[1] * a[1] + a[2] * a[2]), H0 = Math.atan2(a[2], a[1]) * 180 / Math.PI, wb = tkSS((C0 - 0.01) / 0.018) * clear;
-    var tY = Math.max(0, Math.min(1, (gy0 - yT) / ySpan)), skd = P_SKD, Ht = H0 + tkHueDist(237 + 7 * skd, (H0 + 360) % 360) * (0.5 + 0.2 * skd), Ct = C0 * 0.8 * (1.05 - 0.15 * tY), CtM = 0.04 + 0.2 * Math.max(0, C0 - 0.06), Ct = skd > 0 && Ct > CtM ? Ct + (CtM - Ct) * skd : Ct, Lt = a[0] - 0.07 * (1.4 - 1.1 * tY) * tkSS((a[0] - 0.4) / 0.3);
+    var tY = Math.max(0, Math.min(1, (gy0 - yT) / ySpan)), skd = P_SKD * (1 - tkSS((Math.sqrt(skA * skA + skB * skB) - 0.04) / 0.03)), Ht = H0 + tkHueDist(237 + 7 * skd, (H0 + 360) % 360) * (0.5 + 0.2 * skd), Ct = C0 * 0.8 * (1.05 - 0.15 * tY), CtM = 0.04 + 0.2 * Math.max(0, C0 - 0.06), Ct = skd > 0 && Ct > CtM ? Ct + (CtM - Ct) * skd : Ct, Lt = a[0] - 0.07 * (1.4 - 1.1 * tY) * tkSS((a[0] - 0.4) / 0.3);
     var At = Math.cos(Ht * Math.PI / 180) * Ct, Bt = Math.sin(Ht * Math.PI / 180) * Ct, Aw = b[1] + (a[1] * 0.3 + Math.cos(ih) * 0.009 - b[1]) * owt, Bw = b[2] + (a[2] * 0.3 + Math.sin(ih) * 0.009 - b[2]) * owt;   /* 曇り：白く明るい曇り空だけ淡く無彩色に。夕方・雨雲のような暗めの曇り空は、仕上がりの色のまま（雲の一部だけ灰色にして割れない） */
     var Cb = Math.sqrt(b[1] * b[1] + b[2] * b[2]); if (Cb > Ct && Ct > 1e-4){ var up = 1 + (Cb / Ct - 1) * (1 - 0.85 * skd); At *= up; Bt *= up; } var LtB = Lt; Lt = Math.max(Math.min(b[0], Lt), LtB - 0.04);
     var tL = b[0] + (Lt - b[0]) * wb, tA = Aw + (At - Aw) * wb, tB = Bw + (Bt - Bw) * wb;
