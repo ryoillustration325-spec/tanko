@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v200</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v201</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3951,7 +3951,7 @@ function tkLook6(img, n, P, w, h){
   var sf = (P.l6Soft == null ? 0 : P.l6Soft) / 100;
   if (sf > 0 && w && h){ var liS = tkL6Idx(P); var eS = P.l6Custom ? null : TK_L6[liS]; var tgt = P.l6Custom ? P.l6CustomLC : (eS && eS.lc ? eS.lc[0] : 0); if (tgt) tkL6Soft(img, n, w, h, tgt, sf); }
   // 葉の深さ（人物でない写真）：葉は見本のように暗く沈めて濃く（色を抜いて灰緑にしない）、黄緑は青緑の方へ
-  var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person){ var eF = P.l6Custom ? null : TK_L6[tkL6Idx(P)], qF = eF && eF.m && eF.m._q, fL = (qF && P.l6FolFollow === 1) ? Math.min(0.62, TK_L6_FOL.L + Math.max(0, 0.8 * (qF[3] - 0.42))) : null; tkL6Foliage(img, n, fo, fL); }
+  var fo = (P.l6Fol == null ? 100 : P.l6Fol) / 100; if (fo > 0 && !P.l6Person){ var eF = P.l6Custom ? null : TK_L6[tkL6Idx(P)], qF = eF && eF.m && eF.m._q, fL = (qF && P.l6FolFollow === 1) ? Math.min(0.62, TK_L6_FOL.L + Math.max(0, 0.8 * (qF[3] - 0.42))) : null; tkL6Foliage(img, n, fo, fL, w, h); }
   // 青の入れ方（人物でない写真）：1＝青影（暗い所に藍）／2＝中間（中くらいの明るさを青緑〜藍へ）／3＝青光（明るい所・光を青く）。黒は締める
   var bmd = (P._tung || 0) > 0.3 && (P.l6BlueMode | 0) !== 1 ? 0 : P.l6BlueMode | 0, bam = (P.l6BlueAmt == null ? 100 : P.l6BlueAmt) / 100;   /* 電球色の写真は青の入れ方をかけない */ if (bmd > 0 && bam > 0 && !P.l6Person){ var hBM = 245; if (P.l6BlueHue !== 0 && P.l6Follow !== 0){ var trB = tkL6Traits(P.l6Custom || (TK_L6[tkL6Idx(P)] || TK_L6[0]).m); hBM = Math.round(bmd === 1 ? trB.hS : bmd === 3 ? trB.hH : trB.hM); } var kBM = bmd + ',' + bam + ',' + hBM; if (TK_LUTC.l6bmK !== kBM){ TK_LUTC.l6bmK = kBM; TK_LUTC.l6bm = tkL6BlueLut(bmd, bam, hBM); } tkApplyLut3(img, n, TK_LUTC.l6bm, 33); }
   // 濃い青：「肌の範囲」の中は肌の量、外（消した所も含む）は背景の量。2種類だけ
@@ -4214,7 +4214,7 @@ function tkL6BlueLut(mode, amt, hB){
 //   いちばん暗い所（0.04〜0.18）に青みが入るのは4枚に1枚ほど＝選んだ見本の暗い所が青い時だけ藍を差す
 var TK_L6_TUNG_SH = { H: 78, C: 0.008, blue: 0.24 };
 var TK_L6_FOL = { L: 0.39, H: 149 };   // v138：植物の見本（本人の投稿のみ）の葉の明るさ中央0.39・色相147°（以前の0.40・150°からの差を反映）
-function tkL6Foliage(img, n, amt, tgtL){
+function tkL6Foliage(img, n, amt, tgtL, w0, h0){
   var FL = tgtL != null ? tgtL : TK_L6_FOL.L;   // v188：葉を沈める先の明るさ。見本が植物の見本の中央より明るい時は、その分だけ明るく（明るい見本を選んだのに葉だけ暗く沈むのを防ぐ）
   var o = [0, 0, 0], Ls = [], cnt = 0, tot = 0;
   for (var i = 0; i < n; i += 7){ var j = i * 3; tkToOk(img[j], img[j + 1], img[j + 2], o); var C = Math.sqrt(o[1] * o[1] + o[2] * o[2]), H = (Math.atan2(o[2], o[1]) * 180 / Math.PI + 360) % 360; tot++;
@@ -4235,7 +4235,17 @@ function tkL6Foliage(img, n, amt, tgtL){
     }
     tkFromOk(L, A, B, o); LUT[p] = tkClamp01(o[0]); LUT[p + 1] = tkClamp01(o[1]); LUT[p + 2] = tkClamp01(o[2]); p += 3;
   }
-  tkApplyLut3(img, n, LUT, 33);
+  // v201：葉を沈めるのは「葉のある所とその周り」だけ。以前は色だけで決めていたので、色の薄い空や壁まで暗くなり、空のグラデーションに帯（段差）が出ていた
+  if (!(w0 && h0 && w0 * h0 === n)){ tkApplyLut3(img, n, LUT, 33); return; }
+  var gs = Math.max(1, Math.round(Math.max(w0, h0) / 160)), GW = Math.ceil(w0 / gs), GH = Math.ceil(h0 / gs), G = new Float32Array(GW * GH), GN = new Float32Array(GW * GH), x, y;
+  for (y = 0; y < h0; y += 2) for (x = 0; x < w0; x += 2){ var j2 = (y * w0 + x) * 3; tkToOk(img[j2], img[j2 + 1], img[j2 + 2], o); var C2 = Math.sqrt(o[1] * o[1] + o[2] * o[2]), H2 = (Math.atan2(o[2], o[1]) * 180 / Math.PI + 360) % 360, gi2 = Math.floor(y / gs) * GW + Math.floor(x / gs);
+    G[gi2] += (H2 > 95 && H2 < 182 && o[0] < 0.78) ? tkSS((C2 - 0.03) / 0.03) * (1 - tkSS((H2 - 168) / 14)) : 0; GN[gi2]++; }   /* 青緑がかった空・明るい面は葉に数えない */
+  for (var g0 = 0; g0 < G.length; g0++) G[g0] = GN[g0] ? G[g0] / GN[g0] : 0;
+  var Gb = tkBlur1(G, GW, GH, 3), src = new Float32Array(img.subarray(0, n * 3)); tkApplyLut3(img, n, LUT, 33);
+  for (y = 0; y < h0; y++){ var gy = Math.min(GH - 1.001, Math.max(0, (y + 0.5) / gs - 0.5)), y0 = gy | 0, ty = gy - y0, y1 = Math.min(GH - 1, y0 + 1);
+    for (x = 0; x < w0; x++){ var gx = Math.min(GW - 1.001, Math.max(0, (x + 0.5) / gs - 0.5)), x0 = gx | 0, tx = gx - x0, x1 = Math.min(GW - 1, x0 + 1);
+      var gv = (Gb[y0 * GW + x0] * (1 - tx) + Gb[y0 * GW + x1] * tx) * (1 - ty) + (Gb[y1 * GW + x0] * (1 - tx) + Gb[y1 * GW + x1] * tx) * ty, k = tkSS((gv - 0.12) / 0.25); if (k >= 0.999) continue;
+      var q = (y * w0 + x) * 3; img[q] = src[q] + (img[q] - src[q]) * k; img[q + 1] = src[q + 1] + (img[q + 1] - src[q + 1]) * k; img[q + 2] = src[q + 2] + (img[q + 2] - src[q + 2]) * k; } }
 }
 // 肌のきめ：肌の範囲では、細かい明暗と色の揺れ（毛穴・そばかす・うぶ毛の陰影・色ムラ）を元の写真の比率に戻す。
 //   トーンカーブが肌の明るさ帯で急になると、きめが持ち上がって「つるっと感」が消える＝それを防ぐ（ぼかしではなく元のきめ）
