@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v206</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v207</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3978,6 +3978,7 @@ function tkLook6(img, n, P, w, h){
   if (ISk && w && h && !P.l6Person && STB > 0) tkL6Stable(img, (P._tung > 0.05 && IT0) ? IT0 : ISk, n, w, h, STB);   /* 人物以外：明るい所・平らな所の割れを防ぐ */
   if (ISk && !P.l6Person && !P.l6Custom){ var liE = tkL6Idx(P); var eE = TK_L6[liE]; if (eE && eE.m && eE.m._q) tkL6ToneEnds(img, ISk, n, eE.m._q, 0.35); }   /* 人物以外：黒の浮き・白の抜けを見本へ */
   if (ISk && w && h && !P.l6Person) tkL6KeepVivid(img, ISk, n);
+  P_GD = (P.l6GreenDeep == null ? 100 : P.l6GreenDeep) / 100;
   { var gk = (P.l6Green == null ? 100 : P.l6Green) / 100; if (ISk && w && h && gk > 0){ var trG = null; try{ trG = tkL6Traits(P.l6Custom || (TK_L6[tkL6Idx(P)] || TK_L6[0]).m); }catch(e){} tkL6KeepGreen(img, ISk, n, gk, trG ? Math.max(trG.teal, 0.7 * trG.deep) / 1.3 : 0, 0, w, h); } }   /* v193：緑を残す（本人の自然の写真の濃さ） */   /* 人物以外：主役の色（花・毛・果物）は抜きすぎない・青白いベールをかけない */
   if (ISk && w && h && !P.l6Person && P.l6HueGuard !== 0) tkL6HueGuard(img, ISk, n, 1);
   if (ISk && w && h){ var csA = (P.l6Cast == null ? 100 : P.l6Cast) / 100, csW = P.l6White != null ? P.l6White / 100 : 0.55 * (P.l6Sep == null ? 1 : P.l6Sep / 100);   /* v206：白い物の色かぶりは「色を作り分ける」と一緒に動く（以前の設定に l6White があればそれを使う） */ var csS = (P.l6Sep == null ? 100 : P.l6Sep) / 100; var csO = (P.l6Own == null ? 100 : P.l6Own) / 100; if (csA < 0.999 || csW > 0.001 || csS > 0.001 || csO > 0.001) tkL6CastShape(img, ISk, n, csA, csW, csS, csO); }
@@ -4061,6 +4062,7 @@ function tkL6KeepVivid(img, I0, n){
 //   手持ちの写真の緑は元から同じくらいの濃さ（0.044・0.086）なのに、見本寄せの後は0.029・0.056まで抜け、緑だった所の多くが灰色になっていた
 //   （全体の鮮やかさを見本の中央値へ合わせる処理と、青をのせる処理が、緑を打ち消していた。見本の鮮やかさの中央値が低いのは霧・空・暗部が多いからで、緑そのものは濃い）
 //   元が緑だった所だけ：濃さは元の9割を下限に戻す（鮮やかすぎる緑は上限0.07＋明るさ分まで抑える）、色相は元から164°の方へ少しだけ（青緑の見本の時は青緑側へ広めに許す）。明るさは見本寄せのまま
+var P_GD = 1;   /* v207：緑の深さ（本人の葉に合わせて、鮮やかな黄緑を落ち着いた深い緑へ）。0で以前 */
 function tkL6KeepGreen(img, I0, n, amt, teal, mode, w, h){
   // 緑の色は「元の色」から一様な規則で決める（見本寄せの後の色は使わない）＝日なたの葉と陰の葉で色が割れない（まだらにならない）
   //   色相：元の色相を160°の方へ45％だけ（黄側へは8°・青緑側へは14°まで）。青緑の見本の時は全体を一様に少し青緑へ
@@ -4075,8 +4077,8 @@ function tkL6KeepGreen(img, I0, n, amt, teal, mode, w, h){
     if (mem <= 0) continue;
     var wv = mem * tkSS((a[0] - 0.08) / 0.1) * amt; if (own) own[p] = wv; if (wv < 0.01) continue;
     tkToOk(img[j], img[j + 1], img[j + 2], b); var C1 = Math.sqrt(b[1] * b[1] + b[2] * b[2]), H1 = C1 > 1e-4 ? (Math.atan2(b[2], b[1]) * 180 / Math.PI + 360) % 360 : H0;
-    var Ht = H0 + Math.max(-8, Math.min(14, tkHueDist(160, H0) * 0.45)) + tsh;
-    var cap = 0.075 + 0.04 * Math.max(0, b[0] - 0.5), Ct = Math.min(C0 * 0.92, cap + (C0 * 0.92 - cap) * 0.35);
+    var gd = P_GD, Ht = H0 + Math.max(-8, Math.min(14 + 10 * gd, tkHueDist(160 + 6 * gd, H0) * (0.45 + 0.2 * gd))) + tsh;
+    var cap = 0.075 - 0.022 * gd + 0.04 * Math.max(0, b[0] - 0.5), Ct = Math.min(C0 * 0.92, cap + (C0 * 0.92 - cap) * 0.35);
     if (C0 * 0.92 <= cap) Ct = C0 * 0.92;
     var Cn = C1 + (Ct - C1) * wv, Hn = H1 + tkHueDist(Ht, H1) * wv;
     tkFromOk(b[0], Math.cos(Hn * Math.PI / 180) * Cn, Math.sin(Hn * Math.PI / 180) * Cn, b); img[j] = tkClamp01(b[0]); img[j + 1] = tkClamp01(b[1]); img[j + 2] = tkClamp01(b[2]);
@@ -4125,6 +4127,7 @@ function tkL6HueGuard(img, I0, n, amt){
     tkFromOk(b[0], Math.cos(Hn * Math.PI / 180) * Cn, Math.sin(Hn * Math.PI / 180) * Cn, b); img[j] = tkClamp01(b[0]); img[j + 1] = tkClamp01(b[1]); img[j + 2] = tkClamp01(b[2]);
   }
 }
+var P_SKD = 1;   /* v207：空の青を本人の空（落ち着いた青）へ。0で以前 */
 function tkL6SkyFix(img, I0, n, w, h, onlyBlue, amt, UW){
   amt = amt == null ? 1 : amt; if (amt <= 0) return;
   var s = 400 / Math.max(w, h), W = Math.max(8, Math.round(w * s)), H = Math.max(8, Math.round(h * s)), m = W * H, k = [0, 0, 0];
@@ -4162,9 +4165,9 @@ function tkL6SkyFix(img, I0, n, w, h, onlyBlue, amt, UW){
     var wz = M[g]; if (wz < 0.02) continue; var gx0 = g % W, gy0 = (g - gx0) / W, sxg = Math.min(w - 1, Math.floor((gx0 + 0.5) * w / W)), syg = Math.min(h - 1, Math.floor((gy0 + 0.5) * h / H)), q0 = (syg * w + sxg) * 3;
     a[0] = L[g]; a[1] = A[g]; a[2] = B[g]; var ws = wz * simA(a[0], a[1], a[2]); if (ws < 0.02) continue; tkToOk(img[q0], img[q0 + 1], img[q0 + 2], b);
     var C0 = Math.sqrt(a[1] * a[1] + a[2] * a[2]), H0 = Math.atan2(a[2], a[1]) * 180 / Math.PI, wb = tkSS((C0 - 0.01) / 0.018) * clear;
-    var tY = Math.max(0, Math.min(1, (gy0 - yT) / ySpan)), Ht = H0 + tkHueDist(237, (H0 + 360) % 360) * 0.5, Ct = C0 * 0.8 * (1.05 - 0.15 * tY), Lt = a[0] - 0.07 * (1.4 - 1.1 * tY) * tkSS((a[0] - 0.4) / 0.3);
+    var tY = Math.max(0, Math.min(1, (gy0 - yT) / ySpan)), skd = P_SKD, Ht = H0 + tkHueDist(237 + 4 * skd, (H0 + 360) % 360) * 0.5, Ct = C0 * 0.8 * (1.05 - 0.15 * tY), CtM = 0.05 + 0.25 * Math.max(0, C0 - 0.06), Ct = skd > 0 && Ct > CtM ? Ct + (CtM - Ct) * skd : Ct, Lt = a[0] - 0.07 * (1.4 - 1.1 * tY) * tkSS((a[0] - 0.4) / 0.3);
     var At = Math.cos(Ht * Math.PI / 180) * Ct, Bt = Math.sin(Ht * Math.PI / 180) * Ct, Aw = b[1] + (a[1] * 0.3 + Math.cos(ih) * 0.009 - b[1]) * owt, Bw = b[2] + (a[2] * 0.3 + Math.sin(ih) * 0.009 - b[2]) * owt;   /* 曇り：白く明るい曇り空だけ淡く無彩色に。夕方・雨雲のような暗めの曇り空は、仕上がりの色のまま（雲の一部だけ灰色にして割れない） */
-    var Cb = Math.sqrt(b[1] * b[1] + b[2] * b[2]); if (Cb > Ct && Ct > 1e-4){ At *= Cb / Ct; Bt *= Cb / Ct; } var LtB = Lt; Lt = Math.max(Math.min(b[0], Lt), LtB - 0.04);
+    var Cb = Math.sqrt(b[1] * b[1] + b[2] * b[2]); if (Cb > Ct && Ct > 1e-4){ var up = 1 + (Cb / Ct - 1) * (1 - 0.85 * skd); At *= up; Bt *= up; } var LtB = Lt; Lt = Math.max(Math.min(b[0], Lt), LtB - 0.04);
     var tL = b[0] + (Lt - b[0]) * wb, tA = Aw + (At - Aw) * wb, tB = Bw + (Bt - Bw) * wb;
     DL[g] = (tL - b[0]) * ws; DA[g] = (tA - b[1]) * ws; DB[g] = (tB - b[2]) * ws; DW[g] = ws;
   }
