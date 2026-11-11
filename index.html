@@ -256,6 +256,17 @@
   .gbody{padding:0 14px 12px; display:none}
   .group.open .gbody{display:block}
   .group.off .gbody{opacity:.45}
+  .panel .group.fold.off .gbody{display:none}
+  .panel .group.fold.off .ghead small::after{content:'　— オンにすると調整できます'; opacity:.7}
+  .morebtn{display:block; width:100%; margin:6px 0 2px; padding:8px 10px; font-size:12px; color:var(--ink2,inherit); opacity:.8; background:transparent; border:1px dashed rgba(255,255,255,.16); border-radius:10px; text-align:center}
+  .more[hidden]{display:none}
+  .actbar{display:flex; gap:6px; overflow-x:auto; padding:0 12px 6px; scrollbar-width:none; flex:none; align-items:center}
+  .actbar:empty{display:none}
+  .actbar .lab{flex:none; font-size:11px; opacity:.6}
+  .actbar .pill{flex:none; display:inline-flex; align-items:center; font-size:11.5px; border-radius:13px; border:1px solid rgba(255,255,255,.14); overflow:hidden}
+  .actbar .pill button{background:transparent; border:0; color:inherit; font:inherit; padding:4px 4px 4px 10px}
+  .actbar .pill button.x{padding:4px 9px 4px 5px; opacity:.6}
+  .app.modal .actbar{pointer-events:none; opacity:.35}
   .row{display:flex; align-items:center; gap:12px; padding:7px 0}
   .row label{font-size:12px; color:var(--muted); width:84px; flex:none}
   .row input[type=range]{flex:1; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; background:var(--line); outline:none}
@@ -519,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v196</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v197</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -530,6 +541,7 @@
   </div></main>
   <section class="sheet" id="sheet" aria-label="編集パネル">
     <button class="grab" id="grab" type="button" aria-label="パネルを隠す／出す"></button>
+    <div class="actbar" id="actbar" aria-label="いま効いている効果"></div>
     <div class="subtabs" id="subtabs" role="tablist"></div>
     <div class="panel" id="panel"></div>
   </section>
@@ -4718,11 +4730,14 @@ function tkLook2(img, n, P, w, h){
   function slShow(k, v){ return SL_FMT[k] ? SL_FMT[k](v) : String(v); }
   function slEnds(k){ var w = SL_WORDS[k]; if (!w) return null; var d = document.createElement('div'); d.className = 'sle'; d.innerHTML = '<span></span><span></span>'; d.children[0].textContent = '← ' + w[0]; d.children[1].textContent = w[1] + ' →'; return d; }
 
+  // v197：まとめた項目を短く見せる。オフの効果は見出しだけ／よく使うスライダーだけ出し、残りは「詳しく」
+  var FOLD_KEYS = { glow: 1, hal: 1, diff: 1, mist: 1, ana: 1, cross: 1, ray: 1, fsoft: 1, depth: 1, bokeh: 1, split: 1, dens: 1, fsh: 1, fblk: 1, bright: 1, tone: 1, grain: 1, lens: 1 };
+  var MAIN_SL = { fx: ['fxTex', 'fxCla', 'fxDeh'], det: ['shAmt', 'nrL'], ana: ['anAmt', 'anLen', 'anAng'], cross: ['crAmt', 'crLen', 'crAng'], flare: ['flAmt', 'flGhost'], ray: ['rAmt', 'rWidth', 'rAng'], calm: ['cmUnify', 'cmEven', 'cmDense'], glow: ['glow', 'glowR'], fsoft: ['fsAmt', 'fsEdge'] };
   // グループUI生成
   var host = $('groups');
   GROUPS.forEach(function(g){
     if (g.sect){ var sc = document.createElement('div'); sc.className = 'sect'; sc.textContent = g.sect; host.appendChild(sc); return; }
-    var box = document.createElement('div'); box.className = 'group'; box.id = 'g-' + g.key;
+    var box = document.createElement('div'); box.className = 'group' + (FOLD_KEYS[g.key] && !g.noToggle ? ' fold' : ''); box.id = 'g-' + g.key;
     var head = document.createElement('div'); head.className = 'ghead';
     head.innerHTML = '<span class="caret">▶</span><div class="t"></div>' + (g.noToggle ? '' : '<button class="tg" aria-label="ON/OFF"></button>');
     head.querySelector('.t').innerHTML = '';
@@ -4739,6 +4754,7 @@ function tkLook2(img, n, P, w, h){
       body.appendChild(seg);
     }
     if (g.custom) (typeof g.custom === 'function' ? g.custom : buildRegPanel)(body);
+    var mainSl = !g.modes && MAIN_SL[g.key], moreBox = null, moreN = 0; if (mainSl){ moreBox = document.createElement('div'); moreBox.className = 'more'; moreBox.hidden = true; }
     g.sliders.forEach(function(s){
       var row = document.createElement('div'); row.className = 'row'; if (s[5]) row.dataset.mode = s[5];
       row.innerHTML = '<label></label><input type="range"><span class="val num"></span>';
@@ -4749,8 +4765,9 @@ function tkLook2(img, n, P, w, h){
       r.addEventListener('input', function(){ P[s[0]] = +r.value; v.textContent = slShow(s[0], r.value); clearPresetMark(); schedule(); });
       row.querySelector('label').addEventListener('dblclick', function(){ setVal(s[0], s[4]); clearPresetMark(); schedule(); });
       if (g.key === 'mix'){ var hue = [0, 30, 60, 120, 180, 230, 275, 320][+s[0].slice(2)]; row.querySelector('label').style.setProperty('--sw', 'hsl(' + hue + ',70%,58%)'); row.classList.add('mixrow'); }
-      body.appendChild(row);
+      if (moreBox && mainSl.indexOf(s[0]) < 0){ moreBox.appendChild(row); moreN++; } else body.appendChild(row);
     });
+    if (moreBox && moreN){ var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'morebtn'; mb.textContent = '詳しく（あと' + moreN + '項目）'; mb.addEventListener('click', function(){ moreBox.hidden = !moreBox.hidden; mb.textContent = moreBox.hidden ? '詳しく（あと' + moreN + '項目）' : '詳しい項目を閉じる'; }); body.appendChild(mb); body.appendChild(moreBox); }
     if (g.hint){ var h = document.createElement('div'); h.className = 'hint'; h.textContent = g.hint; body.appendChild(h); }
     box.appendChild(head); box.appendChild(body); host.appendChild(box);
     var tg = head.querySelector('.tg');
@@ -7417,8 +7434,8 @@ function tkLook2(img, n, P, w, h){
   var TABS = [
     { key: 'look', label: '自動' },
     { key: 'light', label: '光', chips: [['basic','ライト',['basic']],['crv','カーブ',['crv']],['tone','明るさ・トーン',['bright','tone','fblk']],['comp','白飛び・霞',['comp','fsh']]] },
-    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg']],['mix','ミキサー',['mix']],['split','スプリット',['split']],['calm','まとまり',['calm']],['dens','濃さ',['dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
-    { key: 'adj', label: '調整', chips: [['fx','効果',['fx']],['det','ディテール',['det']],['fsoft','柔らかさ',['fsoft','diff','mist']],['depth','奥行き',['depth','bokeh']],['glow','グロー',['glow']],['hal','ハレーション',['hal']],['ana','ラインフレア',['ana']],['cross','クロス',['cross']],['flare','フレア',['flare']],['ray','光の差し込み',['ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
+    { key: 'color', label: '色', chips: [['wb','カラー',['wb']],['cg','グレーディング',['cg','split']],['mix','ミキサー',['mix']],['calm','まとまり・濃さ',['calm','dens']],['grad','寒暖',['grad']],['match','カラーマッチ',['match']],['skin','肌',['skin']]] },
+    { key: 'adj', label: '調整', chips: [['fx','質感',['fx','det']],['fsoft','柔らかさ・奥行き',['fsoft','depth','bokeh']],['glow','光のにじみ',['glow','hal','diff','mist']],['ana','光の線・フレア',['cross','ana','flare','ray']],['grain','粒子',['grain']],['lens','レンズ',['lens']],['geo','トリミング',['geo']]] },
     { key: 'part', label: '範囲', chips: [['reg','AIで部分調整',['reg']],['lm','マスク',['lm']]] },
     { key: 'util', label: 'その他', chips: [['hist','履歴',['hist']],['cmpv','前後比較',['cmpv']],['clip','コピー',['clip']],['feed','フィード確認',['feed']],['batch','まとめて書き出し',['batch']],['mypre','設定の保存',['mypre']],['aiprep','AIの準備',['aiprep']]] }
   ];
@@ -8445,7 +8462,23 @@ function tkLook2(img, n, P, w, h){
     if (k === 'geo') return geoOn();
     return !!P.on[k];
   }
+  var ACT_NAME = { fsoft: '柔らかさ', depth: '奥行き', bokeh: 'ピントの浅さ', glow: 'グロー', hal: 'ハレーション', diff: 'ミスト', mist: 'フォギー', cross: 'クロス', ana: 'ラインフレア', ray: '光の差し込み', grain: '粒子', lens: 'オールドレンズ', fsh: '白の肩', fblk: '霞んだ黒', bright: '明るさ', tone: 'フィルムトーン', split: 'スプリット', dens: '濃さ', grad: '寒暖', match: 'カラーマッチ', skin: '肌', reg: '部分調整' };
+  var ACT_SIG = null;
+  function updateActBar(){
+    var bar = $('actbar'); if (!bar) return; var on = Object.keys(ACT_NAME).filter(function(k){ return P.on[k] && $('g-' + k); }), sig = on.join(',');
+    if (sig === ACT_SIG) return; ACT_SIG = sig; bar.innerHTML = ''; if (!on.length) return;
+    var lab = document.createElement('span'); lab.className = 'lab'; lab.textContent = 'オン'; bar.appendChild(lab);
+    on.forEach(function(k){
+      var where = null; TABS.forEach(function(t){ if (t.chips) t.chips.forEach(function(c){ if (c[2].indexOf(k) >= 0) where = [t.key, c[0]]; }); });
+      var pill = document.createElement('span'); pill.className = 'pill', a = document.createElement('button'), x = document.createElement('button');
+      a.type = x.type = 'button'; a.textContent = ACT_NAME[k]; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', ACT_NAME[k] + 'をオフ');
+      a.addEventListener('click', function(){ if (!where) return; setCollapsed(false); showTab(where[0], where[1]); setTimeout(function(){ var g0 = $('g-' + k); if (g0 && g0.parentNode === panel) panel.scrollTo({ top: panel.scrollTop + g0.getBoundingClientRect().top - panel.getBoundingClientRect().top - 2, behavior: 'smooth' }); }, 30); });
+      x.addEventListener('click', function(){ P.on[k] = 0; syncGroup(k); clearPresetMark(); if (k === 'reg') drawOverlay(); updateExtras(); schedule(); toast(ACT_NAME[k] + 'をオフにしました'); });
+      pill.appendChild(a); pill.appendChild(x); bar.appendChild(pill);
+    });
+  }
   function updateIndicators(){
+    try{ updateActBar(); }catch(e){}
     TABS.forEach(function(t){
       var any = false;
       if (t.chips) t.chips.forEach(function(c){
