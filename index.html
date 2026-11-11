@@ -519,7 +519,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v193</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v194</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -2314,6 +2314,33 @@ function tkFlare(img, w, h, P){
 }
 // ---------- クロスフィルター：強い光の芯から、4・6・8本の光の筋（光芒）。ラインフレアと同じ光源の選び方 ----------
 //   筋の向きごとに「回した小さな画像の上で両側へ指数で減るぼかし」をかけて足す。虹色＝色ごとに筋の長さと太さを少し変える（先ほど色が分かれる）
+// v194：クロスの「面の光」の筋。点の光は細い筋（tkSpikes）、窓・水面のきらめき・玉ボケのように大きさのある光は、その幅のままやわらかい筋になる（実物のクロスフィルターはすべての光を同じ形に引き伸ばす）
+function tkCrossBand(img, w, h, P, angs, lenK, amt, rain, tint){
+  if (!TK_PRE) return; var S = tkOpticSrc(TK_PRE.d, TK_PRE.w, TK_PRE.h), lw = S.lw, lh = S.lh, n2 = lw * lh, D = Math.ceil(Math.sqrt(lw * lw + lh * lh)) + 2, cx = lw / 2, cy = lh / 2, dc = D / 2;
+  var src = [new Float32Array(n2), new Float32Array(n2), new Float32Array(n2)], ch = [S.R, S.G, S.B], j, c, any = 0;
+  for (j = 0; j < n2; j++){ var k = S.HB[j] * (1 + S.BO[j]); if (k < 0.02) continue; any = 1; var r = ch[0][j] * k, g = ch[1][j] * k, b = ch[2][j] * k, m = (r + g + b) / 3; src[0][j] = m + (r - m) * tint; src[1][j] = m + (g - m) * tint; src[2][j] = m + (b - m) * tint; }
+  if (!any) return;
+  var out = [new Float32Array(n2), new Float32Array(n2), new Float32Array(n2)], rot = new Float32Array(D * D), acc = new Float32Array(D * D), Lb = lenK * Math.sqrt(lw * lw + lh * lh), axes = [], seen = {};
+  angs.forEach(function(a){ var m = ((a % 180) + 180) % 180, key = Math.round(m * 10); if (!seen[key]){ seen[key] = 1; axes.push(m); } });
+  var fr = 0.11 * amt / axes.length * 2;   /* 筋へ回る光の割合（軸1本あたり） */
+  axes.forEach(function(ad){ var an = ad * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an);
+    for (c = 0; c < 3; c++){
+      var sc3 = src[c], x, y;
+      for (y = 0; y < D; y++) for (x = 0; x < D; x++){ var rx = x - dc, ry = y - dc, sx = cx + rx * ux - ry * uy - 0.5, sy = cy + rx * uy + ry * ux - 0.5, v = 0;
+        if (sx >= 0 && sy >= 0 && sx < lw - 1 && sy < lh - 1){ var x0 = sx | 0, y0 = sy | 0, tx = sx - x0, ty = sy - y0, q = y0 * lw + x0; v = (sc3[q] * (1 - tx) + sc3[q + 1] * tx) * (1 - ty) + (sc3[q + lw] * (1 - tx) + sc3[q + lw + 1] * tx) * ty; }
+        rot[y * D + x] = v; }
+      var Lc = Lb * (1 + rain * (c === 0 ? 0.35 : c === 1 ? -0.18 : 0.12)), taus = [Math.max(0.6, Lc * 0.09), Math.max(1.2, Lc * 0.28)], wts = [0.8, 0.2];
+      acc.fill(0);
+      for (var ti = 0; ti < 2; ti++){ var al = Math.exp(-1 / taus[ti]), nk = wts[ti] / (2 * taus[ti]);   /* 両側へ指数で減る。面積1に正規化 */
+        for (y = 0; y < D; y++){ var o = y * D, f = 0; for (x = 0; x < D; x++){ f = rot[o + x] + al * f; acc[o + x] += nk * f; } f = 0; for (x = D - 1; x >= 0; x--){ acc[o + x] += nk * f; f = rot[o + x] + al * f; } } }
+      var oc = out[c];
+      for (y = 0; y < lh; y++) for (x = 0; x < lw; x++){ var px = x + 0.5 - cx, py = y + 0.5 - cy, rx2 = px * ux + py * uy + dc, ry2 = -px * uy + py * ux + dc;
+        if (rx2 < 0 || ry2 < 0 || rx2 >= D - 1 || ry2 >= D - 1) continue; var a0 = rx2 | 0, b0 = ry2 | 0, t1 = rx2 - a0, t2 = ry2 - b0, q2 = b0 * D + a0;
+        oc[y * lw + x] += fr * ((acc[q2] * (1 - t1) + acc[q2 + 1] * t1) * (1 - t2) + (acc[q2 + D] * (1 - t1) + acc[q2 + D + 1] * t1) * t2); }
+    } });
+  tkOpticEach(img, w, h, { lw: lw, lh: lh, sc: lw / w }, out, function(i, r, g, b){ if (r + g + b < 0.0009) return;
+    for (var c2 = 0; c2 < 3; c2++){ var m = c2 === 0 ? r : c2 === 1 ? g : b; if (m < 0.0003) continue; var L0 = tkLinF(img[i + c2]); img[i + c2] = tkGamF(tkOpticSh(L0 + m, L0)); } });
+}
 function tkCross(img, w, h, P){
   var amt = (P.crAmt == null ? 50 : P.crAmt) / 100, rng = (P.crRange == null ? 30 : P.crRange) / 100, len = (P.crLen == null ? 40 : P.crLen) / 100,
       soft = (P.crSoft == null ? 20 : P.crSoft) / 100, rain = (P.crRain == null ? 40 : P.crRain) / 100, tint = (P.crTint == null ? 50 : P.crTint) / 100, pts = P.crPts === 6 || P.crPts === 8 ? P.crPts : 4;
@@ -2325,6 +2352,8 @@ function tkCross(img, w, h, P){
     R[k] = SA[q]; G[k] = SA[q + 1]; B[k] = SA[q + 2]; Y[k] = 0.2126 * R[k] + 0.7152 * G[k] + 0.0722 * B[k];
   }
   var MX = new Float32Array(sn); for (i = 0; i < sn; i++) MX[i] = Math.max(R[i], G[i], B[i]);
+  var angs0 = [], bs0 = (P.crAng || 0); for (var l0 = 0; l0 < pts; l0++) angs0.push(bs0 + 360 / pts * l0);
+  if (P.crBand !== 0) tkCrossBand(img, w, h, P, angs0, 0.02 + 0.22 * len * len + 0.04 * len, amt * (P.crBand == null ? 1 : P.crBand / 100), rain * 0.85, tint);
   var st0 = TK_STRICT; if (P.crSrc !== 'bright' && !st0) TK_STRICT = 1; var PK = tkLightPeaks(Y, sw, sh, rng, MX, P.crEx); TK_STRICT = st0; if (!PK.length) return;
   // v165：筋は元の解像度で1本ずつ、髪の毛ほどの細さで描く（縮小して描いて戻すと太く・ぼやけて「載せた感じ」になる）
   var PI = tkPeakInfo(PK, R, G, B, Y, sw, sh, sc); if (TK_PEAKHOOK) PI = TK_PEAKHOOK(PI, w, h, 'cross'); var GR = tkFlareGrain(Y, sw, sh), res = Math.max(0.5, Math.sqrt(w * w + h * h) / 2800);
