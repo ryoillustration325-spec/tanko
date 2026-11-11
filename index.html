@@ -530,7 +530,7 @@
         <span class="mark"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
         <span class="big" id="dropBig">写真をタップして選択</span>
       </div>
-      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v211</span></span>
+      <span class="sub">JPG / PNG / HEIC ・ 写真は端末の中だけで処理されます ・ <span class="num">v212</span></span>
     </div>
     <canvas id="view" style="display:none"></canvas>
     <canvas id="ovl" style="display:none"></canvas>
@@ -3985,7 +3985,20 @@ function tkLook6(img, n, P, w, h){
   if (ISk && w && h){ var csA = (P.l6Cast == null ? 100 : P.l6Cast) / 100, csW = P.l6White != null ? P.l6White / 100 : 0.55 * (P.l6Sep == null ? 1 : P.l6Sep / 100);   /* v206：白い物の色かぶりは「色を作り分ける」と一緒に動く（以前の設定に l6White があればそれを使う） */ var csS = (P.l6Sep == null ? 100 : P.l6Sep) / 100; var csO = (P.l6Own == null ? 100 : P.l6Own) / 100; if (csA < 0.999 || csW > 0.001 || csS > 0.001 || csO > 0.001) tkL6CastShape(img, ISk, n, csA, csW, csS, csO); }
   if (ISk && w && h){ var skyA = (P.l6Sky == null ? 100 : P.l6Sky) / 100, smU = null; (P.lm || []).forEach(function(x){ if (x.type === 'sky' && !x.inv && x.l6use !== 0) smU = x; }); var UWs = null; if (smU){ try{ UWs = tkLmWeight(Object.assign({}, smU, { img: ISk, iw: w, ih: h }), w, h); }catch(e){ UWs = null; } } tkL6SkyFix(img, ISk, n, w, h, !!P.l6Person, skyA, UWs); }   /* 空の仕上げ：スライダーで強さ、マスクの「空」があればその範囲を空として */   /* 人物の写真は青い空だけ（白い壁・白い布の背景は空としない） */   /* 人物以外：空は空の規則で（晴れは沈めつつ鮮やかに、曇りは淡く無彩色に） */
   if (ISk && WSK0 && P.l6SkinTex !== 0) tkL6SkinTex(img, ISk, n, P, w, h, WSK0);
+  { var shN = (P.l6ShNeu == null ? 100 : P.l6ShNeu) / 100; if (shN > 0 && n) tkL6ShadowNeutral(img, n, shN); }   /* v212：暗い所の色を抑える */
   if (I06) for (var q6 = 0; q6 < img.length; q6++) img[q6] = tkClamp01(I06[q6] + (img[q6] - I06[q6]) * mm6);
+}
+// v212：暗い所の色を抑える。本人の写真（確認済み69枚）は、暗い所（明るさ0.3未満）の色の濃さが中央0.010・上位0.016。
+//   これまでの仕上げは中央0.019・上位0.025で、影に色が乗りすぎていた（元の写真は0.014。仕上げで増えていた）。中間〜明るい所は本人と同じなので触らない
+//   鮮やかな物（暗い赤い花・夜の灯り）は外す
+function tkL6ShadowNeutral(img, n, amt){
+  var k = [0, 0, 0];
+  for (var p = 0, j = 0; p < n; p++, j += 3){
+    tkToOk(img[j], img[j + 1], img[j + 2], k); if (k[0] > 0.4) continue;
+    var C = Math.sqrt(k[1] * k[1] + k[2] * k[2]); if (C < 0.004 || C > 0.1) continue;
+    var f = 1 - 0.42 * amt * (1 - tkSS((k[0] - 0.18) / 0.2)) * (1 - tkSS((C - 0.045) / 0.04)); if (f > 0.995) continue;
+    tkFromOk(k[0], k[1] * f, k[2] * f, k); img[j] = tkClamp01(k[0]); img[j + 1] = tkClamp01(k[1]); img[j + 2] = tkClamp01(k[2]);
+  }
 }
 // 割れ止め（人物以外）：仕上げで変わった分（明るさ・色）を、元の写真の明るさを手がかりに「同じ面の中ではそろえる」。
 //   大きな明暗の境目（猫と床、木と空）では変わり方の違いを残し、白い毛・壁・空など平らな面の中の小さなムラ（クリーム色の毛の斑・壁の目地）が
