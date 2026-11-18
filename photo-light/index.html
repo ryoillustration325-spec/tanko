@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="photo light">
+<meta name="theme-color" content="#121212">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>photo light</title>
+<style>
+:root{
+  --bg:#111110;--panel:#1a1a19;--line:#2b2a28;--ink:#ecebe7;--sub:#9a978f;--faint:#6b6862;
+  --accent:#e9e3d4;--hl:#d8c9a6;
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;overscroll-behavior:none}
+body{display:flex;flex-direction:column;height:100dvh;padding-top:var(--safe-t)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;height:48px;flex:none}
+.brand{font-size:15px;letter-spacing:.08em;font-weight:500}
+.brand small{color:var(--faint);font-weight:400;letter-spacing:.04em;margin-left:6px;font-size:11px}
+.hbtn{height:32px;padding:0 14px;border-radius:16px;border:1px solid var(--line);font-size:13px;color:var(--ink)}
+.hbtn.primary{background:var(--accent);color:#141413;border-color:var(--accent);font-weight:600}
+.hbtn:disabled{opacity:.35}
+.hgroup{display:flex;gap:8px}
+
+#stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;padding:4px 12px;user-select:none;-webkit-user-select:none;touch-action:none}
+#cv{max-width:100%;max-height:100%;display:none;box-shadow:0 0 0 1px rgba(255,255,255,.04)}
+#empty{display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--sub);text-align:center;line-height:1.7}
+#empty .big{width:72px;height:72px;border-radius:36px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--ink)}
+#badge{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  padding:5px 12px;border-radius:14px;font-size:12px;letter-spacing:.06em;opacity:0;transition:opacity .15s;pointer-events:none}
+#badge.on{opacity:1}
+#busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(17,17,16,.6);font-size:13px;color:var(--sub)}
+
+/* パターン */
+#pats{flex:none;display:flex;gap:8px;overflow-x:auto;padding:10px 12px 8px;scrollbar-width:none}
+#pats::-webkit-scrollbar{display:none}
+.pat{flex:none;width:86px;border-radius:10px;padding:7px 6px 6px;border:1px solid var(--line);background:var(--panel);text-align:left;position:relative}
+.pat.on{border-color:var(--hl);background:#22211e}
+.pat .sw{display:flex;height:22px;border-radius:5px;overflow:hidden;margin-bottom:6px}
+.pat .sw i{flex:1}
+.pat .k{font-size:10px;color:var(--faint);letter-spacing:.1em}
+.pat .n{font-size:11.5px;line-height:1.25;margin-top:1px;white-space:nowrap}
+.pat .rec{position:absolute;top:-6px;right:-4px;background:var(--hl);color:#161513;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;letter-spacing:.04em}
+
+/* パネル */
+#panel{flex:none;background:var(--panel);border-top:1px solid var(--line);padding:0 0 calc(8px + var(--safe-b))}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tab{flex:1;height:40px;font-size:13px;color:var(--faint);letter-spacing:.06em;position:relative}
+.tab.on{color:var(--ink)}
+.tab.on:after{content:"";position:absolute;left:30%;right:30%;bottom:-1px;height:2px;background:var(--hl);border-radius:1px}
+.pane{display:none;padding:6px 16px 2px;max-height:34vh;overflow-y:auto}
+.pane.on{display:block}
+.note{color:var(--sub);font-size:12px;line-height:1.6;padding:6px 0 4px}
+.row{padding:9px 0 7px}
+.row .top{display:flex;justify-content:space-between;align-items:baseline}
+.row label{font-size:13px}
+.row .val{font-variant-numeric:tabular-nums;color:var(--sub);font-size:12px;min-width:40px;text-align:right}
+.row .desc{font-size:11px;color:var(--faint);margin-top:2px;line-height:1.5}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;margin:2px 0 0}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:1px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:10px;background:var(--accent);margin-top:-9px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+input[type=range]::-moz-range-track{height:2px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:10px;background:var(--accent);border:0}
+
+/* 数値タブ */
+table.num{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin:4px 0 8px}
+table.num th{font-weight:400;color:var(--faint);text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+table.num th:first-child,table.num td:first-child{text-align:left}
+table.num td{padding:7px 4px;border-bottom:1px solid #232220;text-align:right}
+td .chip{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-3px;margin-right:4px;box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+.judge{font-size:11px;padding:1px 6px;border-radius:5px;background:#26332a;color:#a9cdb2}
+.judge.w{background:#3a2f22;color:#e0c39a}
+.foot{display:flex;gap:8px;padding:6px 0 4px}
+.foot button{flex:1;height:34px;border-radius:9px;border:1px solid var(--line);font-size:12.5px;color:var(--sub)}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">photo light<small>露出と光で寄せる</small></div>
+  <div class="hgroup">
+    <button class="hbtn" id="openBtn">開く</button>
+    <button class="hbtn primary" id="saveBtn" disabled>保存</button>
+  </div>
+</header>
+
+<div id="stage">
+  <div id="empty"><button class="big" id="openBig">＋</button><div>写真を開く<br><span style="font-size:12px;color:var(--faint)">押している間は元の写真を表示します</span></div></div>
+  <canvas id="cv"></canvas>
+  <div id="badge">元の写真</div>
+  <div id="busy">書き出し中…</div>
+</div>
+
+<div id="pats"></div>
+
+<div id="panel">
+  <div class="tabs">
+    <button class="tab on" data-t="p1">寄せ</button>
+    <button class="tab" data-t="p2">仕上げ</button>
+    <button class="tab" data-t="p3">数値</button>
+  </div>
+  <div class="pane on" id="p1">
+    <div class="note" id="patNote">パターンを選ぶと、そのパターンの中で今の写真に近い作例だけを選んで寄せます（全体の平均は使いません）。</div>
+    <div id="s1"></div>
+  </div>
+  <div class="pane" id="p2"><div id="s2"></div>
+    <div class="foot"><button id="resetBtn">すべて初期値に戻す</button></div>
+  </div>
+  <div class="pane" id="p3"><div id="numBox" class="note">写真を開くと、今の写真と寄せ先の数値を比べて表示します。</div></div>
+</div>
+<input type="file" id="file" accept="image/*">
+
+<script src="model.js"></script>
+<script src="engine.js"></script>
+<script>
+(function(){
+'use strict';
+var MODEL=window.PL_MODEL, P=PL.PATTERNS, ORDER=['A','B','C','D','E','F','G','H','M'];
+var DEF={amt:0.8,tone:1,color:1,chroma:1,exp:0,black:0,white:0,sat:0};
+var SL1=[
+ ['amt','全体の強さ',0,1,0.01,'寄せ全体のかかり具合。',function(v){return Math.round(v*100)+'%';}],
+ ['tone','露出・トーンを寄せる',0,1.2,0.01,'黒の位置・中間の明るさ・白の飛ばし方を作例に近づけます。',function(v){return Math.round(v*100)+'%';}],
+ ['color','色を寄せる',0,1.2,0.01,'影・中間・光それぞれの色の向きを作例に近づけます。',function(v){return Math.round(v*100)+'%';}],
+ ['chroma','彩度を寄せる',0,1.2,0.01,'色の濃さを作例の濃さに近づけます。被写体の色そのものは残します。',function(v){return Math.round(v*100)+'%';}]
+];
+var SL2=[
+ ['exp','露出',-1,1,0.01,'中間の明るさだけを上下します（黒と白は動かしにくくしています）。',function(v){return (v>0?'+':'')+v.toFixed(2);}],
+ ['black','黒の位置',-20,30,0.5,'暗部だけを上げ下げ。＋で黒を持ち上げ、−で深く沈めます。',function(v){return (v>0?'+':'')+v.toFixed(1);}],
+ ['white','白の飛ばし',-10,10,0.5,'明部だけを上げ下げ。＋で白に近づけます。',function(v){return (v>0?'+':'')+v.toFixed(1);}],
+ ['sat','彩度の微調整',-50,50,1,'寄せたあとの全体の彩度。',function(v){return (v>0?'+':'')+Math.round(v)+'%';}]
+];
+var st={pat:'auto',s:Object.assign({},DEF),img:null,src:null,inp:null,rank:[],lut:null,showOrig:false};
+try{var sv=JSON.parse(localStorage.getItem('pl_settings')||'null');if(sv&&sv.s){st.s=Object.assign({},DEF,sv.s);st.pat=sv.pat||'auto';}}catch(e){}
+
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d',{willReadFrequently:true});
+
+// ---- パターンの色見本（各パターンの中央値から） ----
+function swatches(p){
+  var v=MODEL.filter(function(m){return m.p===p;}).map(function(m){return m.v;});
+  function md(i){var a=v.map(function(x){return x[i];}).sort(function(a,b){return a-b;});return a[a.length>>1];}
+  var o=[0,0,0],out=[];
+  [[Math.min(md(3),35),9],[md(4),12],[Math.min(md(6),92),15]].forEach(function(z){
+    var a=p==='M'?0:md(z[1]),b=p==='M'?0:md(z[1]+1);
+    PL.lab2rgb(z[0],a*1.6,b*1.6,o);out.push('rgb('+o.map(function(x){return Math.round(x*255);}).join(',')+')');
+  });
+  return out;
+}
+function renderPats(){
+  var box=document.getElementById('pats');box.innerHTML='';
+  var list=['auto'].concat(ORDER);
+  list.forEach(function(p){
+    var b=document.createElement('button');b.className='pat'+(st.pat===p?' on':'');
+    var sw=p==='auto'?(st.rank[0]?swatches(st.rank[0]):['#333','#555','#888']):swatches(p);
+    var name=p==='auto'?'自動':P[p].name, key=p==='auto'?(st.rank[0]?'→ '+st.rank[0]:'AUTO'):p;
+    b.innerHTML='<div class="sw">'+sw.map(function(c){return '<i style="background:'+c+'"></i>';}).join('')+'</div><div class="k">'+key+'</div><div class="n">'+name+'</div>'+
+      (p!=='auto'&&st.rank.slice(0,2).indexOf(p)>=0?'<span class="rec">近い</span>':'');
+    b.onclick=function(){st.pat=p;renderPats();updateNote();schedule();save();};
+    box.appendChild(b);
+  });
+}
+function curPat(){return st.pat==='auto'?(st.rank[0]||'C'):st.pat;}
+function updateNote(){
+  var p=curPat();document.getElementById('patNote').textContent=(st.pat==='auto'?'自動判定：':'')+p+'「'+P[p].name+'」— '+P[p].note;
+}
+
+// ---- スライダー ----
+function mkSliders(id,list){
+  var box=document.getElementById(id);box.innerHTML='';
+  list.forEach(function(d){
+    var r=document.createElement('div');r.className='row';
+    r.innerHTML='<div class="top"><label>'+d[1]+'</label><span class="val"></span></div><input type="range" min="'+d[2]+'" max="'+d[3]+'" step="'+d[4]+'"><div class="desc">'+d[5]+'</div>';
+    var inp=r.querySelector('input'),val=r.querySelector('.val');
+    inp.value=st.s[d[0]];val.textContent=d[6](st.s[d[0]]);
+    inp.oninput=function(){st.s[d[0]]=parseFloat(inp.value);val.textContent=d[6](st.s[d[0]]);schedule();};
+    inp.onchange=save;
+    // ダブルタップで初期値
+    var last=0;r.querySelector('label').onclick=function(){var n=Date.now();if(n-last<350){st.s[d[0]]=DEF[d[0]];inp.value=DEF[d[0]];val.textContent=d[6](DEF[d[0]]);schedule();save();}last=n;};
+    box.appendChild(r);
+  });
+}
+function save(){try{localStorage.setItem('pl_settings',JSON.stringify({s:st.s,pat:st.pat}));}catch(e){}}
+
+document.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('on',x===t);});
+  document.querySelectorAll('.pane').forEach(function(x){x.classList.toggle('on',x.id===t.dataset.t);});
+};});
+document.getElementById('resetBtn').onclick=function(){st.s=Object.assign({},DEF);mkSliders('s1',SL1);mkSliders('s2',SL2);schedule();save();};
+
+// ---- 読み込み ----
+var file=document.getElementById('file');
+document.getElementById('openBtn').onclick=document.getElementById('openBig').onclick=function(){file.click();};
+file.onchange=function(){
+  var f=file.files[0];if(!f)return;
+  var url=URL.createObjectURL(f),im=new Image();
+  im.onload=function(){st.img=im;st.name=(f.name||'photo').replace(/\.[^.]+$/,'');prepare();};
+  im.onerror=function(){alert('この形式は開けませんでした。JPEGかHEIC（写真アプリから）で開いてください。');};
+  im.src=url;file.value='';
+};
+function prepare(){
+  var im=st.img,W=im.naturalWidth,H=im.naturalHeight;
+  var dpr=Math.min(2,window.devicePixelRatio||1),max=Math.round(Math.min(1800,Math.max(window.innerWidth,window.innerHeight)*dpr));
+  var s=Math.min(1,max/Math.max(W,H));cv.width=Math.round(W*s);cv.height=Math.round(H*s);
+  ctx.drawImage(im,0,0,cv.width,cv.height);
+  st.src=ctx.getImageData(0,0,cv.width,cv.height);
+  // 解析は小さく（作例と同じ600px基準）
+  var a=document.createElement('canvas'),k=Math.min(1,600/Math.max(W,H));a.width=Math.round(W*k);a.height=Math.round(H*k);
+  var ac=a.getContext('2d');ac.drawImage(im,0,0,a.width,a.height);
+  st.inp=PL.analyze(ac.getImageData(0,0,a.width,a.height).data,a.width,a.height);
+  st.rank=PL.rank(MODEL,st.inp).filter(function(p){return p!=='M';});
+  document.getElementById('empty').style.display='none';cv.style.display='block';
+  document.getElementById('saveBtn').disabled=false;
+  renderPats();updateNote();schedule();
+}
+
+// ---- 描画 ----
+var pending=false;
+function schedule(){if(!st.src||pending)return;pending=true;requestAnimationFrame(function(){pending=false;render();});}
+function makeLUT(){
+  var p=curPat(),t=PL.target(MODEL,p,st.inp,6);
+  st.tgt=t;return PL.buildLUT(PL.buildTransform(st.inp,t,st.s,p==='M'));
+}
+function render(){
+  if(st.showOrig){ctx.putImageData(st.src,0,0);return;}
+  st.lut=makeLUT();
+  var out=ctx.createImageData(st.src.width,st.src.height);
+  PL.applyLUT(st.src.data,out.data,st.lut);ctx.putImageData(out,0,0);
+  renderNums();
+}
+
+// ---- 数値タブ ----
+function chip(L,a,b){var o=[0,0,0];PL.lab2rgb(L,a,b,o);return '<span class="chip" style="background:rgb('+o.map(function(x){return Math.round(x*255);}).join(',')+')"></span>';}
+function renderNums(){
+  var i=st.inp,t=st.tgt.v,p=curPat();
+  function j(d,th){return Math.abs(d)<=th?'<span class="judge">近い</span>':'<span class="judge w">'+(d>0?'寄せで上げる':'寄せで下げる')+'</span>';}
+  var rows=[['黒（下位5%）',1],['影（下位25%）',3],['中間（中央）',4],['光（上位25%）',5],['白（上位5%）',7]];
+  var h='<table class="num"><tr><th>トーン</th><th>今</th><th>寄せ先</th><th>差</th><th></th></tr>';
+  rows.forEach(function(r){var d=t[r[1]]-i[r[1]];h+='<tr><td>'+r[0]+'</td><td>L'+i[r[1]].toFixed(0)+'</td><td>L'+t[r[1]].toFixed(0)+'</td><td>'+(d>0?'+':'')+d.toFixed(0)+'</td><td>'+j(d,4)+'</td></tr>';});
+  h+='</table><table class="num"><tr><th>色</th><th>今</th><th>寄せ先</th><th>彩度 今→先</th></tr>';
+  [['影',9,22],['中間',12,50],['光',15,80]].forEach(function(z){
+    var k=z[1];h+='<tr><td>'+z[0]+'</td><td>'+chip(z[2],i[k]*2,i[k+1]*2)+'</td><td>'+(p==='M'?chip(z[2],0,0):chip(z[2],t[k]*2,t[k+1]*2))+'</td><td>'+i[k+2].toFixed(0)+' → '+(p==='M'?0:t[k+2].toFixed(0))+'</td></tr>';
+  });
+  h+='</table><div class="note">寄せ先は「'+p+' '+P[p].name+'」の作例のうち、今の写真に近い'+st.tgt.n+'枚の中央値です。色見本は違いが見えるよう2倍に強調しています。</div>';
+  document.getElementById('numBox').innerHTML=h;
+}
+
+// ---- 押している間は元の写真 ----
+var stage=document.getElementById('stage'),badge=document.getElementById('badge');
+function hold(on){if(!st.src)return;st.showOrig=on;badge.classList.toggle('on',on);if(on)ctx.putImageData(st.src,0,0);else schedule();}
+stage.addEventListener('pointerdown',function(e){if(e.target===cv)hold(true);});
+['pointerup','pointercancel','pointerleave'].forEach(function(ev){stage.addEventListener(ev,function(){if(st.showOrig)hold(false);});});
+
+// ---- 書き出し（元の解像度。iPhoneのcanvas上限に合わせ1600万画素まで） ----
+document.getElementById('saveBtn').onclick=function(){
+  if(!st.img)return;var busy=document.getElementById('busy');busy.style.display='flex';
+  setTimeout(function(){
+    try{
+      var W=st.img.naturalWidth,H=st.img.naturalHeight,k=Math.min(1,Math.sqrt(16e6/(W*H)));
+      var c=document.createElement('canvas');c.width=Math.round(W*k);c.height=Math.round(H*k);
+      var x=c.getContext('2d');x.drawImage(st.img,0,0,c.width,c.height);
+      var lut=makeLUT(),band=512;
+      for(var y=0;y<c.height;y+=band){var hh=Math.min(band,c.height-y),d=x.getImageData(0,y,c.width,hh);PL.applyLUT(d.data,d.data,lut);x.putImageData(d,0,y);}
+      c.toBlob(function(b){
+        busy.style.display='none';
+        var fn=st.name+'_'+curPat()+'.jpg',f=new File([b],fn,{type:'image/jpeg'});
+        if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(){});}
+        else{var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fn;a.click();}
+      },'image/jpeg',0.95);
+    }catch(e){busy.style.display='none';alert('書き出せませんでした：'+e.message);}
+  },30);
+};
+
+mkSliders('s1',SL1);mkSliders('s2',SL2);renderPats();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
+})();
+</script>
+</body>
+</html>
