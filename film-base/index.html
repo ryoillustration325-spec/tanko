@@ -616,7 +616,7 @@ function render(){
       $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
       if (on){ origDirect(p); return; }
       if (HQS && HQS.n === hqN) { drawHQ(HQS.res); return; }
-      hq.hidden = true; fbHQ(); return; }
+      hq.hidden = true; if (!hqBusy) fbHQ(); return; }   // 計算中なら、やり直さずにそのまま待つ
     if (on) hqHide(); $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
     if (on){ var s = p.zoom ? p.zoom.data : p.prev; cv.width = s.width; cv.height = s.height; ctx.putImageData(s, 0, 0); }
     else if (p.res && p.res.sig === sigOf(p, p.zoom, params())){ cv.width = p.res.img.width; cv.height = p.res.img.height; ctx.putImageData(p.res.img, 0, 0); }
@@ -627,8 +627,8 @@ function render(){
   function applyZ(){ if (window.fbHQ) $('hq').hidden = true; clampZ(); cv.style.transform = Z.s > 1 ? 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')' : ''; v.style.touchAction = Z.s > 1 ? 'none' : 'pan-y'; }
   window.fbResetZoom = function(){ Z = { s:1, x:0, y:0 }; applyZ(); };
   // 拡大して指を離したら、見えている範囲だけを元の解像度から作り直して、くっきり表示する
-  var hq = $('hq'), hqT = 0, hqN = 0;
-  function hqHide(){ clearTimeout(hqT); hqN++; hq.hidden = true; HQS = null; }
+  var hq = $('hq'), hqT = 0, hqN = 0, hqBusy = false;
+  function hqHide(){ clearTimeout(hqT); hqN++; hqBusy = false; hq.hidden = true; HQS = null; }
   window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || Z.s <= 1 || showingOrig) return; hqT = setTimeout(function(){ makeHQ(p); }, 220); };
   // くっきり版は、加工後と元の写真の両方を持っておく（拡大中に長押ししても、元の写真が粗くならない）
   var HQS = null;
@@ -650,7 +650,9 @@ function render(){
     var c = SC(tw, th), x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
     x.drawImage(p.bm, ex * sx, ey * sx, ew * sx, eh * sx, 0, 0, tw, th);
     var srcD = x.getImageData(0, 0, tw, th), origCopy = new ImageData(new Uint8ClampedArray(srcD.data), tw, th), buf = srcD.data.buffer; freeSC(); HQS = null;
+    hqBusy = true;
     runJob({ type:'run', key:p.key, buf:buf, w:tw, h:th, ox:Math.round(ex * k), oy:Math.round(ey * k), W:Math.round(p.W * k), H:Math.round(p.H * k), P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
+      if (n === hqN) hqBusy = false;
       if (n !== hqN || photos[cur] !== p) return;
       HQS = { n:n, orig:origCopy, res:new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), x:Math.max(0, left) * dpr, y:Math.max(0, top) * dpr, dw:dw, dh:dh, W:Math.round(vw * dpr), H:Math.round(vh * dpr) };
       drawHQ(showingOrig ? HQS.orig : HQS.res);
