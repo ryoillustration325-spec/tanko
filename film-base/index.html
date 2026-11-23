@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#121110">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="film base">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>film base</title>
+<style>
+:root{--bg:#121110;--card:#1c1b19;--ink:#ece8df;--sub:#958f84;--line:#2d2b27;--acc:#d9774a;--acc2:#251c16;--r:14px;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html{touch-action:pan-x pan-y}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Hiragino Sans","Noto Sans JP",sans-serif}
+header{padding:calc(env(safe-area-inset-top) + 30px) 18px 12px;max-width:720px;margin:0 auto}
+header h1{margin:0;font-size:24px;letter-spacing:.01em;font-weight:700;line-height:1.2}
+header p{margin:3px 0 0;color:var(--sub);font-size:13px}
+main{padding:0 14px calc(env(safe-area-inset-bottom) + 28px);max-width:720px;margin:0 auto}
+.stick{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -14px;padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;transition:box-shadow .2s}
+.stick.sh{box-shadow:0 8px 14px -10px rgba(0,0,0,.7)}
+.stick.sh .tip{display:none}
+.view{position:relative;background:#080807;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.view canvas{display:block;max-width:100%;max-height:42vh;height:auto;transform-origin:50% 50%;will-change:transform}
+.view .empty{color:#8f897e;text-align:center;padding:48px 28px;font-size:13.5px;width:100%;line-height:1.7}
+.view .empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+.view #hq{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;max-height:none;transform:none}
+.badge{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:3px 9px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity .15s}
+.badge.on{opacity:1}
+.busy{position:absolute;right:10px;top:10px;width:16px;height:16px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;opacity:0}
+.busy.on{opacity:1}@keyframes sp{to{transform:rotate(360deg)}}
+.tip{color:var(--sub);font-size:12px;margin:6px 4px 0}
+.thumbs{display:flex;gap:6px;overflow-x:auto;padding:10px 2px 2px}
+.thumbs img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:2px solid transparent;flex:none}
+.thumbs img.on{border-color:var(--acc)}
+h2{font-size:13px;color:var(--sub);font-weight:600;letter-spacing:.04em;margin:20px 4px 8px}
+.pats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pats button{border:1px solid var(--line);background:var(--card);border-radius:11px;padding:8px 4px 7px;color:var(--ink);font:inherit;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+.pats button .k{font-weight:700;font-size:16px;line-height:1.1}
+.pats button .n{font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pats button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}.pats button.on .n{color:#5d584f}
+.pnote{font-size:12.5px;color:var(--sub);margin:8px 4px 0;min-height:1.5em}
+.sect{margin-top:22px}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden}
+.gh{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+.gh .t{flex:1;min-width:0}.gh .t b{display:block;font-size:15px}.gh .t small{display:block;color:var(--sub);font-size:12px;line-height:1.4}
+.gh .chev{color:var(--sub);transition:transform .2s;font-size:13px}.grp.open .chev{transform:rotate(90deg)}
+.sw{position:relative;width:44px;height:26px;flex:none}
+.sw input{opacity:0;width:0;height:0}.sw i{position:absolute;inset:0;background:#3a3733;border-radius:26px;transition:.2s}
+.sw i:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#ece8df;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw input:checked+i{background:var(--acc)}.sw input:checked+i:before{transform:translateX(18px)}
+.gb{display:none;padding:2px 14px 12px}.grp.open .gb{display:block}
+.grp.off .gb{opacity:.45}
+.sl{padding:7px 0}
+.sl .row{display:flex;justify-content:space-between;font-size:13.5px}
+.sl .row output{color:var(--sub);font-variant-numeric:tabular-nums;min-width:2.5em;text-align:right}
+.sl .row output.ch{color:var(--acc);font-weight:600}
+input[type=range]{width:100%;margin:6px 0 0;-webkit-appearance:none;appearance:none;background:transparent;height:28px}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:#34312d;border-radius:4px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#ece8df;border:0;margin-top:-10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.ends{display:flex;justify-content:space-between;font-size:11px;color:#69645b;margin-top:-2px}
+.gnote{font-size:12px;color:var(--sub);margin:4px 0 2px;line-height:1.55}
+.mini{border:1px solid var(--line);background:#24231f;border-radius:9px;padding:6px 12px;font:inherit;font-size:13px;color:var(--ink)}
+.flow{background:var(--acc2);border-radius:var(--r);padding:12px 14px;font-size:12.5px;color:#c9a690;margin-top:18px;border:1px solid #3a2a20;line-height:1.65}
+.flow b{color:#ecc7ae}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#exp{border:0;border-radius:20px;padding:8px 16px;font:inherit;font-weight:600;font-size:13.5px;background:var(--ink);color:var(--bg);flex:none}
+#exp:disabled{background:#2a2825;color:#6b665d}
+.thumbs .add{flex:none;height:54px;border:1px dashed #3d3a35;background:transparent;color:var(--sub);border-radius:8px;padding:0 12px;font:inherit;font-size:12.5px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.thumbs .add span{font-size:17px;color:var(--ink)}
+.view .empty{cursor:pointer}
+.ovrow{display:flex;align-items:center;gap:10px;padding:8px 0 6px;font-size:12px;color:var(--sub);line-height:1.5}
+.ovrow img{width:46px;height:46px;object-fit:cover;border-radius:8px;flex:none}
+.ovrow span{flex:1}
+.blend{padding:6px 0 4px}.blend .bt{font-size:13.5px;margin-bottom:7px}
+.bgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.bgrid button{border:1px solid var(--line);background:#24231f;border-radius:10px;padding:7px 10px;text-align:left;font:inherit;color:var(--ink);min-width:0}
+.bgrid button b{display:block;font-size:13px;font-weight:600}.bgrid button small{display:block;font-size:11px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgrid button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}.bgrid button.on small{color:#5d584f}
+#exp2{position:absolute;right:10px;bottom:10px;border:0;border-radius:18px;padding:6px 13px;font:inherit;font-weight:600;font-size:12.5px;background:rgba(236,232,223,.92);color:#121110;display:none}
+.stick.sh #exp2{display:block}
+.view .empty .pk{display:inline-block;margin-top:14px;border:1px solid #3d3a35;border-radius:20px;padding:7px 16px;color:var(--ink);font-size:13px}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:9}
+.sheet.on{display:flex}
+.sheet .in{background:var(--bg);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px)}
+.sheet h3{margin:0 0 4px;font-size:17px}.sheet p{margin:0 0 14px;color:var(--sub);font-size:13px}
+.sheet .opt{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:12px 14px;margin-bottom:8px;font:inherit}
+.sheet .opt b{display:block}.sheet .opt small{color:var(--sub)}
+.prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0 12px}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 28px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10;white-space:nowrap}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header><div class="hrow"><h1>film base</h1><button class="b2" id="exp" disabled>書き出す</button></div><p>Lightroomで色を整えた写真に、フィルムの質感を足す</p></header>
+<main>
+  <div class="stick" id="stick">
+  <div class="view" id="view">
+    <div class="empty" id="empty"><b>写真を選んでください</b>にじみ・粒子・レンズ・光漏れだけを足します。<br>色は変えません。<br><span class="pk">タップして写真を選ぶ</span></div>
+    <canvas id="cv" hidden></canvas><canvas id="hq" hidden></canvas>
+    <div class="badge" id="badge">元の写真</div><button type="button" id="exp2" hidden>書き出す</button><div class="busy" id="busy"></div>
+  </div>
+  <div class="tip" id="tip" hidden>ピンチで拡大　／　長押しで元の写真　／　ダブルタップで等倍</div>
+  </div>
+  <div class="thumbs" id="thumbs"></div>
+
+  <h2>光のパターン（見本から初期値を決める）</h2>
+  <div class="pats" id="pats"></div>
+  <div class="pnote" id="pnote"></div>
+
+  <div id="groups"></div>
+
+  <div class="flow"><b>使い方の流れ</b><br>① Lightroomで「ネガ」プリセットを当てて色を整え、書き出す（画質100・サイズはそのまま）<br>② ここで質感を足して書き出す（高画質JPEG）<br>最後に粒子を入れると、色調整で出たグラデーションの段差も目立たなくなります。暖色のF・Gで、にじみまで暖色に染めたい時だけ、こちらを先にしてください。</div>
+</main>
+<input type="file" id="file" accept="image/*" multiple hidden>
+<input type="file" id="ovfile" accept="image/*" hidden>
+<div class="sheet" id="sheet"><div class="in" id="sheetIn"></div></div>
+<div class="toast" id="toast"></div>
+
+<script id="engine" type="text/plain">// film base：質感と光の効果をつくる処理（色調整はしない）
+// 大きさはすべて長辺に対する割合で決めるので、プレビュー・等倍・書き出しで同じ見え方になる
+var FB = (function(){
+  var S2L = new Float32Array(256);
+  for (var i = 0; i < 256; i++){ var c = i / 255; S2L[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  var LN = 16384, L2S = new Float32Array(LN + 1);
+  for (i = 0; i <= LN; i++){ var v = i / LN; L2S[i] = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; }
+  function l2s(c){ return c <= 0 ? 0 : c >= 1 ? 1 : L2S[(c * LN + 0.5) | 0]; }
+  var SL = new Float32Array(4097); for (i = 0; i <= 4096; i++){ var cc = i / 4096; SL[i] = cc <= 0.04045 ? cc / 12.92 : Math.pow((cc + 0.055) / 1.055, 2.4); }
+  function s2l(c){ return c <= 0 ? 0 : c >= 1 ? 1 : SL[(c * 4096 + 0.5) | 0]; }
+  // 重ね方：X-S10の多重露光と同じ4つ（光の量のまま合成する）
+  function mx(mode, a, b, op){ switch (mode){
+    case 'avg': return a + (b - a) * op * 0.5;                    // 平均：明るさが揃うように平均（強さ100で1:1）
+    case 'lig': return a + (Math.max(a, b) - a) * op;             // 明：明るい方を残す
+    case 'dar': return a + (Math.min(a, b) - a) * op;             // 暗：暗い方を残す
+    default: return Math.min(1, a + b * op); } }                  // 加算：光をそのまま足す（明るくなる）
+  function sm(a, b, x){ var t = (x - a) / (b - a); t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
+  function shoulder(c){ return c < 0.8 ? c : 0.8 + 0.2 * (1 - Math.exp(-(c - 0.8) / 0.2)); }   // 白は肩で丸める
+
+  // ---- ぼかし（箱ぼかし3回でガウスに近づける） ----
+  function boxes(sigma){ var n = 3, wI = Math.sqrt(12 * sigma * sigma / n + 1), wl = Math.floor(wI); if (wl % 2 === 0) wl--; var wu = wl + 2, mI = (12 * sigma * sigma - n * wl * wl - 4 * n * wl - 3 * n) / (-4 * wl - 4), m = Math.round(mI), r = []; for (var i = 0; i < n; i++) r.push(((i < m ? wl : wu) - 1) / 2); return r; }
+  function boxH(s, d, w, h, r){ var ia = 1 / (r + r + 1); for (var y = 0; y < h; y++){ var t = y * w, val = (r + 1) * s[t], j; for (j = 0; j < r; j++) val += s[t + Math.min(j, w - 1)]; for (j = 0; j < w; j++){ val += s[t + Math.min(j + r, w - 1)] - s[t + Math.max(j - r - 1, 0)]; d[t + j] = val * ia; } } }
+  function boxV(s, d, w, h, r){ var ia = 1 / (r + r + 1); for (var x = 0; x < w; x++){ var val = (r + 1) * s[x], j; for (j = 0; j < r; j++) val += s[Math.min(j, h - 1) * w + x]; for (j = 0; j < h; j++){ val += s[Math.min(j + r, h - 1) * w + x] - s[Math.max(j - r - 1, 0) * w + x]; d[j * w + x] = val * ia; } } }
+  function blur(src, w, h, sigma){ var a = new Float32Array(src), b = new Float32Array(src.length); if (sigma < 0.5) return a; boxes(sigma).forEach(function(r){ r = Math.max(0, Math.round(r)); boxH(a, b, w, h, r); boxV(b, a, w, h, r); }); return a; }
+  function blurH(src, w, h, sigma){ var a = new Float32Array(src), b = new Float32Array(src.length); if (sigma < 0.5) return a; boxes(sigma).forEach(function(r){ r = Math.max(0, Math.round(r)); boxH(a, b, w, h, r); a.set(b); }); return a; }
+
+  // ---- 乱数（位置から決まる） ----
+  function hash(x, y, s){ var n = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; n = (n ^ (n >>> 13)) * 1274126177 | 0; n = n ^ (n >>> 16); return ((n >>> 0) / 4294967295) * 2 - 1; }
+  function vnoise(x, y, s){ var x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); var a = hash(x0, y0, s), b = hash(x0 + 1, y0, s), c = hash(x0, y0 + 1, s), d = hash(x0 + 1, y0 + 1, s); return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy; }
+
+  // ---- 地図（縮小画像から作る。設定ごとに覚えておく） ----
+  function mk(A, w, h){ return { A:A, w:w, h:h }; }
+  function sampleMap(m, u, v){ var fx = u * m.w - 0.5, fy = v * m.h - 0.5; if (fx < 0) fx = 0; if (fy < 0) fy = 0; if (fx > m.w - 1.001) fx = m.w - 1.001; if (fy > m.h - 1.001) fy = m.h - 1.001; var x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, i = y0 * m.w + x0, A = m.A; return (A[i] * (1 - ax) + A[i + 1] * ax) * (1 - ay) + (A[i + m.w] * (1 - ax) + A[i + m.w + 1] * ax) * ay; }
+  var memo = {};
+  function M(name, k, fn){ var c = memo[name]; if (c && c.k === k) return c.v; var v = fn(); memo[name] = { k:k, v:v }; return v; }
+  function half(A, w, h){ var w2 = Math.max(1, w >> 1), h2 = Math.max(1, h >> 1), B = new Float32Array(w2 * h2); for (var y = 0; y < h2; y++) for (var x = 0; x < w2; x++){ var i = (y * 2) * w + x * 2; B[y * w2 + x] = (A[i] + A[i + 1] + A[i + w] + A[i + w + 1]) * 0.25; } return mk(B, w2, h2); }
+  function excess(R, G, B, n, thr){ var E = new Float32Array(n); for (var i = 0; i < n; i++){ var Y = 0.2126 * R[i] + 0.7152 * G[i] + 0.0722 * B[i]; E[i] = Y > thr ? Math.pow((Y - thr) / (1 - thr), 1.3) : 0; } return E; }
+  // 線に沿った積分（クロス・光の軌跡）
+  function streak(m, ang, len, oneSide){ var w = m.w, h = m.h, A = m.A, O = new Float32Array(w * h), dx = Math.cos(ang), dy = Math.sin(ang), N = 28, st = len / N, ws = 0, k;
+    for (k = 1; k <= N; k++) ws += Math.exp(-k / N * 3) * (oneSide ? 1 : 2);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ var s = 0;
+      for (k = 1; k <= N; k++){ var wt = Math.exp(-k / N * 3), px = x + dx * st * k, py = y + dy * st * k;
+        if (px >= 0 && py >= 0 && px < w - 1 && py < h - 1) s += wt * A[(py | 0) * w + (px | 0)];
+        if (!oneSide){ px = x - dx * st * k; py = y - dy * st * k; if (px >= 0 && py >= 0 && px < w - 1 && py < h - 1) s += wt * A[(py | 0) * w + (px | 0)]; } }
+      O[y * w + x] = s / ws; }
+    return O; }
+  function dirBlur(R, w, h, ang, len){ var O = new Float32Array(w * h), dx = Math.cos(ang), dy = Math.sin(ang), N = 16, st = len / N;
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ var s = 0, c = 0; for (var k = -N; k <= N; k++){ var px = x + dx * st * k, py = y + dy * st * k; if (px < 0 || py < 0 || px > w - 1 || py > h - 1) continue; s += R[(py | 0) * w + (px | 0)]; c++; } O[y * w + x] = s / c; }
+    return O; }
+
+  function maps(key, sm8, sw, sh, P){
+    var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
+    var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
+    var o = { base:base };
+    if (on.hal){ var thr = 0.35 + 0.55 * P.halT / 100, sh_ = (0.004 + 0.02 * P.halS / 100) * Ls, sb = (0.015 + 0.06 * P.halS / 100) * Ls;
+      o.hal = M('hal', key + thr + '|' + sh_ + '|' + sb, function(){ var E = excess(base.R, base.G, base.B, n, thr), h1 = blur(E, sw, sh, sh_), h2 = blur(E, sw, sh, sh_ * 0.35);
+        for (var i = 0; i < n; i++) h1[i] = 0.6 * h1[i] + 0.4 * h2[i];
+        var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n); for (i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i]; ER[i] = r > thr ? (r - thr) / (1 - thr) : 0; EG[i] = g > thr ? (g - thr) / (1 - thr) : 0; EB[i] = b > thr ? (b - thr) / (1 - thr) : 0; }
+        return { H:mk(h1, sw, sh), R:mk(blur(ER, sw, sh, sb), sw, sh), G:mk(blur(EG, sw, sh, sb), sw, sh), B:mk(blur(EB, sw, sh, sb), sw, sh) }; }); }
+    if (on.lens && P.lSoft > 0){ var ss = (0.002 + 0.005 * P.lSoft / 100) * Ls;
+      o.soft = M('soft', key + ss, function(){ return { R:mk(blur(base.R, sw, sh, ss), sw, sh), G:mk(blur(base.G, sw, sh, ss), sw, sh), B:mk(blur(base.B, sw, sh, ss), sw, sh) }; }); }
+    if (on.glass){ var sg = (0.0015 * (1 + 7 * P.gsB / 100)) * Ls;
+      o.glass = M('glass', key + sg, function(){ return { R:mk(blur(base.R, sw, sh, sg), sw, sh), G:mk(blur(base.G, sw, sh, sg), sw, sh), B:mk(blur(base.B, sw, sh, sg), sw, sh) }; }); }
+    if (on.slow){ var ang = P.sA / 100 * Math.PI, ln = (0.02 + 0.25 * P.sL / 100) * Ls;
+      o.slow = M('slow', key + ang + '|' + ln, function(){ var E = excess(base.R, base.G, base.B, n, 0.45), Eh = half(E, sw, sh), Rh = half(base.R, sw, sh), Gh = half(base.G, sw, sh), Bh = half(base.B, sw, sh);
+        return { T:mk(streak(Eh, ang, ln / 2, true), Eh.w, Eh.h), R:mk(dirBlur(Rh.A, Rh.w, Rh.h, ang, ln / 4), Rh.w, Rh.h), G:mk(dirBlur(Gh.A, Gh.w, Gh.h, ang, ln / 4), Gh.w, Gh.h), B:mk(dirBlur(Bh.A, Bh.w, Bh.h, ang, ln / 4), Bh.w, Bh.h) }; }); }
+    if (on.cross){ var ct = 0.55 + 0.4 * P.cT / 100, cl = (0.03 + 0.25 * P.cL / 100) * Ls, cn = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, cr = P.cR / 100 * Math.PI / 2;
+      o.cross = M('cross', key + ct + '|' + cl + '|' + cn + '|' + cr, function(){ var E = excess(base.R, base.G, base.B, n, ct), Eh = half(E, sw, sh), S = new Float32Array(Eh.w * Eh.h);
+        for (var a = 0; a < cn; a++){ var T = streak(Eh, cr + a * Math.PI / cn, cl / 2, false); for (var i = 0; i < S.length; i++) S[i] += T[i]; }
+        return mk(S, Eh.w, Eh.h); }); }
+    if (on.ray){ var rt = 0.4 + 0.5 * P.rT / 100, rx = P.rX / 100, ry = P.rY / 100, rl = 0.2 + 0.75 * P.rL / 100;
+      o.ray = M('ray', key + rt + '|' + rx + '|' + ry + '|' + rl, function(){ var E = excess(base.R, base.G, base.B, n, rt), Eh = half(E, sw, sh), w = Eh.w, h = Eh.h, O = new Float32Array(w * h), N = 36, sx = rx * w, sy = ry * h;
+        for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ var dx = (sx - x) * rl / N, dy = (sy - y) * rl / N, s = 0, dec = 1, px = x, py = y;
+          for (var k = 0; k < N; k++){ px += dx; py += dy; if (px < 0 || py < 0 || px > w - 1 || py > h - 1) break; s += Eh.A[(py | 0) * w + (px | 0)] * dec; dec *= 0.955; }
+          O[y * w + x] = s / N * 2.2; }
+        return mk(O, w, h); }); }
+    if (on.ana){ var at = 0.5 + 0.45 * P.aT / 100, al = (0.05 + 0.45 * P.aL / 100) * Ls;
+      o.ana = M('ana', key + at + '|' + al, function(){ var E = excess(base.R, base.G, base.B, n, at), Eh = half(E, sw, sh), A1 = blurH(Eh.A, Eh.w, Eh.h, al / 2), A2 = blurH(Eh.A, Eh.w, Eh.h, al / 8);
+        for (var i = 0; i < A1.length; i++) A1[i] = A1[i] * 0.7 + A2[i] * 0.3; var A3 = new Float32Array(A1.length); boxV(A1, A3, Eh.w, Eh.h, 1);
+        return mk(A3, Eh.w, Eh.h); }); }
+    return o;
+  }
+
+  // ---- 本体：src（RGBA 8bit、全体W×Hのうち ox,oy から w×h の範囲）を処理して out に書く ----
+  function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov){
+    var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
+    var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
+    var hal = on.hal ? P.halR / 100 * 7 : 0, blo = on.hal ? P.halW / 100 * 1.8 : 0;
+    var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
+    var leak = on.leak ? P.kA / 100 * 2.6 : 0, edge = on.leak ? P.kE / 100 * 1.4 : 0;
+    var gA = on.grain ? P.gA / 100 * 0.075 : 0, gC = P.gC / 100 * 0.9, gD = P.gD / 100;
+    var gp = L / 4000 * (0.7 + 2.3 * P.gS / 100), gAmp = gA * Math.min(1, gp), gInv = 1 / Math.max(gp, 1e-3), fine = gp < 1;
+    var ang = (P.kP / 100) * Math.PI * 2 - Math.PI * 0.75, ca_ = Math.cos(ang), sa = Math.sin(ang), sc = 1 / Math.max(Math.abs(ca_), Math.abs(sa)), lx = ca_ * sc, ly = sa * sc;
+    var sp = 0.22 + 1.1 * P.kS / 100, hu = P.kH / 100, cEg = 0.1 + 0.6 * hu, cEb = 0.04 + 0.16 * hu;
+    // 光の効果
+    var fl = on.flash, fA = P.fA / 100, fF = P.fF / 100, fR = L * (0.18 + 0.7 * P.fS / 100), fX = P.fX / 100 * W, fY = P.fY / 100 * H, fH = P.fH / 100, fT = (P.fT - 50) / 50, ftr = 1 + 0.06 * fT, ftg = 1 + 0.01 * fT, ftb = 1 - 0.07 * fT;
+    var ob = on.orb, oA = P.oA / 100, oR = L * (0.06 + 0.42 * P.oS / 100), oX = P.oX / 100 * W, oY = P.oY / 100 * H, oSp = 0.25 + 0.9 * P.oSo / 100, oC = P.oC / 100, oW = P.oW / 100, ogg = 0.95 - 0.16 * oW, ogb = 0.86 - 0.42 * oW;
+    var gl = on.glass, gsA = P.gsA / 100, gCell = Math.max(2, L * (0.004 + 0.045 * (1 - P.gsS / 100))), gAmp2 = gCell * (0.4 + 2.2 * P.gsW / 100) * 0.3, gMix = 0.35 + 0.6 * P.gsB / 100, gVeil = P.gsV / 100 * 0.4;
+    var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
+    var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
+    var cr = on.cross ? P.cA / 100 * 5.5 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0, rW = P.rW / 100, an = on.ana ? P.aA / 100 * 7 : 0, aC = P.aC / 100;
+    var acr = 0.35 + 0.65 * aC, acg = 0.6 - 0.05 * aC, acb = 1 - 0.7 * aC;
+    var cx = W / 2, cy = H / 2, asp = W / H;
+    function px(ch, X, Y){ var fx = X - ox, fy = Y - oy;
+      if (fx < -0.5 || fy < -0.5 || fx > w - 0.5 || fy > h - 0.5){ var mm = ch === 0 ? BR : ch === 1 ? BG : BB; return sampleMap(mm, (X + 0.5) / W, (Y + 0.5) / H); }   // 範囲の外は縮小画像から
+      if (fx < 0) fx = 0; if (fy < 0) fy = 0; if (fx > w - 1.001) fx = w - 1.001; if (fy > h - 1.001) fy = h - 1.001;
+      var x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, i = (y0 * w + x0) * 4 + ch; return (S2L[src[i]] * (1 - ax) + S2L[src[i + 4]] * ax) * (1 - ay) + (S2L[src[i + w * 4]] * (1 - ax) + S2L[src[i + w * 4 + 4]] * ax) * ay; }
+    for (var y = 0; y < h; y++){
+      var Y = oy + y, ny = (Y + 0.5) / H * 2 - 1, v = (Y + 0.5) / H;
+      for (var x = 0; x < w; x++){
+        var X = ox + x, nx = (X + 0.5) / W * 2 - 1, u = (X + 0.5) / W, j = (y * w + x) * 4;
+        var dX = X - cx, dY = Y - cy, rr = Math.sqrt(dX * dX + dY * dY) / (diag / 2);
+        // 1) 読み取る位置（ガラスのゆらぎ）
+        var SX = X, SY = Y, warped = false;
+        if (gl && gsA > 0){ SX = X + vnoise(X / gCell, Y / gCell, seed + 31) * gAmp2 * gsA; SY = Y + vnoise(X / gCell + 17, Y / gCell + 5, seed + 37) * gAmp2 * gsA; warped = true; }
+        var r, g, b;
+        if (ca > 0){ var k = ca * rr; r = px(0, SX + dX * k, SY + dY * k); g = warped ? px(1, SX, SY) : S2L[src[j + 1]]; b = px(2, SX - dX * k, SY - dY * k); }
+        else if (warped){ r = px(0, SX, SY); g = px(1, SX, SY); b = px(2, SX, SY); }
+        else { r = S2L[src[j]]; g = S2L[src[j + 1]]; b = S2L[src[j + 2]]; }
+        // 2) 多重露光：ずらした像を光として重ねる
+        if (mu && ov){ if (ov[j + 3] > 0){ var opv = P.mA / 100; r = mx(mB, r, S2L[ov[j]], opv); g = mx(mB, g, S2L[ov[j + 1]], opv); b = mx(mB, b, S2L[ov[j + 2]], opv); } }   // 別の写真を重ねる
+        else if (mu && mA > 0){ for (var q = 1; q <= mN; q++){ var s2 = Math.pow(mS, q), qx = cx + (X - cx) / s2 - mDX * q, qy = cy + (Y - cy) / s2 - mDY * q, op = mA / Math.sqrt(q);
+          r = mx(mB, r, px(0, qx, qy), op); g = mx(mB, g, px(1, qx, qy), op); b = mx(mB, b, px(2, qx, qy), op); } }
+        // 3) ガラスの滲みと曇り
+        if (gl && gsA > 0){ var uu = (SX + 0.5) / W, vv = (SY + 0.5) / H, r0 = r, g0 = g, b0 = b;
+          r += (sampleMap(Mp.glass.R, uu, vv) - r) * gMix; g += (sampleMap(Mp.glass.G, uu, vv) - g) * gMix; b += (sampleMap(Mp.glass.B, uu, vv) - b) * gMix;
+          if (gVeil > 0){ r += (0.7 - r) * gVeil * (0.6 + 0.4 * r); g += (0.7 - g) * gVeil * (0.6 + 0.4 * g); b += (0.7 - b) * gVeil * (0.6 + 0.4 * b); }
+          r = r0 + (r - r0) * gsA; g = g0 + (g - g0) * gsA; b = b0 + (b - b0) * gsA; }
+        // 4) レンズ：四隅の甘さ
+        if (soft > 0){ var ws = soft * Math.pow(sm(0.3, 1.0, rr), 1.3); if (ws > 0){ r += (sampleMap(Mp.soft.R, u, v) - r) * ws; g += (sampleMap(Mp.soft.G, u, v) - g) * ws; b += (sampleMap(Mp.soft.B, u, v) - b) * ws; } }
+        // 5) スローシンクロのブレ（フラッシュが当たった所は止まる）
+        var lit = 0;
+        if (fl){ var fdx = (X - fX) / fR, fdy = (Y - fY) / fR; lit = Math.exp(-(fdx * fdx + fdy * fdy) * 1.6); }
+        if (sl && sG > 0){ var wb = sG * (fl ? 1 - lit : 1); r += (sampleMap(Mp.slow.R, u, v) - r) * wb; g += (sampleMap(Mp.slow.G, u, v) - g) * wb; b += (sampleMap(Mp.slow.B, u, v) - b) * wb; }
+        if (vig > 0){ var vv2 = 1 - vig * Math.pow(sm(0.15, 1.1, rr), 1.6); r *= vv2; g *= vv2; b *= vv2; }
+        // 6) 直射フラッシュ：中心ほど明るく、離れるほど沈む
+        var hardK = 0;
+        if (fl){ var gf = (1 + fA * 0.7 * lit) * Math.pow(Math.max(0.02, 1 - fF * 0.93 * (1 - lit)), 1.6); r = shoulder(r * gf * ftr); g = shoulder(g * gf * ftg); b = shoulder(b * gf * ftb); hardK = fH * 0.35 * lit; }
+        // 7) 光を足す（にじみ・光の玉・クロス・光芒・横のフレア・光の軌跡・光漏れ）
+        var ar = 0, ag = 0, ab = 0;
+        if (hal > 0 || blo > 0){ var hv = sampleMap(Mp.hal.H, u, v) * hal; ar += hv; ag += hv * 0.4; ab += hv * 0.15; ar += sampleMap(Mp.hal.R, u, v) * blo; ag += sampleMap(Mp.hal.G, u, v) * blo * 0.97; ab += sampleMap(Mp.hal.B, u, v) * blo * 0.9; }
+        if (ob && oA > 0){ var odx = (X - oX) / oR, ody = (Y - oY) / oR, od2 = odx * odx + ody * ody;
+          if (od2 < 9){ var og = Math.exp(-od2 / oSp) * oA * 1.6, oc = Math.exp(-od2 / 0.06) * oC * oA * 2.2, orr = Math.exp(-Math.pow(Math.sqrt(od2) - 1.05, 2) / 0.02) * oA * 0.12 * P.oSo / 100; ar += og + oc + orr; ag += og * ogg + oc + orr * 0.75; ab += og * ogb + oc + orr * 0.9; } }
+        if (cr > 0){ var cv_ = sampleMap(Mp.cross, u, v) * cr; ar += cv_; ag += cv_ * 0.96; ab += cv_ * 0.9; }
+        if (ry_ > 0){ var rv = sampleMap(Mp.ray, u, v) * ry_; ar += rv; ag += rv * (0.95 - 0.15 * rW); ab += rv * (0.85 - 0.45 * rW); }
+        if (an > 0){ var av = sampleMap(Mp.ana, u, v) * an; ar += av * acr; ag += av * acg; ab += av * acb; }
+        if (sl && sT > 0){ var tv = sampleMap(Mp.slow.T, u, v) * sT; ar += tv; ag += tv * 0.85; ab += tv * 0.65; }
+        if (leak > 0){ var qx2 = (nx - lx) * asp, qy2 = ny - ly, d2 = (qx2 * qx2 + qy2 * qy2) / (sp * sp), I = Math.exp(-d2 * 2);
+          if (I > 0.002){ I *= 0.65 + 0.35 * vnoise(nx * 1.6 + 7, ny * 1.6 + 3, seed + 11); var core = I * I; ar += leak * I; ag += leak * I * (cEg + (0.9 - cEg) * core); ab += leak * I * (cEb + (0.55 - cEb) * core); } }
+        if (edge > 0){ var de = Math.min(X, W - 1 - X, Y, H - 1 - Y) / L, band = Math.exp(-de / 0.014);
+          if (band > 0.003){ band *= 0.45 + 0.55 * (0.5 + 0.5 * vnoise(X / L * 9, Y / L * 9, seed + 23)); ar += edge * band; ag += edge * band * 0.42; ab += edge * band * 0.14; } }
+        if (ar > 0 || ag > 0 || ab > 0){ r = 1 - (1 - Math.min(r, 1)) * Math.exp(-ar); g = 1 - (1 - Math.min(g, 1)) * Math.exp(-ag); b = 1 - (1 - Math.min(b, 1)) * Math.exp(-ab); }
+        var R = l2s(r), G = l2s(g), B = l2s(b);
+        if (hardK > 0){ R += (R - 0.5) * hardK; G += (G - 0.5) * hardK; B += (B - 0.5) * hardK; }
+        // 8) 粒子（最後に）
+        if (gA > 0){
+          var l = 0.299 * R + 0.587 * G + 0.114 * B; l = l < 0 ? 0 : l > 1 ? 1 : l; var wg = Math.pow(4 * l * (1 - l) + 1e-4, 0.7) + gD * 0.9 * Math.pow(1 - l, 3), nm, nr, nb;
+          if (fine){ nm = hash(X, Y, seed) * 1.7; nr = hash(X, Y, seed + 1) * 1.7; nb = hash(X, Y, seed + 2) * 1.7; }
+          else { var uu2 = X * gInv, vv3 = Y * gInv; nm = vnoise(uu2, vv3, seed) * 1.6 + vnoise(uu2 * 2.1 + 5, vv3 * 2.1 + 9, seed + 5) * 0.8; nr = vnoise(uu2, vv3, seed + 1) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 6) * 0.8; nb = vnoise(uu2, vv3, seed + 2) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 7) * 0.8; }
+          var am = gAmp * wg; R += (nm + gC * nr) * am; G += nm * am; B += (nm + gC * nb) * am;
+        }
+        out[j] = R * 255 + 0.5; out[j + 1] = G * 255 + 0.5; out[j + 2] = B * 255 + 0.5; out[j + 3] = 255;
+      }
+    }
+  }
+  return { run: run };
+})();
+if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof importScripts === 'function'){
+  var SMALL = {};
+  self.onmessage = function(e){
+    var m = e.data;
+    if (m.type === 'small'){ SMALL[m.key] = m; return; }
+    if (m.type === 'run'){
+      var s = SMALL[m.key], src = new Uint8ClampedArray(m.buf), out = new Uint8ClampedArray(src.length);
+      FB.run(src, out, m.w, m.h, m.ox, m.oy, m.W, m.H, s.data, s.sw, s.sh, m.key, m.P, m.seed, m.ov ? new Uint8ClampedArray(m.ov) : null);
+      self.postMessage({ type: 'done', id: m.id, buf: out.buffer, w: m.w, h: m.h }, [out.buffer]);
+    }
+  };
+}
+if (typeof module !== 'undefined') module.exports = FB;
+</script>
+<script>
+(function(){
+'use strict';
+var PATS = {"A":{"halR":20,"halW":40,"halT":55,"halS":50,"gA":40,"gS":45,"gC":30,"gD":30,"lSoft":25,"lVig":15,"lCA":15,"kA":0,"kE":0},"B":{"halR":50,"halW":20,"halT":50,"halS":55,"gA":28,"gS":50,"gC":40,"gD":25,"lSoft":28,"lVig":8,"lCA":15,"kA":0,"kE":0},"C":{"halR":25,"halW":32,"halT":55,"halS":45,"gA":60,"gS":45,"gC":20,"gD":35,"lSoft":15,"lVig":20,"lCA":10,"kA":0,"kE":0},"D":{"halR":30,"halW":60,"halT":60,"halS":40,"gA":50,"gS":55,"gC":30,"gD":45,"lSoft":40,"lVig":35,"lCA":20,"kA":0,"kE":0},"E":{"halR":50,"halW":26,"halT":55,"halS":50,"gA":32,"gS":50,"gC":45,"gD":35,"lSoft":35,"lVig":15,"lCA":15,"kA":0,"kE":0},"F":{"halR":15,"halW":60,"halT":50,"halS":50,"gA":35,"gS":50,"gC":25,"gD":35,"lSoft":35,"lVig":30,"lCA":15,"kA":10,"kE":10},"G":{"halR":10,"halW":40,"halT":45,"halS":55,"gA":30,"gS":55,"gC":28,"gD":30,"lSoft":35,"lVig":18,"lCA":15,"kA":15,"kE":15},"H":{"halR":35,"halW":14,"halT":65,"halS":35,"gA":28,"gS":60,"gC":10,"gD":50,"lSoft":40,"lVig":30,"lCA":20,"kA":0,"kE":0}};
+var PN = { A:['光で飛ばす','白をぎりぎりまで上げた昼の強い光。白のにじみ多め、粒子は中くらい'], B:['霞む水色','柔らかく霞む。赤いにじみと色の粒がやや多く、周辺も甘め'], C:['素の中間調','粒子が一番はっきり出るパターン。にじみは控えめで、レンズはシャープ'], D:['夜のストロボ','光の当たった所に白いにじみ。周辺は暗く甘く、暗部に粒子'], E:['青に沈む','赤いにじみと色の粒が多め。周辺は甘め'], F:['暖色ミッド','電球色の部屋。白のにじみが大きく、周辺は暗め。わずかな光漏れ'], G:['琥珀のかぶり','全体がかぶったような柔らかさ。光漏れとフィルムの端の焼け'], H:['暗闇の残光','点の光に赤いにじみ。暗部の粒子が多く、周辺は暗く甘い'] };
+var GROUPS = [
+  { sect:'フィルムの質感（パターンで初期値が入ります）' },
+  { key:'hal', title:'ハレーション', sub:'明るい所の周りに広がる、赤いにじみと白いにじみ', sl:[['halR','赤いにじみ','なし','強い'],['halW','白いにじみ','なし','強い'],['halT','にじむ明るさ','暗めからにじむ','白だけ'],['halS','広がり','狭い','広い']], note:'フィルムの中で光が反射して、白い所の縁が赤くにじむ現象です。夜の街灯や窓の光でよく出ます。' },
+  { key:'grain', title:'フィルム粒子', sub:'明るさで量が変わる、色ムラのある粒', sl:[['gA','量','なし','多い'],['gS','大きさ','細かい','粗い'],['gC','色の粒','白黒の粒','色ムラ'],['gD','暗部の粒','控えめ','ざらつく']], note:'中間の明るさで一番強く、白に近い所では弱くなります。等倍（ダブルタップ）で確認するのがおすすめです。' },
+  { key:'lens', title:'レンズ', sub:'四隅の甘さ・周辺の落ち・色ずれ', sl:[['lSoft','周辺の甘さ','シャープ','甘い'],['lVig','周辺減光','なし','暗く'],['lCA','色ずれ','なし','強い']], note:'古いコンパクトカメラや写ルンですのような、中心はしっかり、四隅だけ柔らかい写りです。' },
+  { key:'leak', title:'光漏れ・フィルムの端', sub:'端から入る橙の光と、縁の焼け', sl:[['kA','光漏れ','なし','強い'],['kP','位置','左上','一周'],['kS','広がり','小さい','大きい'],['kH','色','赤','黄'],['kE','フィルムの端の焼け','なし','強い']], note:'偶然の味なので、写真ごとに位置を変えるのがおすすめです。', extra:true },
+  { sect:'光の効果（手動。パターンを変えても残ります）' },
+  { key:'flash', man:1, title:'直射フラッシュ', sub:'手前を硬く照らし、奥を沈める', sl:[['fA','強さ','弱い','強い'],['fF','奥を沈める','そのまま','黒く'],['fS','光の届く範囲','狭い','広い'],['fX','光の中心 左右','左','右'],['fY','光の中心 上下','上','下'],['fH','硬さ','柔らかい','硬い'],['fT','光の色','冷たい','暖かい']], note:'光の中心は被写体の顔や体に合わせてください。見本の夜や室内の人物で一番多い光です。' },
+  { key:'slow', man:1, title:'スローシンクロ', sub:'光の軌跡とブレ。フラッシュの当たった所は止まる', sl:[['sT','光の軌跡','なし','強い'],['sG','ブレ','なし','強い'],['sA','向き','横','縦→横'],['sL','長さ','短い','長い']], note:'直射フラッシュと一緒に使うと、光の中心だけが止まり、周りが流れます。' },
+  { key:'multi', man:1, title:'多重露光・残像', sub:'ずらした像を光として重ねる', sl:[['mA','重ねる強さ','薄い','濃い'],['mX','ずれ 左右','左へ','右へ'],['mY','ずれ 上下','上へ','下へ'],['mN','重ねる回数','1回','3回'],['mS','大きさ','小さく','大きく']], note:'同じ写真の時：ずれを中央（50）にして大きさだけ変えると、ズームしたような残像に。別の写真の時：重ねる強さ・ずれ・大きさで位置と濃さを決めます（回数は使いません）。重ね方はX-S10の合成モードと同じです。加算は明るくなるので、カメラで露出を下げる代わりに重ねる強さを下げてください。平均は強さ100で2枚を同じ割合で混ぜます。明・暗は色によって混ざり合うことがあります。' },
+  { key:'orb', man:1, title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ'],['oW','暖かさ','白','暖色']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
+  { key:'cross', man:1, title:'クロス', sub:'点の光から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'街灯や車のライトなど、小さく強い光に向いています。' },
+  { key:'glass', man:1, title:'ガラス越しの滲み', sub:'すりガラス・窓越しのゆらぎと曇り', sl:[['gsA','強さ','弱い','強い'],['gsS','模様の細かさ','粗い','細かい'],['gsW','ゆらぎ','少ない','大きい'],['gsB','滲み','少ない','多い'],['gsV','曇り','なし','白く']], note:'細かくするとすりガラス、粗くすると型板ガラスのような大きなゆらぎになります。' },
+  { key:'ray', man:1, title:'光の筋（光芒）', sub:'明るい所から差し込む光の帯', sl:[['rA','強さ','弱い','強い'],['rX','光源 左右','左','右'],['rY','光源 上下','上','下'],['rL','長さ','短い','長い'],['rW','色','白','暖色'],['rT','光る明るさ','暗めから','強い光だけ']], note:'光源を窓や空の方向に置くと、明るい所から反対側へ光の帯が伸びます。' },
+  { key:'ana', man:1, title:'横に流れるフレア', sub:'強い光から横一直線に伸びる光', sl:[['aA','強さ','弱い','強い'],['aL','長さ','短い','長い'],['aC','色','青','暖色'],['aT','光る明るさ','暗めから','強い光だけ']], note:'夜のライトや街灯に。青くすると映画のような光になります。' }
+];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"oW":40,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rW":50,"rT":55,"aA":50,"aL":55,"aC":25,"aT":55,"mB":"add"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
+var LS = 'filmbase-v1', st;
+try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
+if (!st || !st.P) st = { pat:'A', seed:0, P:{}, on:{} };
+function patVals(p){ var o = Object.assign({}, DEF, PATS[p] || PATS.A); return o; }
+function patOn(p){ var v = PATS[p] || PATS.A; return { hal:1, grain:1, lens:1, leak:(v.kA > 0 || v.kE > 0) ? 1 : 0 }; }
+function applyPat(p){ var keep = {}, keepOn = {}; Object.keys(MAN).forEach(function(k){ if (st.P[k] != null) keep[k] = st.P[k]; }); GROUPS.forEach(function(g){ if (g.man) keepOn[g.key] = st.on[g.key] ? 1 : 0; });
+  st.pat = p; st.P = Object.assign(patVals(p), keep); st.on = Object.assign(patOn(p), keepOn); }   // 光の効果はパターンを変えても残す
+if (!Object.keys(st.P).length) applyPat(st.pat || 'A');
+Object.keys(DEF).forEach(function(k){ if (st.P[k] == null) st.P[k] = DEF[k]; });
+if (['add','avg','lig','dar'].indexOf(st.P.mB) < 0) st.P.mB = 'add';
+function save(){ try{ localStorage.setItem(LS, JSON.stringify(st)); }catch(e){} }
+
+var $ = function(id){ return document.getElementById(id); };
+var cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently:true });
+var wk = new Worker(URL.createObjectURL(new Blob([$('engine').textContent], { type:'text/javascript' })));
+var jobs = {}, jid = 0;
+wk.onmessage = function(e){ var m = e.data, f = jobs[m.id]; delete jobs[m.id]; if (f) f(m); };
+function work(msg, tr){ return new Promise(function(ok){ var id = ++jid; msg.id = id; jobs[id] = ok; wk.postMessage(msg, tr || []); }); }
+
+function toast(t){ var e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function(){ e.classList.remove('on'); }, 2200); }
+
+// ---- パターン ----
+function renderPats(){
+  var box = $('pats'); box.innerHTML = '';
+  Object.keys(PN).forEach(function(p){
+    var b = document.createElement('button'); b.type = 'button'; if (st.pat === p) b.className = 'on';
+    b.innerHTML = '<span class="k">' + p + '</span><span class="n">' + PN[p][0] + '</span>';
+    b.onclick = function(){ applyPat(p); save(); renderPats(); renderGroups(); schedule(); };
+    box.appendChild(b);
+  });
+  var changed = KEYS.some(function(k){ return st.P[k] !== patVals(st.pat)[k]; });
+  $('pnote').textContent = (st.pat ? st.pat + ' ' + PN[st.pat][0] + '：' + PN[st.pat][1] : '') + (changed ? '（調整済み）' : '');
+}
+// ---- 効果のグループ ----
+var openG = { hal:1, grain:1 };
+function renderGroups(){
+  var box = $('groups'); box.innerHTML = ''; var base = patVals(st.pat);
+  GROUPS.forEach(function(g){
+    if (g.sect){ var hh = document.createElement('h2'); hh.className = 'sect'; hh.textContent = g.sect; box.appendChild(hh); return; }
+    var el = document.createElement('div'); el.className = 'grp' + (openG[g.key] ? ' open' : '') + (st.on[g.key] ? '' : ' off');
+    var h = document.createElement('div'); h.className = 'gh';
+    h.innerHTML = '<div class="t"><b>' + g.title + '</b><small>' + g.sub + '</small></div>';
+    var sw = document.createElement('label'); sw.className = 'sw'; sw.innerHTML = '<input type="checkbox"' + (st.on[g.key] ? ' checked' : '') + '><i></i>';
+    sw.onclick = function(e){ e.stopPropagation(); };
+    sw.querySelector('input').onchange = function(){ st.on[g.key] = this.checked ? 1 : 0; el.classList.toggle('off', !this.checked); save(); schedule(); };
+    var ch = document.createElement('span'); ch.className = 'chev'; ch.textContent = '›';
+    h.appendChild(sw); h.appendChild(ch);
+    h.onclick = function(){ openG[g.key] = !openG[g.key]; el.classList.toggle('open'); };
+    var b = document.createElement('div'); b.className = 'gb';
+    g.sl.forEach(function(s){
+      var k = s[0], d = document.createElement('div'); d.className = 'sl';
+      d.innerHTML = '<div class="row"><span>' + s[1] + '</span><output></output></div><input type="range" min="0" max="100" step="1"><div class="ends"><span>' + s[2] + '</span><span>' + s[3] + '</span></div>';
+      var r = d.querySelector('input'), o = d.querySelector('output');
+      function show(){ o.textContent = FMT[k] ? FMT[k](st.P[k]) : st.P[k]; o.classList.toggle('ch', st.P[k] !== base[k]); }
+      r.value = st.P[k]; show();
+      r.oninput = function(){ st.P[k] = +r.value; show(); schedule(true); };
+      r.onchange = function(){ save(); renderPatsNote(); schedule(); };
+      var last = 0; r.addEventListener('touchend', function(){ var t = Date.now(); if (t - last < 320){ st.P[k] = base[k]; r.value = base[k]; show(); save(); renderPatsNote(); schedule(); } last = t; });
+      r.ondblclick = function(){ st.P[k] = base[k]; r.value = base[k]; show(); save(); renderPatsNote(); schedule(); };
+      b.appendChild(d);
+    });
+    var n = document.createElement('div'); n.className = 'gnote'; n.textContent = g.note + (g.man ? '（スライダーをダブルタップで初期値）' : '（スライダーをダブルタップでパターンの初期値）'); b.appendChild(n);
+    if (g.key === 'multi'){ var ob = document.createElement('div'); ob.className = 'ovrow';
+      if (OV){ ob.innerHTML = '<img src="' + OV.url + '"><span>この写真を重ねています。<br>ずれ・大きさで位置を合わせます</span>'; var rm = document.createElement('button'); rm.className = 'mini'; rm.type = 'button'; rm.textContent = '外す'; rm.onclick = function(){ setOverlay(null); }; ob.appendChild(rm); }
+      else { var pk = document.createElement('button'); pk.className = 'mini'; pk.type = 'button'; pk.textContent = '別の写真を重ねる'; pk.onclick = function(){ $('ovfile').click(); }; ob.appendChild(pk); var sp = document.createElement('span'); sp.textContent = '選ばない時は、同じ写真をずらして重ねます'; ob.appendChild(sp); }
+      b.insertBefore(ob, b.firstChild);
+      var BM = [['add','加算','光をそのまま足す'],['avg','平均','明るさを揃えて混ぜる'],['lig','明','明るい方を残す'],['dar','暗','暗い方を残す']];
+      var bw = document.createElement('div'); bw.className = 'blend'; bw.innerHTML = '<div class="bt">重ね方（X-S10の多重露光と同じ4つ）</div>';
+      var bg = document.createElement('div'); bg.className = 'bgrid';
+      BM.forEach(function(m){ var bb = document.createElement('button'); bb.type = 'button'; if ((st.P.mB || 'add') === m[0]) bb.className = 'on'; bb.innerHTML = '<b>' + m[1] + '</b><small>' + m[2] + '</small>';
+        bb.onclick = function(){ st.P.mB = m[0]; save(); bg.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); }); bb.classList.add('on'); schedule(); }; bg.appendChild(bb); });
+      bw.appendChild(bg); b.insertBefore(bw, ob.nextSibling); }
+    if (g.extra){ var bt = document.createElement('button'); bt.className = 'mini'; bt.type = 'button'; bt.textContent = '別の模様にする'; bt.onclick = function(){ st.seed = (st.seed + 1) % 997; save(); schedule(); }; b.appendChild(bt); }
+    el.appendChild(h); el.appendChild(b); box.appendChild(el);
+  });
+}
+function renderPatsNote(){ renderPats(); }
+var FMT = { cN:function(v){ return (v < 34 ? 4 : v < 67 ? 6 : 8) + '本'; }, mN:function(v){ return (v < 34 ? 1 : v < 67 ? 2 : 3) + '回'; }, cR:function(v){ return Math.round(v * 0.9) + '°'; }, sA:function(v){ return Math.round(v * 1.8) + '°'; } };
+
+// ---- 写真 ----
+var photos = [], cur = -1, MAXPX = 16000000;   // iPhoneのブラウザが扱える上限（約1600万画素）
+$('empty').onclick = function(){ $('file').click(); };
+$('ovfile').onchange = function(){ var f = this.files[0]; this.value = ''; if (f){ if (!st.on.multi){ st.on.multi = 1; save(); } setOverlay(f); } };
+['touchstart','touchend','mousedown','mouseup'].forEach(function(t){ $('exp2').addEventListener(t, function(e){ e.stopPropagation(); }); }); $('exp2').onclick = function(e){ e.stopPropagation(); $('exp').click(); };
+$('file').onchange = function(){ var fs = Array.prototype.slice.call(this.files); this.value = ''; if (!fs.length) return; addPhotos(fs); };
+function decode(f){
+  if (window.createImageBitmap) return createImageBitmap(f, { imageOrientation:'from-image' }).catch(function(){ return viaImg(f); });
+  return viaImg(f);
+}
+function viaImg(f){ return new Promise(function(ok, ng){ var u = URL.createObjectURL(f), im = new Image(); im.onload = function(){ ok(im); }; im.onerror = ng; im.src = u; }); }
+// ---- 写真と設定を覚えておく（アプリを閉じても次に開いた時に戻る） ----
+function idb(){ return new Promise(function(ok){ try{ if (!window.indexedDB) return ok(null); var r = indexedDB.open('filmbase', 1); r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); }; r.onsuccess = function(){ ok(r.result); }; r.onerror = function(){ ok(null); }; }catch(e){ ok(null); } }); }
+function idbSet(k, v){ return idb().then(function(db){ if (!db) return; return new Promise(function(ok){ try{ var t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = ok; t.onerror = ok; t.onabort = ok; }catch(e){ ok(); } }); }); }
+function idbGet(k){ return idb().then(function(db){ if (!db) return null; return new Promise(function(ok){ try{ var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function(){ ok(q.result || null); }; q.onerror = function(){ ok(null); }; }catch(e){ ok(null); } }); }); }
+function resetSettings(){ st = { pat:'A', seed:0, P:{}, on:{} }; applyPat('A'); Object.keys(DEF).forEach(function(k){ if (st.P[k] == null) st.P[k] = DEF[k]; }); save(); renderPats(); renderGroups(); }
+function addPhotos(fs, restoring){
+  if (!restoring){ OV = null; idbSet('overlay', null); resetSettings(); photos.forEach(function(p){ if (p.turl) URL.revokeObjectURL(p.turl); }); photos = []; }   // 新しく選んだら、設定は初期に戻して写真を入れ替える
+  fs.forEach(function(f, i){ photos.push({ f:f, name:f.name || ('photo' + i), key:'p' + Date.now() + '_' + i, seed:i * 37 }); });
+  if (!restoring) idbSet('photos', photos.map(function(p){ return { name:p.name, type:p.f.type || 'image/jpeg', blob:p.f }; }));
+  renderThumbs(); select(restoring ? Math.min(st.cur || 0, photos.length - 1) : 0);
+}
+function renderThumbs(){
+  var box = $('thumbs'); box.innerHTML = '';
+  if (!photos.length) return;
+  if (photos.length > 1) photos.forEach(function(p, i){ var im = document.createElement('img'); if (!p.turl) p.turl = URL.createObjectURL(p.f); im.src = p.turl; if (i === cur) im.className = 'on'; im.onclick = function(){ select(i); }; box.appendChild(im); });
+  var add = document.createElement('button'); add.type = 'button'; add.className = 'add'; add.innerHTML = '<span>＋</span>写真を選び直す'; add.onclick = function(){ $('file').click(); }; box.appendChild(add);
+}
+function select(i){
+  cur = i; st.cur = i; save(); var p = photos[i]; renderThumbs(); $('busy').classList.add('on');
+  decode(p.f).then(function(bm){
+    p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
+    var c = document.createElement('canvas'), ss = 1024 / Math.max(w, h); c.width = Math.round(w * ss); c.height = Math.round(h * ss);
+    var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, c.width, c.height);
+    var d = x.getImageData(0, 0, c.width, c.height); wk.postMessage({ type:'small', key:p.key, data:d.data, sw:c.width, sh:c.height });
+    var view = $('view'), pw = Math.min(1500, Math.round(view.clientWidth * (window.devicePixelRatio || 1))), ps = Math.min(1, pw / w);
+    if (h * ps > 1500) ps = 1500 / h;
+    var pc = document.createElement('canvas'); pc.width = Math.round(w * ps); pc.height = Math.round(h * ps);
+    var px = pc.getContext('2d'); px.imageSmoothingQuality = 'high'; px.drawImage(bm, 0, 0, pc.width, pc.height);
+    p.prev = px.getImageData(0, 0, pc.width, pc.height); p.zoom = null; if (window.fbResetZoom) fbResetZoom();
+    cv.width = pc.width; cv.height = pc.height; cv.hidden = false; $('empty').hidden = true; $('tip').hidden = false; $('exp').disabled = false; $('exp2').hidden = false;
+    $('exp').textContent = photos.length > 1 ? '書き出す ' + photos.length + '枚' : '書き出す';
+    ctx.putImageData(p.prev, 0, 0); schedule();
+  }).catch(function(){ $('busy').classList.remove('on'); toast('この写真は読み込めませんでした'); });
+}
+function params(){ var P = Object.assign({}, st.P); P.on = Object.assign({}, st.on); return P; }
+var timer = 0, running = false, again = false;
+function schedule(fast){ clearTimeout(timer); timer = setTimeout(render, fast ? 60 : 30); }
+function sigOf(p, z, P){ return JSON.stringify(P) + '|' + (z ? z.ox + ',' + z.oy : '') + '|' + (p.seed + st.seed * 101) + '|' + (OV ? OV.id : ''); }
+// ---- 多重露光で重ねる別の写真 ----
+var OV = null;
+function ovBuf(w, h, ox, oy, W, H, P){
+  if (!OV || !OV.bm || !P.on || !P.on.multi) return null;
+  var bw = OV.bm.width, bh = OV.bm.height, L = Math.max(W, H), sc = Math.max(W / bw, H / bh) * (1 + (P.mS - 50) / 50 * 0.4), dw = bw * sc, dh = bh * sc;
+  var dx = (P.mX - 50) / 50 * 0.3 * W, dy = (P.mY - 50) / 50 * 0.3 * H;
+  var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+  x.drawImage(OV.bm, (W - dw) / 2 + dx - ox, (H - dh) / 2 + dy - oy, dw, dh);
+  return x.getImageData(0, 0, w, h).data.buffer;
+}
+function runJob(msg, tr){ var b = ovBuf(msg.w, msg.h, msg.ox, msg.oy, msg.W, msg.H, msg.P); if (b){ msg.ov = b; tr.push(b); } return work(msg, tr); }
+function setOverlay(f, restoring){
+  if (!f){ OV = null; idbSet('overlay', null); renderGroups(); schedule(); return; }
+  decode(f).then(function(bm){ OV = { f:f, bm:bm, id:Date.now(), url:URL.createObjectURL(f) }; if (!restoring) idbSet('overlay', { name:f.name || 'overlay', type:f.type || 'image/jpeg', blob:f }); renderGroups(); schedule(); }).catch(function(){ toast('この写真は読み込めませんでした'); });
+}
+function render(){
+  var p = photos[cur]; if (!p || !p.prev) return; if (window.fbHQ) $('hq').hidden = true;
+  if (running){ again = true; return; } running = true; $('busy').classList.add('on');
+  var src = p.zoom ? p.zoom.data : p.prev, w = src.width, h = src.height, z = p.zoom;
+  var buf = new Uint8ClampedArray(src.data).buffer, P0 = params();
+  runJob({ type:'run', key:p.key, buf:buf, w:w, h:h, ox:z ? z.ox : 0, oy:z ? z.oy : 0, W:z ? p.W : w, H:z ? p.H : h, P:P0, seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
+    running = false; if (photos[cur] !== p) { $('busy').classList.remove('on'); return; }
+    if (cv.width !== m.w || cv.height !== m.h){ cv.width = m.w; cv.height = m.h; }
+    var outImg = new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h); ctx.putImageData(outImg, 0, 0); p.shown = true;
+    p.res = { img:outImg, sig:sigOf(p, z, P0) };   // 長押しから戻る時に、計算し直さずそのまま出す
+    if (again){ again = false; render(); } else { $('busy').classList.remove('on'); if (window.fbHQ) fbHQ(); }
+  });
+}
+// 長押しで元の写真、ダブルタップで等倍、ピンチで枠の中だけ拡大（ページは拡大しない）
+(function(){
+  var v = $('view'), hold = 0, lastTap = 0, showingOrig = false, Z = { s:1, x:0, y:0 }, g = null, moved = false;
+  function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; if (on) hqHide(); $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
+    if (on){ var s = p.zoom ? p.zoom.data : p.prev; cv.width = s.width; cv.height = s.height; ctx.putImageData(s, 0, 0); }
+    else if (p.res && p.res.sig === sigOf(p, p.zoom, params())){ cv.width = p.res.img.width; cv.height = p.res.img.height; ctx.putImageData(p.res.img, 0, 0); }
+    else render();
+    if (!on) fbHQ(); }
+  function clampZ(){ var vw = v.clientWidth, vh = v.clientHeight, w = cv.offsetWidth * Z.s, h = cv.offsetHeight * Z.s, mx = Math.max(0, (w - vw) / 2), my = Math.max(0, (h - vh) / 2);
+    if (Z.s <= 1.001){ Z.s = 1; Z.x = 0; Z.y = 0; } Z.x = Math.max(-mx, Math.min(mx, Z.x)); Z.y = Math.max(-my, Math.min(my, Z.y)); }
+  function applyZ(){ if (window.fbHQ) $('hq').hidden = true; clampZ(); cv.style.transform = Z.s > 1 ? 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')' : ''; v.style.touchAction = Z.s > 1 ? 'none' : 'pan-y'; }
+  window.fbResetZoom = function(){ Z = { s:1, x:0, y:0 }; applyZ(); };
+  // 拡大して指を離したら、見えている範囲だけを元の解像度から作り直して、くっきり表示する
+  var hq = $('hq'), hqT = 0, hqN = 0;
+  function hqHide(){ clearTimeout(hqT); hqN++; hq.hidden = true; }
+  window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || Z.s <= 1 || showingOrig) return; hqT = setTimeout(function(){ makeHQ(p); }, 220); };
+  function makeHQ(p){
+    var n = ++hqN, vw = v.clientWidth, vh = v.clientHeight, dpr = window.devicePixelRatio || 1, cw = cv.offsetWidth * Z.s, ch = cv.offsetHeight * Z.s;
+    var left = vw / 2 + Z.x - cw / 2, top = vh / 2 + Z.y - ch / 2;
+    var u0 = Math.max(0, -left / cw), u1 = Math.min(1, (vw - left) / cw), v0 = Math.max(0, -top / ch), v1 = Math.min(1, (vh - top) / ch); if (u1 <= u0 || v1 <= v0) return;
+    var ex = u0 * p.W, ey = v0 * p.H, ew = (u1 - u0) * p.W, eh = (v1 - v0) * p.H;
+    var dw = (u1 - u0) * cw * dpr, dh = (v1 - v0) * ch * dpr, k = Math.min(1, dw / ew), tw = Math.max(1, Math.round(ew * k)), th = Math.max(1, Math.round(eh * k));
+    var c = document.createElement('canvas'); c.width = tw; c.height = th; var x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
+    x.drawImage(p.bm, ex * sx, ey * sx, ew * sx, eh * sx, 0, 0, tw, th);
+    var buf = x.getImageData(0, 0, tw, th).data.buffer;
+    runJob({ type:'run', key:p.key, buf:buf, w:tw, h:th, ox:Math.round(ex * k), oy:Math.round(ey * k), W:Math.round(p.W * k), H:Math.round(p.H * k), P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
+      if (n !== hqN || photos[cur] !== p || showingOrig) return;
+      hq.width = Math.round(vw * dpr); hq.height = Math.round(vh * dpr); var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
+      var tc = document.createElement('canvas'); tc.width = m.w; tc.height = m.h; tc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
+      hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, Math.max(0, left) * dpr, Math.max(0, top) * dpr, dw, dh); hq.hidden = false;
+    });
+  }
+  function mid(t){ var r = v.getBoundingClientRect(); return { x:(t[0].clientX + t[1].clientX) / 2 - r.left - r.width / 2, y:(t[0].clientY + t[1].clientY) / 2 - r.top - r.height / 2 }; }
+  function dist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  v.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+  v.addEventListener('touchstart', function(e){
+    moved = false;
+    if (e.touches.length === 2){ clearTimeout(hold); if (showingOrig) orig(false); var m = mid(e.touches); g = { d:dist(e.touches), s:Z.s, x:Z.x, y:Z.y, mx:m.x, my:m.y }; e.preventDefault(); return; }
+    if (e.touches.length === 1){ var t = e.touches[0]; g = Z.s > 1 ? { pan:1, px:t.clientX, py:t.clientY, x:Z.x, y:Z.y } : null; hold = setTimeout(function(){ if (!moved) orig(true); }, 300); }
+  }, { passive:false });
+  v.addEventListener('touchmove', function(e){
+    if (g && e.touches.length === 2 && g.d){ e.preventDefault(); moved = true;
+      var m = mid(e.touches), s = Math.max(1, Math.min(8, g.s * dist(e.touches) / g.d)), k = s / g.s;
+      Z.s = s; Z.x = m.x - (g.mx - g.x) * k; Z.y = m.y - (g.my - g.y) * k; applyZ(); return; }
+    if (g && g.pan && e.touches.length === 1){ e.preventDefault(); var t = e.touches[0], dx = t.clientX - g.px, dy = t.clientY - g.py; if (Math.abs(dx) + Math.abs(dy) > 6){ moved = true; clearTimeout(hold); } Z.x = g.x + dx; Z.y = g.y + dy; applyZ(); return; }
+    moved = true; clearTimeout(hold);
+  }, { passive:false });
+  v.addEventListener('touchend', function(e){
+    clearTimeout(hold);
+    if (showingOrig){ orig(false); return; }
+    if (e.touches.length === 1 && Z.s > 1){ var t = e.touches[0]; g = { pan:1, px:t.clientX, py:t.clientY, x:Z.x, y:Z.y }; return; }   // ピンチから片手に戻ったら、そのまま動かせる
+    if (e.touches.length) return;
+    fbHQ();
+    var was = moved; g = null; if (was){ lastTap = 0; return; }
+    var now = Date.now(); if (now - lastTap < 300){ lastTap = 0; if (Z.s > 1){ fbResetZoom(); } else zoomAt(e.changedTouches[0]); } else lastTap = now;
+  });
+  v.addEventListener('mousedown', function(){ hold = setTimeout(function(){ orig(true); }, 300); });
+  v.addEventListener('mouseup', function(){ clearTimeout(hold); if (showingOrig) orig(false); });
+  v.addEventListener('dblclick', function(e){ if (Z.s > 1) fbResetZoom(); else zoomAt(e); });
+  v.addEventListener('wheel', function(e){ if (!e.ctrlKey) return; e.preventDefault(); Z.s = Math.max(1, Math.min(8, Z.s * Math.exp(-e.deltaY / 150))); applyZ(); fbHQ(); }, { passive:false });
+  window.addEventListener('resize', applyZ);
+  function zoomAt(pt){
+    var p = photos[cur]; if (!p || !p.bm) return;
+    if (p.zoom){ p.zoom = null; $('badge').classList.remove('on'); cv.width = p.prev.width; cv.height = p.prev.height; schedule(); return; }
+    var r = cv.getBoundingClientRect(), fx = (pt.clientX - r.left) / r.width, fy = (pt.clientY - r.top) / r.height;
+    var cw = Math.min(p.W, 900), chh = Math.min(p.H, Math.round(900 * r.height / r.width)), ox = Math.round(Math.max(0, Math.min(p.W - cw, fx * p.W - cw / 2))), oy = Math.round(Math.max(0, Math.min(p.H - chh, fy * p.H - chh / 2)));
+    var c = document.createElement('canvas'); c.width = cw; c.height = chh; var x = c.getContext('2d'), sx = p.bm.width / p.W;
+    x.imageSmoothingQuality = 'high'; x.drawImage(p.bm, ox * sx, oy * sx, cw * sx, chh * sx, 0, 0, cw, chh);
+    p.zoom = { data:x.getImageData(0, 0, cw, chh), ox:ox, oy:oy };
+    $('badge').textContent = '等倍（ダブルタップで戻る）'; $('badge').classList.add('on'); setTimeout(function(){ if (!showingOrig) $('badge').classList.remove('on'); }, 1600);
+    cv.width = cw; cv.height = chh; schedule();
+  }
+})();
+
+// ---- 書き出し ----
+$('exp').onclick = function(){
+  if (photos.length < 2){ exportList([cur]); return; }
+  sheet('<h3>書き出し</h3><p>今の設定（' + st.pat + ' ' + PN[st.pat][0] + '）で書き出します。光漏れの模様は写真ごとに変わります。</p>' +
+    '<button class="opt" data-a="one"><b>この写真だけ</b><small>表示中の1枚</small></button><button class="opt" data-a="all"><b>全部（' + photos.length + '枚）</b><small>同じ設定でまとめて</small></button><button class="opt" data-a="x"><b>やめる</b></button>', function(a){
+      if (a === 'one') exportList([cur]); else if (a === 'all') exportList(photos.map(function(_, i){ return i; }));
+    });
+};
+function sheet(html, cb){ var s = $('sheet'), b = $('sheetIn'); b.innerHTML = html; s.classList.add('on');
+  b.querySelectorAll('[data-a]').forEach(function(e){ e.onclick = function(){ s.classList.remove('on'); cb && cb(e.getAttribute('data-a')); }; });
+  s.onclick = function(e){ if (e.target === s) s.classList.remove('on'); }; }
+function exportOne(i){
+  var p = photos[i];
+  return (p.bm ? Promise.resolve(p.bm) : decode(p.f)).then(function(bm){
+    p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
+    if (i !== cur){ var c0 = document.createElement('canvas'), ss = 1024 / Math.max(w, h); c0.width = Math.round(w * ss); c0.height = Math.round(h * ss); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); wk.postMessage({ type:'small', key:p.key, data:x0.getImageData(0, 0, c0.width, c0.height).data, sw:c0.width, sh:c0.height }); }
+    var c = document.createElement('canvas'); c.width = p.W; c.height = p.H; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, p.W, p.H);
+    var d = x.getImageData(0, 0, p.W, p.H), buf = d.data.buffer; d = null;
+    return runJob({ type:'run', key:p.key, buf:buf, w:p.W, h:p.H, ox:0, oy:0, W:p.W, H:p.H, P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
+      x.putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
+      return new Promise(function(ok){ c.toBlob(function(bl){ c.width = c.height = 1; ok(new File([bl], p.name.replace(/\.[^.]+$/, '') + '_base.jpg', { type:'image/jpeg' })); }, 'image/jpeg', 0.97); });
+    });
+  });
+}
+function exportList(list){
+  sheet('<h3>書き出し中…</h3><p id="pt">準備しています</p><div class="prog"><i id="pb"></i></div><p style="margin:0">大きな写真は1枚に数十秒かかることがあります。</p>');
+  var files = [], k = 0;
+  (function next(){
+    if (k >= list.length){ $('sheet').classList.remove('on'); deliver(files); return; }
+    $('pt').textContent = (k + 1) + ' / ' + list.length + ' 枚目'; $('pb').style.width = (k / list.length * 100) + '%';
+    exportOne(list[k]).then(function(f){ files.push(f); k++; $('pb').style.width = (k / list.length * 100) + '%'; setTimeout(next, 30); }).catch(function(){ k++; toast('書き出せなかった写真がありました'); next(); });
+  })();
+}
+function deliver(files){
+  if (!files.length) return;
+  var share = function(){ return navigator.share({ files:files }).catch(function(e){ if (e && e.name !== 'AbortError') download(); }); };
+  var can = navigator.canShare && navigator.canShare({ files:files });
+  sheet('<h3>できました（' + files.length + '枚）</h3><p>' + files[0].name + (files.length > 1 ? ' ほか' : '') + '　' + (photos[cur] ? photos[cur].W + '×' + photos[cur].H : '') + '</p>' +
+    (can ? '<button class="opt" data-a="s"><b>写真に保存・共有</b><small>共有シートで「画像を保存」を選ぶと写真アプリに入ります</small></button>' : '') +
+    '<button class="opt" data-a="d"><b>ダウンロード</b><small>ファイルとして保存</small></button><button class="opt" data-a="x"><b>閉じる</b></button>', function(a){ if (a === 's') share(); else if (a === 'd') download(); });
+  function download(){ files.forEach(function(f, i){ setTimeout(function(){ var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }, i * 400); }); }
+}
+
+renderPats(); renderGroups();
+idbGet('overlay').then(function(r){ if (r && r.blob){ var f = r.blob; try{ f = new File([r.blob], r.name, { type:r.type }); }catch(e){} setOverlay(f, true); } });
+idbGet('photos').then(function(list){ if (list && list.length && !photos.length){ var fs = list.map(function(r){ var b = r.blob; try{ b = new File([r.blob], r.name, { type:r.type }); }catch(e){ b.name = r.name; } return b; }); addPhotos(fs, true); } });   // 前回の写真を戻す
+window.addEventListener('scroll', function(){ $('stick').classList.toggle('sh', window.scrollY > 120); }, { passive:true });
+if ('serviceWorker' in navigator){   // 新しい版が入ったら1回だけ読み直す（古い画面のまま残らないように）
+  var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){ if (hadCtl && !reloaded && !photos.length){ reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function(r){ r.update(); }).catch(function(){});
+}
+})();
+</script>
+</body>
+</html>
