@@ -610,7 +610,9 @@ function render(){
 // 長押しで元の写真、ダブルタップで等倍、ピンチで枠の中だけ拡大（ページは拡大しない）
 (function(){
   var v = $('view'), hold = 0, lastTap = 0, showingOrig = false, Z = { s:1, x:0, y:0 }, g = null, moved = false;
-  function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; if (on) hqHide(); $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
+  function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; var hqOk = HQS && HQS.n === hqN && !hq.hidden && Z.s > 1;
+    if (hqOk){ $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on); drawHQ(on ? HQS.orig : HQS.res); return; }   // 拡大中は、くっきり版の元の写真を出す
+    if (on) hqHide(); $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
     if (on){ var s = p.zoom ? p.zoom.data : p.prev; cv.width = s.width; cv.height = s.height; ctx.putImageData(s, 0, 0); }
     else if (p.res && p.res.sig === sigOf(p, p.zoom, params())){ cv.width = p.res.img.width; cv.height = p.res.img.height; ctx.putImageData(p.res.img, 0, 0); }
     else render();
@@ -621,8 +623,12 @@ function render(){
   window.fbResetZoom = function(){ Z = { s:1, x:0, y:0 }; applyZ(); };
   // 拡大して指を離したら、見えている範囲だけを元の解像度から作り直して、くっきり表示する
   var hq = $('hq'), hqT = 0, hqN = 0;
-  function hqHide(){ clearTimeout(hqT); hqN++; hq.hidden = true; }
+  function hqHide(){ clearTimeout(hqT); hqN++; hq.hidden = true; HQS = null; }
   window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || Z.s <= 1 || showingOrig) return; hqT = setTimeout(function(){ makeHQ(p); }, 220); };
+  // くっきり版は、加工後と元の写真の両方を持っておく（拡大中に長押ししても、元の写真が粗くならない）
+  var HQS = null;
+  function drawHQ(img){ if (!HQS) return; hq.width = HQS.W; hq.height = HQS.H; var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
+    var tc = SC(img.width, img.height); tc.getContext('2d').putImageData(img, 0, 0); hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, HQS.x, HQS.y, HQS.dw, HQS.dh); freeSC(); hq.hidden = false; }
   function makeHQ(p){
     var n = ++hqN, vw = v.clientWidth, vh = v.clientHeight, dpr = window.devicePixelRatio || 1, cw = cv.offsetWidth * Z.s, ch = cv.offsetHeight * Z.s;
     var left = vw / 2 + Z.x - cw / 2, top = vh / 2 + Z.y - ch / 2;
@@ -631,12 +637,11 @@ function render(){
     var dw = (u1 - u0) * cw * dpr, dh = (v1 - v0) * ch * dpr, k = Math.min(1, dw / ew), tw = Math.max(1, Math.round(ew * k)), th = Math.max(1, Math.round(eh * k));
     var c = SC(tw, th), x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
     x.drawImage(p.bm, ex * sx, ey * sx, ew * sx, eh * sx, 0, 0, tw, th);
-    var buf = x.getImageData(0, 0, tw, th).data.buffer; freeSC();
+    var srcD = x.getImageData(0, 0, tw, th), origCopy = new ImageData(new Uint8ClampedArray(srcD.data), tw, th), buf = srcD.data.buffer; freeSC(); HQS = null;
     runJob({ type:'run', key:p.key, buf:buf, w:tw, h:th, ox:Math.round(ex * k), oy:Math.round(ey * k), W:Math.round(p.W * k), H:Math.round(p.H * k), P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
-      if (n !== hqN || photos[cur] !== p || showingOrig) return;
-      hq.width = Math.round(vw * dpr); hq.height = Math.round(vh * dpr); var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
-      var tc = SC(m.w, m.h); tc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
-      hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, Math.max(0, left) * dpr, Math.max(0, top) * dpr, dw, dh); freeSC(); hq.hidden = false;
+      if (n !== hqN || photos[cur] !== p) return;
+      HQS = { n:n, orig:origCopy, res:new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), x:Math.max(0, left) * dpr, y:Math.max(0, top) * dpr, dw:dw, dh:dh, W:Math.round(vw * dpr), H:Math.round(vh * dpr) };
+      drawHQ(showingOrig ? HQS.orig : HQS.res);
     });
   }
   function mid(t){ var r = v.getBoundingClientRect(); return { x:(t[0].clientX + t[1].clientX) / 2 - r.left - r.width / 2, y:(t[0].clientY + t[1].clientY) / 2 - r.top - r.height / 2 }; }
