@@ -170,7 +170,7 @@ var FB = (function(){
     for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ var s = 0, c = 0; for (var k = -N; k <= N; k++){ var px = x + dx * st * k, py = y + dy * st * k; if (px < 0 || py < 0 || px > w - 1 || py > h - 1) continue; s += R[(py | 0) * w + (px | 0)]; c++; } O[y * w + x] = s / c; }
     return O; }
 
-  function maps(key, sm8, sw, sh, P){
+  function maps(key, sm8, sw, sh, P, dep){
     var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
     var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
     var o = { base:base };
@@ -183,6 +183,14 @@ var FB = (function(){
       o.soft = M('soft', key + ss, function(){ return { R:mk(blur(base.R, sw, sh, ss), sw, sh), G:mk(blur(base.G, sw, sh, ss), sw, sh), B:mk(blur(base.B, sw, sh, ss), sw, sh) }; }); }
     if (on.glass){ var sg = (0.0015 * (1 + 7 * P.gsB / 100)) * Ls;
       o.glass = M('glass', key + sg, function(){ return { R:mk(blur(base.R, sw, sh, sg), sw, sh), G:mk(blur(base.G, sw, sh, sg), sw, sh), B:mk(blur(base.B, sw, sh, sg), sw, sh) }; }); }
+    if (on.depth && dep){ o.dep = mk(dep, sw, sh);
+      o.dq = M('dq', key + '|dq', function(){ var a = []; for (var i = 0; i < n; i += 7) a.push(dep[i]); a.sort(function(x, y){ return x - y; }); return a; });
+      o.db = M('db', key + '|db', function(){ var L3 = [0.003, 0.009, 0.022].map(function(f){ return f * Ls; }), out = [];
+        L3.forEach(function(sg){ out.push({ R:mk(blur(base.R, sw, sh, sg), sw, sh), G:mk(blur(base.G, sw, sh, sg), sw, sh), B:mk(blur(base.B, sw, sh, sg), sw, sh) }); }); return out; }); }
+    if (on.sfocus){ var sf1 = (0.004 + 0.03 * P.sfR / 100) * Ls;
+      o.sf = M('sf', key + sf1, function(){ var g8 = [new Float32Array(n), new Float32Array(n), new Float32Array(n)]; for (var i = 0; i < n; i++){ g8[0][i] = sm8[i * 4] / 255; g8[1][i] = sm8[i * 4 + 1] / 255; g8[2][i] = sm8[i * 4 + 2] / 255; }
+        function two(A){ var x1 = blur(A, sw, sh, sf1), x2 = blur(A, sw, sh, sf1 * 0.4); for (var i = 0; i < n; i++) x1[i] = x1[i] * 0.6 + x2[i] * 0.4; return mk(x1, sw, sh); }
+        return { LR:two(base.R), LG:two(base.G), LB:two(base.B), GR:two(g8[0]), GG:two(g8[1]), GB:two(g8[2]) }; }); }
     if (on.slow){ var ang = P.sA / 100 * Math.PI, ln = (0.02 + 0.25 * P.sL / 100) * Ls;
       o.slow = M('slow', key + ang + '|' + ln, function(){ var E = excess(base.R, base.G, base.B, n, 0.45), Eh = half(E, sw, sh), Rh = half(base.R, sw, sh), Gh = half(base.G, sw, sh), Bh = half(base.B, sw, sh);
         return { T:mk(streak(Eh, ang, ln / 2, true), Eh.w, Eh.h), R:mk(dirBlur(Rh.A, Rh.w, Rh.h, ang, ln / 4), Rh.w, Rh.h), G:mk(dirBlur(Gh.A, Gh.w, Gh.h, ang, ln / 4), Gh.w, Gh.h), B:mk(dirBlur(Bh.A, Bh.w, Bh.h, ang, ln / 4), Bh.w, Bh.h) }; }); }
@@ -256,8 +264,8 @@ var FB = (function(){
     return o;
   }
   // ---- 本体：src（RGBA 8bit、全体W×Hのうち ox,oy から w×h の範囲）を処理して out に書く ----
-  function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov){
-    var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
+  function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov, dep){
+    var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P, dep), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
     if (on.fsoft){   // 輪郭の柔らかさは重いので、同じ写真・同じ範囲・同じ値なら前の結果を使う（他の効果を動かす時に速い）
       var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
       var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
@@ -273,6 +281,11 @@ var FB = (function(){
     var fl = on.flash, fA = P.fA / 100, fF = P.fF / 100, fR = L * (0.18 + 0.7 * P.fS / 100), fX = P.fX / 100 * W, fY = P.fY / 100 * H, fH = P.fH / 100, fT = (P.fT - 50) / 50, ftr = 1 + 0.06 * fT, ftg = 1 + 0.01 * fT, ftb = 1 - 0.07 * fT;
     var ob = on.orb, oA = P.oA / 100, oR = L * (0.06 + 0.42 * P.oS / 100), oX = P.oX / 100 * W, oY = P.oY / 100 * H, oSp = 0.25 + 0.9 * P.oSo / 100, oC = P.oC / 100, oW = P.oW / 100, ogg = 0.95 - 0.16 * oW, ogb = 0.86 - 0.42 * oW;
     var gl = on.glass, gsA = P.gsA / 100, gCell = Math.max(2, L * (0.004 + 0.045 * (1 - P.gsS / 100))), gAmp2 = gCell * (0.4 + 2.2 * P.gsW / 100) * 0.3, gMix = 0.35 + 0.6 * P.gsB / 100, gVeil = P.gsV / 100 * 0.4;
+    var dpo = !!(on.depth && Mp.dep), dfd = 0, dtol = 0, dkf = 0, dkn = 0;
+    if (dpo){ var fxp = P.dpX == null ? 0.5 : P.dpX, fyp = P.dpY == null ? 0.55 : P.dpY, fs_ = [], ii, jj;   // ピントの点のまわりの奥行き（中央値）＋ずらし
+      for (ii = -2; ii <= 2; ii++) for (jj = -2; jj <= 2; jj++) fs_.push(sampleMap(Mp.dep, Math.min(1, Math.max(0, fxp + ii * 0.012)), Math.min(1, Math.max(0, fyp + jj * 0.012))));
+      fs_.sort(function(x, y){ return x - y; }); dfd = fs_[12] - (P.dpF - 50) / 50 * 0.35; dtol = 0.02 + 0.25 * P.dpS / 100; dkf = P.dpA / 100 * 4; dkn = P.dpN / 100 * 4; }
+    var sfo = on.sfocus ? P.sfA / 100 * 0.55 : 0, sfM = P.sfM / 100;
     var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
     var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
     var cr = on.cross ? P.cA / 100 * 5.5 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0, rW = P.rW / 100, an = on.ana ? P.aA / 100 * 7 : 0, aC = P.aC / 100;
@@ -303,8 +316,18 @@ var FB = (function(){
           r += (sampleMap(Mp.glass.R, uu, vv) - r) * gMix; g += (sampleMap(Mp.glass.G, uu, vv) - g) * gMix; b += (sampleMap(Mp.glass.B, uu, vv) - b) * gMix;
           if (gVeil > 0){ r += (0.7 - r) * gVeil * (0.6 + 0.4 * r); g += (0.7 - g) * gVeil * (0.6 + 0.4 * g); b += (0.7 - b) * gVeil * (0.6 + 0.4 * b); }
           r = r0 + (r - r0) * gsA; g = g0 + (g - g0) * gsA; b = b0 + (b - b0) * gsA; }
+        // 3.5) 奥行きのぼけ：ピントの面は残し、奥（と手前）ほど大きく溶かす（光の量のまま混ぜるので、明るい所は丸く広がる）
+        if (dpo){ var dd = dfd - sampleMap(Mp.dep, u, v), cf = Math.max(0, dd - dtol) * dkf + Math.max(0, -dd - dtol) * dkn;
+          if (cf > 0.002){ if (cf > 1) cf = 1; var lv0 = cf * 3, li0 = lv0 | 0, fr = lv0 - li0, A0, A1;
+            if (li0 >= 2){ A0 = Mp.db[2]; A1 = Mp.db[2]; fr = 1; } else { A0 = li0 === 0 ? null : Mp.db[li0 - 1]; A1 = Mp.db[li0]; }
+            var r1 = sampleMap(A1.R, u, v), g1 = sampleMap(A1.G, u, v), b1 = sampleMap(A1.B, u, v), r0 = A0 ? sampleMap(A0.R, u, v) : r, g0_ = A0 ? sampleMap(A0.G, u, v) : g, b0_ = A0 ? sampleMap(A0.B, u, v) : b;
+            r = r0 + (r1 - r0) * fr; g = g0_ + (g1 - g0_) * fr; b = b0_ + (b1 - b0_) * fr; } }
         // 4) レンズ：四隅の甘さ
         if (soft > 0){ var ws = soft * Math.pow(sm(0.3, 1.0, rr), 1.3); if (ws > 0){ r += (sampleMap(Mp.soft.R, u, v) - r) * ws; g += (sampleMap(Mp.soft.G, u, v) - g) * ws; b += (sampleMap(Mp.soft.B, u, v) - b) * ws; } }
+        // 4.5) ソフトフォーカス：芯を残したまま、同じ色の柔らかなぼけを重ねる（ミストのように白いもやにはしない）
+        if (sfo > 0){ var sR = s2l(sampleMap(Mp.sf.GR, u, v)), sG2 = s2l(sampleMap(Mp.sf.GG, u, v)), sB2 = s2l(sampleMap(Mp.sf.GB, u, v));
+          sR += (sampleMap(Mp.sf.LR, u, v) - sR) * sfM; sG2 += (sampleMap(Mp.sf.LG, u, v) - sG2) * sfM; sB2 += (sampleMap(Mp.sf.LB, u, v) - sB2) * sfM;
+          r += (sR - r) * sfo; g += (sG2 - g) * sfo; b += (sB2 - b) * sfo; }
         // 5) スローシンクロのブレ（フラッシュが当たった所は止まる）
         var lit = 0;
         if (fl){ var fdx = (X - fX) / fR, fdy = (Y - fY) / fR; lit = Math.exp(-(fdx * fdx + fdy * fdy) * 1.6); }
@@ -346,10 +369,11 @@ if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof impor
   var SMALL = {};
   self.onmessage = function(e){
     var m = e.data;
-    if (m.type === 'small'){ SMALL[m.key] = m; return; }
+    if (m.type === 'small'){ var keep = SMALL[m.key] && SMALL[m.key].dep; SMALL[m.key] = m; if (keep && !m.dep) m.dep = keep; return; }
+    if (m.type === 'dep'){ if (SMALL[m.key]) SMALL[m.key].dep = m.dep; return; }
     if (m.type === 'run'){
       var s = SMALL[m.key], src = new Uint8ClampedArray(m.buf), out = new Uint8ClampedArray(src.length);
-      FB.run(src, out, m.w, m.h, m.ox, m.oy, m.W, m.H, s.data, s.sw, s.sh, m.key, m.P, m.seed, m.ov ? new Uint8ClampedArray(m.ov) : null);
+      FB.run(src, out, m.w, m.h, m.ox, m.oy, m.W, m.H, s.data, s.sw, s.sh, m.key, m.P, m.seed, m.ov ? new Uint8ClampedArray(m.ov) : null, s.dep || null);
       self.postMessage({ type: 'done', id: m.id, buf: out.buffer, w: m.w, h: m.h }, [out.buffer]);
     }
   };
@@ -374,11 +398,12 @@ var GROUPS = [
   { key:'multi', man:1, title:'多重露光・残像', sub:'ずらした像を光として重ねる', sl:[['mA','重ねる強さ','薄い','濃い'],['mX','ずれ 左右','左へ','右へ'],['mY','ずれ 上下','上へ','下へ'],['mN','重ねる回数','1回','3回'],['mS','大きさ','小さく','大きく']], note:'同じ写真の時：ずれを中央（50）にして大きさだけ変えると、ズームしたような残像に。別の写真の時：重ねる強さ・ずれ・大きさで位置と濃さを決めます（回数は使いません）。重ね方はX-S10の合成モードと同じです。加算は明るくなるので、カメラで露出を下げる代わりに重ねる強さを下げてください。平均は強さ100で2枚を同じ割合で混ぜます。明・暗は色によって混ざり合うことがあります。' },
   { key:'orb', man:1, title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ'],['oW','暖かさ','白','暖色']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
   { key:'cross', man:1, title:'クロス', sub:'点の光から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'街灯や車のライトなど、小さく強い光に向いています。' },
-  { key:'glass', man:1, title:'ガラス越しの滲み', sub:'すりガラス・窓越しのゆらぎと曇り', sl:[['gsA','強さ','弱い','強い'],['gsS','模様の細かさ','粗い','細かい'],['gsW','ゆらぎ','少ない','大きい'],['gsB','滲み','少ない','多い'],['gsV','曇り','なし','白く']], note:'細かくするとすりガラス、粗くすると型板ガラスのような大きなゆらぎになります。' },
+  { key:'depth', man:1, title:'奥行きのぼけ', sub:'ピントの面を残して、奥ほど溶かす（AIで奥行きを推定）', sl:[['dpA','ぼけの量','少ない','多い'],['dpF','ピントの位置（タップした所から）','手前へ','奥へ'],['dpS','ピントの深さ','薄い','深い'],['dpN','手前もぼかす','ぼかさない','ぼかす']], note:'写真から奥行きを推定して、絞りを開けて撮ったように背景を溶かします。オンの間は、プレビューをタップした所にピントが合います（最初は画面の中央）。初めてオンにした時は、AIの読み込み（約35MB）で数十秒かかります。2回目からは端末に残るので速くなります。髪の毛の先など細かい境目は、少しにじむことがあります。' },
+  { key:'sfocus', man:1, title:'ソフトフォーカス', sub:'芯を残して、同じ色の柔らかなぼけを重ねる', sl:[['sfA','強さ','弱い','強い'],['sfR','広がり','狭い','広い'],['sfM','にじみ方','影もにじむ','光だけ']], note:'ソフトフォーカスのレンズやフィルターのように、くっきりした像に同じ色のぼけを薄く重ねます。ミストフィルターと違って白いもやにはならず、暗い所の色もそのまま柔らかく広がります。「光だけ」に寄せるほど明るい所が強く光ります。' },
   { key:'ray', man:1, title:'光の筋（光芒）', sub:'明るい所から差し込む光の帯', sl:[['rA','強さ','弱い','強い'],['rX','光源 左右','左','右'],['rY','光源 上下','上','下'],['rL','長さ','短い','長い'],['rW','色','白','暖色'],['rT','光る明るさ','暗めから','強い光だけ']], note:'光源を窓や空の方向に置くと、明るい所から反対側へ光の帯が伸びます。' },
   { key:'ana', man:1, title:'横に流れるフレア', sub:'強い光から横一直線に伸びる光', sl:[['aA','強さ','弱い','強い'],['aL','長さ','短い','長い'],['aC','色','青','暖色'],['aT','光る明るさ','暗めから','強い光だけ']], note:'夜のライトや街灯に。青くすると映画のような光になります。' }
 ];
-var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"oW":40,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rW":50,"rT":55,"aA":50,"aL":55,"aC":25,"aT":55,"mB":"add"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"oW":40,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rW":50,"rT":55,"aA":50,"aL":55,"aC":25,"aT":55,"mB":"add","sfA":40,"sfR":45,"sfM":35,"dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
 GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
 var LS = 'filmbase-v1', st;
 try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
@@ -508,6 +533,47 @@ function select(i){
     ctx.putImageData(p.prev, 0, 0); schedule();
   }).catch(function(){ $('busy').classList.remove('on'); toast('この写真は読み込めませんでした'); });
 }
+// ---- 奥行き（MiDaS small）。photo retouchと同じAIを、上の階層から読み込む ----
+var ORT_B = (function(){ try{ return new URL('../', location.href).href; }catch(e){ return '../'; } })(), DS = null, DL = null;
+function loadScript(u){ return new Promise(function(ok, ng){ var e = document.createElement('script'); e.src = u; e.onload = ok; e.onerror = ng; document.head.appendChild(e); }); }
+function midas(){
+  if (DS) return Promise.resolve(DS); if (DL) return DL;
+  DL = (window.ort ? Promise.resolve() : loadScript(ORT_B + 'ort.wasm.min.js')).then(function(){ ort.env.wasm.wasmPaths = ORT_B; ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false; return loadScript(ORT_B + 'm_midas_0.js'); })
+    .then(function(){ return loadScript(ORT_B + 'm_midas_1.js'); })
+    .then(function(){ var b = atob(window.TKM.midas), u8 = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i); delete window.TKM.midas; return ort.InferenceSession.create(u8, { executionProviders:['wasm'] }); })
+    .then(function(s){ DS = s; return s; }, function(e){ DL = null; throw e; });
+  return DL;
+}
+function boxMean(A, w, h, r){ var T = new Float32Array(A.length), O = new Float32Array(A.length), x, y, s, k;
+  for (y = 0; y < h; y++){ var o = y * w; s = 0; for (k = -r; k <= r; k++) s += A[o + Math.min(w - 1, Math.max(0, k))]; for (x = 0; x < w; x++){ T[o + x] = s / (2 * r + 1); s += A[o + Math.min(w - 1, x + r + 1)] - A[o + Math.max(0, x - r)]; } }
+  for (x = 0; x < w; x++){ s = 0; for (k = -r; k <= r; k++) s += T[Math.min(h - 1, Math.max(0, k)) * w + x]; for (y = 0; y < h; y++){ O[y * w + x] = s / (2 * r + 1); s += T[Math.min(h - 1, y + r + 1) * w + x] - T[Math.max(0, y - r) * w + x]; } }
+  return O; }
+function guided(I, p, w, h, r, eps){   // 写真の明るさの境目に沿わせて、奥行きの境目をくっきりさせる
+  var n = w * h, Ip = new Float32Array(n), II = new Float32Array(n), i; for (i = 0; i < n; i++){ Ip[i] = I[i] * p[i]; II[i] = I[i] * I[i]; }
+  var mI = boxMean(I, w, h, r), mp = boxMean(p, w, h, r), mIp = boxMean(Ip, w, h, r), mII = boxMean(II, w, h, r), a = new Float32Array(n), b = new Float32Array(n);
+  for (i = 0; i < n; i++){ var cv2 = mIp[i] - mI[i] * mp[i], vr = mII[i] - mI[i] * mI[i]; a[i] = cv2 / (vr + eps); b[i] = mp[i] - a[i] * mI[i]; }
+  var ma = boxMean(a, w, h, r), mb = boxMean(b, w, h, r), q = new Float32Array(n); for (i = 0; i < n; i++) q[i] = ma[i] * I[i] + mb[i]; return q; }
+function ensureDepth(p){
+  if (p.dep) return Promise.resolve(p.dep); if (p.depP) return p.depP;
+  toast('奥行きを測っています…（初回は数十秒）');
+  p.depP = (p.bm ? Promise.resolve(p.bm) : decode(p.f)).then(function(bm){ if (!p.bm) p.bm = bm; return midas().then(function(S){
+    var c = SC(256, 256), x = c.getContext('2d'); x.drawImage(bm, 0, 0, 256, 256); var d = x.getImageData(0, 0, 256, 256).data, n = 65536, i, k, mean = [0.485, 0.456, 0.406], sd = [0.229, 0.224, 0.225], inp = new Float32Array(3 * n);
+    for (i = 0; i < n; i++) for (k = 0; k < 3; k++) inp[k * n + i] = (d[i * 4 + k] / 255 - mean[k]) / sd[k];
+    var feeds = {}; feeds[S.inputNames[0]] = new ort.Tensor('float32', inp, [1, 3, 256, 256]);
+    return S.run(feeds).then(function(r){
+      var o = r[S.outputNames[0]].data, mn = Infinity, mx = -Infinity; for (i = 0; i < n; i++){ if (o[i] < mn) mn = o[i]; if (o[i] > mx) mx = o[i]; }
+      var w = bm.width, h = bm.height, ss = 1024 / Math.max(w, h), sw = Math.round(w * ss), sh = Math.round(h * ss);
+      var c2 = SC(sw, sh), x2 = c2.getContext('2d'); x2.imageSmoothingQuality = 'high'; x2.drawImage(bm, 0, 0, sw, sh); var g = x2.getImageData(0, 0, sw, sh).data; freeSC();
+      var D = new Float32Array(sw * sh), I = new Float32Array(sw * sh);
+      for (var yy = 0; yy < sh; yy++) for (var xx = 0; xx < sw; xx++){ var fx = (xx + 0.5) / sw * 256 - 0.5, fy = (yy + 0.5) / sh * 256 - 0.5; fx = Math.max(0, Math.min(254.999, fx)); fy = Math.max(0, Math.min(254.999, fy));
+        var x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, q = y0 * 256 + x0, v = (o[q] * (1 - ax) + o[q + 1] * ax) * (1 - ay) + (o[q + 256] * (1 - ax) + o[q + 257] * ax) * ay, j = yy * sw + xx;
+        D[j] = (v - mn) / (mx - mn + 1e-6); I[j] = (0.299 * g[j * 4] + 0.587 * g[j * 4 + 1] + 0.114 * g[j * 4 + 2]) / 255; }
+      D = guided(I, D, sw, sh, Math.max(2, Math.round(Math.max(sw, sh) * 0.012)), 1e-3);
+      p.dep = D; wk.postMessage({ type:'dep', key:p.key, dep:D }); return D; });
+  }); });
+  p.depP.catch(function(){ p.depP = null; toast('奥行きを測れませんでした'); });
+  return p.depP;
+}
 function params(){ var P = Object.assign({}, st.P); P.on = Object.assign({}, st.on); return P; }
 var timer = 0, running = false, again = false;
 function schedule(fast){ clearTimeout(timer); timer = setTimeout(render, fast ? 60 : 30); }
@@ -528,7 +594,8 @@ function setOverlay(f, restoring){
   decode(f).then(function(bm){ OV = { f:f, bm:bm, id:Date.now(), url:URL.createObjectURL(f) }; if (!restoring) idbSet('overlay', { name:f.name || 'overlay', type:f.type || 'image/jpeg', blob:f }); renderGroups(); schedule(); }).catch(function(){ toast('この写真は読み込めませんでした'); });
 }
 function render(){
-  var p = photos[cur]; if (!p || !p.prev) return; if (window.fbHQ) $('hq').hidden = true;
+  var p = photos[cur]; if (!p || !p.prev) return;
+  if (st.on.depth && !p.dep){ ensureDepth(p).then(function(){ schedule(); }); } if (window.fbHQ) $('hq').hidden = true;
   if (running){ again = true; return; } running = true; $('busy').classList.add('on');
   var src = p.zoom ? p.zoom.data : p.prev, w = src.width, h = src.height, z = p.zoom;
   var buf = new Uint8ClampedArray(src.data).buffer, P0 = params();
@@ -594,13 +661,20 @@ function render(){
     if (e.touches.length) return;
     fbHQ();
     var was = moved; g = null; if (was){ lastTap = 0; return; }
-    var now = Date.now(); if (now - lastTap < 300){ lastTap = 0; if (Z.s > 1){ fbResetZoom(); } else zoomAt(e.changedTouches[0]); } else lastTap = now;
+    var now = Date.now(); clearTimeout(tapT);
+    if (now - lastTap < 300){ lastTap = 0; if (Z.s > 1){ fbResetZoom(); } else zoomAt(e.changedTouches[0]); }
+    else { lastTap = now; var tp = e.changedTouches[0], tx = tp.clientX, ty = tp.clientY; tapT = setTimeout(function(){ focusAt(tx, ty); }, 320); }
   });
   v.addEventListener('mousedown', function(){ hold = setTimeout(function(){ orig(true); }, 300); });
   v.addEventListener('mouseup', function(){ clearTimeout(hold); if (showingOrig) orig(false); });
   v.addEventListener('dblclick', function(e){ if (Z.s > 1) fbResetZoom(); else zoomAt(e); });
   v.addEventListener('wheel', function(e){ if (!e.ctrlKey) return; e.preventDefault(); Z.s = Math.max(1, Math.min(8, Z.s * Math.exp(-e.deltaY / 150))); applyZ(); fbHQ(); }, { passive:false });
   window.addEventListener('resize', applyZ);
+  var tapT = 0;
+  function focusAt(cx, cy){   // 奥行きのぼけがオンの時だけ：タップした所にピントを合わせる
+    var p = photos[cur]; if (!p || !st.on.depth || p.zoom) return; var r = cv.getBoundingClientRect(); if (!r.width) return;
+    var fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height; if (fx < 0 || fy < 0 || fx > 1 || fy > 1) return;
+    st.P.dpX = Math.round(fx * 1000) / 1000; st.P.dpY = Math.round(fy * 1000) / 1000; save(); toast('ここにピントを合わせました'); schedule(); }
   function zoomAt(pt){
     var p = photos[cur]; if (!p || !p.bm) return;
     if (p.zoom){ p.zoom = null; $('badge').classList.remove('on'); cv.width = p.prev.width; cv.height = p.prev.height; schedule(); return; }
@@ -630,12 +704,14 @@ function exportOne(i){
   return (p.bm ? Promise.resolve(p.bm) : decode(p.f)).then(function(bm){
     p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
     if (i !== cur){ var ss = 1024 / Math.max(w, h), c0 = SC(Math.round(w * ss), Math.round(h * ss)); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); wk.postMessage({ type:'small', key:p.key, data:x0.getImageData(0, 0, c0.width, c0.height).data, sw:c0.width, sh:c0.height });  freeSC(); }
+    return (st.on.depth ? ensureDepth(p) : Promise.resolve()).then(function(){ if (p.dep) wk.postMessage({ type:'dep', key:p.key, dep:p.dep });
     var c = document.createElement('canvas'); c.width = p.W; c.height = p.H; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, p.W, p.H);
     var d = x.getImageData(0, 0, p.W, p.H), buf = d.data.buffer; d = null;
     return runJob({ type:'run', key:p.key, buf:buf, w:p.W, h:p.H, ox:0, oy:0, W:p.W, H:p.H, P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
       x.putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
       if (i !== cur && p.bm){ if (p.bm.close) p.bm.close(); p.bm = null; }
       return new Promise(function(ok){ c.toBlob(function(bl){ c.width = c.height = 1; ok(new File([bl], p.name.replace(/\.[^.]+$/, '') + '_base.jpg', { type:'image/jpeg' })); }, 'image/jpeg', 0.97); });
+    });
     });
   });
 }
