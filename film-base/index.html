@@ -103,7 +103,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
     <canvas id="cv" hidden></canvas><canvas id="hq" hidden></canvas>
     <div class="badge" id="badge">元の写真</div><button type="button" id="exp2" hidden>書き出す</button><div class="busy" id="busy"></div>
   </div>
-  <div class="tip" id="tip" hidden>ピンチで拡大　／　長押しで元の写真　／　ダブルタップで等倍</div>
+  <div class="tip" id="tip" hidden>ピンチ・ダブルタップで拡大　／　長押しで元の写真</div>
   </div>
   <div class="thumbs" id="thumbs"></div>
 
@@ -681,12 +681,13 @@ function render(){
     fbHQ();
     var was = moved; g = null; if (was){ lastTap = 0; return; }
     var now = Date.now(); clearTimeout(tapT);
-    if (now - lastTap < 300){ lastTap = 0; if (Z.s > 1){ fbResetZoom(); } else zoomAt(e.changedTouches[0]); }
+    if (now - lastTap < 300){ lastTap = 0; if (Z.s > 1){ fbResetZoom(); } else zoomTo(e.changedTouches[0]); }
     else { lastTap = now; var tp = e.changedTouches[0], tx = tp.clientX, ty = tp.clientY; tapT = setTimeout(function(){ focusAt(tx, ty); }, 320); }
   });
-  v.addEventListener('mousedown', function(){ hold = setTimeout(function(){ orig(true); }, 300); });
+  v.addEventListener('mousedown', function(){ if (Date.now() - lastTouchT < 1000) return; hold = setTimeout(function(){ orig(true); }, 300); });
   v.addEventListener('mouseup', function(){ clearTimeout(hold); if (showingOrig) orig(false); });
-  v.addEventListener('dblclick', function(e){ if (Z.s > 1) fbResetZoom(); else zoomAt(e); });
+  var lastTouchT = 0; v.addEventListener('touchstart', function(){ lastTouchT = Date.now(); }, { passive:true });
+  v.addEventListener('dblclick', function(e){ if (Date.now() - lastTouchT < 1000) return; if (Z.s > 1) fbResetZoom(); else zoomTo(e); });   // 指で触った直後の「ダブルクリック」は無視（タッチで二重に動かないように）
   v.addEventListener('wheel', function(e){ if (!e.ctrlKey) return; e.preventDefault(); Z.s = Math.max(1, Math.min(8, Z.s * Math.exp(-e.deltaY / 150))); applyZ(); fbHQ(); }, { passive:false });
   window.addEventListener('resize', applyZ);
   var tapT = 0;
@@ -694,6 +695,14 @@ function render(){
     var p = photos[cur]; if (!p || !st.on.depth || p.zoom) return; var r = cv.getBoundingClientRect(); if (!r.width) return;
     var fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height; if (fx < 0 || fy < 0 || fx > 1 || fy > 1) return;
     st.P.dpX = Math.round(fx * 1000) / 1000; st.P.dpY = Math.round(fy * 1000) / 1000; save(); toast('ここにピントを合わせました'); schedule(); }
+  // ダブルタップ：ピンチと同じ拡大で、タップした所を中心に等倍（1画素＝画面の1点）まで寄る。そのまま指で動かせる
+  function zoomTo(pt){
+    var p = photos[cur]; if (!p || !p.prev || !cv.offsetWidth) return;
+    var dpr = window.devicePixelRatio || 1, s = Math.max(2, Math.min(8, p.W / (cv.offsetWidth * dpr))), r = v.getBoundingClientRect();
+    var mx = pt.clientX - r.left - r.width / 2, my = pt.clientY - r.top - r.height / 2;
+    Z.s = s; Z.x = mx * (1 - s); Z.y = my * (1 - s); applyZ(); fbHQ();
+    $('badge').textContent = '等倍（ダブルタップで戻る）'; $('badge').classList.add('on'); setTimeout(function(){ if (!showingOrig) $('badge').classList.remove('on'); }, 1400);
+  }
   function zoomAt(pt){
     var p = photos[cur]; if (!p || !p.bm) return;
     if (p.zoom){ p.zoom = null; $('badge').classList.remove('on'); cv.width = p.prev.width; cv.height = p.prev.height; schedule(); return; }
