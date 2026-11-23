@@ -341,6 +341,7 @@ var cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently:true });
 var wk = new Worker(URL.createObjectURL(new Blob([$('engine').textContent], { type:'text/javascript' })));
 var jobs = {}, jid = 0;
 wk.onmessage = function(e){ var m = e.data, f = jobs[m.id]; delete jobs[m.id]; if (f) f(m); };
+wk.onerror = function(){ toast('処理が止まりました。アプリを閉じて開き直してください'); var b = document.getElementById('busy'); if (b) b.classList.remove('on'); };
 function work(msg, tr){ return new Promise(function(ok){ var id = ++jid; msg.id = id; jobs[id] = ok; wk.postMessage(msg, tr || []); }); }
 
 function toast(t){ var e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function(){ e.classList.remove('on'); }, 2200); }
@@ -404,6 +405,8 @@ function renderPatsNote(){ renderPats(); }
 var FMT = { cN:function(v){ return (v < 34 ? 4 : v < 67 ? 6 : 8) + '本'; }, mN:function(v){ return (v < 34 ? 1 : v < 67 ? 2 : 3) + '回'; }, cR:function(v){ return Math.round(v * 0.9) + '°'; }, sA:function(v){ return Math.round(v * 1.8) + '°'; } };
 
 // ---- 写真 ----
+var SCv = null; function SC(w, h){ if (!SCv) SCv = document.createElement('canvas'); SCv.width = w; SCv.height = h; return SCv; }
+function freeSC(){ if (SCv){ SCv.width = 1; SCv.height = 1; } }   // iPhoneは画像メモリの上限が小さいので、作業用の画像はすぐ返す
 var photos = [], cur = -1, MAXPX = 16000000;   // iPhoneのブラウザが扱える上限（約1600万画素）
 $('empty').onclick = function(){ $('file').click(); };
 $('ovfile').onchange = function(){ var f = this.files[0]; this.value = ''; if (f){ if (!st.on.multi){ st.on.multi = 1; save(); } setOverlay(f); } };
@@ -432,17 +435,18 @@ function renderThumbs(){
   var add = document.createElement('button'); add.type = 'button'; add.className = 'add'; add.innerHTML = '<span>＋</span>写真を選び直す'; add.onclick = function(){ $('file').click(); }; box.appendChild(add);
 }
 function select(i){
+  photos.forEach(function(q, k){ if (k !== i && q.bm){ if (q.bm.close) q.bm.close(); q.bm = null; } });   // 表示中以外の大きな画像は閉じて、メモリを空ける
   cur = i; st.cur = i; save(); var p = photos[i]; renderThumbs(); $('busy').classList.add('on');
   decode(p.f).then(function(bm){
     p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
-    var c = document.createElement('canvas'), ss = 1024 / Math.max(w, h); c.width = Math.round(w * ss); c.height = Math.round(h * ss);
+    var ss = 1024 / Math.max(w, h), c = SC(Math.round(w * ss), Math.round(h * ss));
     var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, c.width, c.height);
     var d = x.getImageData(0, 0, c.width, c.height); wk.postMessage({ type:'small', key:p.key, data:d.data, sw:c.width, sh:c.height });
     var view = $('view'), pw = Math.min(1500, Math.round(view.clientWidth * (window.devicePixelRatio || 1))), ps = Math.min(1, pw / w);
     if (h * ps > 1500) ps = 1500 / h;
-    var pc = document.createElement('canvas'); pc.width = Math.round(w * ps); pc.height = Math.round(h * ps);
+    var pc = SC(Math.round(w * ps), Math.round(h * ps));
     var px = pc.getContext('2d'); px.imageSmoothingQuality = 'high'; px.drawImage(bm, 0, 0, pc.width, pc.height);
-    p.prev = px.getImageData(0, 0, pc.width, pc.height); p.zoom = null; if (window.fbResetZoom) fbResetZoom();
+    p.prev = px.getImageData(0, 0, pc.width, pc.height); freeSC(); p.zoom = null; if (window.fbResetZoom) fbResetZoom();
     cv.width = pc.width; cv.height = pc.height; cv.hidden = false; $('empty').hidden = true; $('tip').hidden = false; $('exp').disabled = false; $('exp2').hidden = false;
     $('exp').textContent = photos.length > 1 ? '書き出す ' + photos.length + '枚' : '書き出す';
     ctx.putImageData(p.prev, 0, 0); schedule();
@@ -458,9 +462,9 @@ function ovBuf(w, h, ox, oy, W, H, P){
   if (!OV || !OV.bm || !P.on || !P.on.multi) return null;
   var bw = OV.bm.width, bh = OV.bm.height, L = Math.max(W, H), sc = Math.max(W / bw, H / bh) * (1 + (P.mS - 50) / 50 * 0.4), dw = bw * sc, dh = bh * sc;
   var dx = (P.mX - 50) / 50 * 0.3 * W, dy = (P.mY - 50) / 50 * 0.3 * H;
-  var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+  var c = SC(w, h), x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
   x.drawImage(OV.bm, (W - dw) / 2 + dx - ox, (H - dh) / 2 + dy - oy, dw, dh);
-  return x.getImageData(0, 0, w, h).data.buffer;
+  var ob = x.getImageData(0, 0, w, h).data.buffer; freeSC(); return ob;
 }
 function runJob(msg, tr){ var b = ovBuf(msg.w, msg.h, msg.ox, msg.oy, msg.W, msg.H, msg.P); if (b){ msg.ov = b; tr.push(b); } return work(msg, tr); }
 function setOverlay(f, restoring){
@@ -502,14 +506,14 @@ function render(){
     var u0 = Math.max(0, -left / cw), u1 = Math.min(1, (vw - left) / cw), v0 = Math.max(0, -top / ch), v1 = Math.min(1, (vh - top) / ch); if (u1 <= u0 || v1 <= v0) return;
     var ex = u0 * p.W, ey = v0 * p.H, ew = (u1 - u0) * p.W, eh = (v1 - v0) * p.H;
     var dw = (u1 - u0) * cw * dpr, dh = (v1 - v0) * ch * dpr, k = Math.min(1, dw / ew), tw = Math.max(1, Math.round(ew * k)), th = Math.max(1, Math.round(eh * k));
-    var c = document.createElement('canvas'); c.width = tw; c.height = th; var x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
+    var c = SC(tw, th), x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
     x.drawImage(p.bm, ex * sx, ey * sx, ew * sx, eh * sx, 0, 0, tw, th);
-    var buf = x.getImageData(0, 0, tw, th).data.buffer;
+    var buf = x.getImageData(0, 0, tw, th).data.buffer; freeSC();
     runJob({ type:'run', key:p.key, buf:buf, w:tw, h:th, ox:Math.round(ex * k), oy:Math.round(ey * k), W:Math.round(p.W * k), H:Math.round(p.H * k), P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
       if (n !== hqN || photos[cur] !== p || showingOrig) return;
       hq.width = Math.round(vw * dpr); hq.height = Math.round(vh * dpr); var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
-      var tc = document.createElement('canvas'); tc.width = m.w; tc.height = m.h; tc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
-      hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, Math.max(0, left) * dpr, Math.max(0, top) * dpr, dw, dh); hq.hidden = false;
+      var tc = SC(m.w, m.h); tc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
+      hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, Math.max(0, left) * dpr, Math.max(0, top) * dpr, dw, dh); freeSC(); hq.hidden = false;
     });
   }
   function mid(t){ var r = v.getBoundingClientRect(); return { x:(t[0].clientX + t[1].clientX) / 2 - r.left - r.width / 2, y:(t[0].clientY + t[1].clientY) / 2 - r.top - r.height / 2 }; }
@@ -546,9 +550,9 @@ function render(){
     if (p.zoom){ p.zoom = null; $('badge').classList.remove('on'); cv.width = p.prev.width; cv.height = p.prev.height; schedule(); return; }
     var r = cv.getBoundingClientRect(), fx = (pt.clientX - r.left) / r.width, fy = (pt.clientY - r.top) / r.height;
     var cw = Math.min(p.W, 900), chh = Math.min(p.H, Math.round(900 * r.height / r.width)), ox = Math.round(Math.max(0, Math.min(p.W - cw, fx * p.W - cw / 2))), oy = Math.round(Math.max(0, Math.min(p.H - chh, fy * p.H - chh / 2)));
-    var c = document.createElement('canvas'); c.width = cw; c.height = chh; var x = c.getContext('2d'), sx = p.bm.width / p.W;
+    var c = SC(cw, chh), x = c.getContext('2d'), sx = p.bm.width / p.W;
     x.imageSmoothingQuality = 'high'; x.drawImage(p.bm, ox * sx, oy * sx, cw * sx, chh * sx, 0, 0, cw, chh);
-    p.zoom = { data:x.getImageData(0, 0, cw, chh), ox:ox, oy:oy };
+    p.zoom = { data:x.getImageData(0, 0, cw, chh), ox:ox, oy:oy }; freeSC();
     $('badge').textContent = '等倍（ダブルタップで戻る）'; $('badge').classList.add('on'); setTimeout(function(){ if (!showingOrig) $('badge').classList.remove('on'); }, 1600);
     cv.width = cw; cv.height = chh; schedule();
   }
@@ -569,11 +573,12 @@ function exportOne(i){
   var p = photos[i];
   return (p.bm ? Promise.resolve(p.bm) : decode(p.f)).then(function(bm){
     p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
-    if (i !== cur){ var c0 = document.createElement('canvas'), ss = 1024 / Math.max(w, h); c0.width = Math.round(w * ss); c0.height = Math.round(h * ss); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); wk.postMessage({ type:'small', key:p.key, data:x0.getImageData(0, 0, c0.width, c0.height).data, sw:c0.width, sh:c0.height }); }
+    if (i !== cur){ var ss = 1024 / Math.max(w, h), c0 = SC(Math.round(w * ss), Math.round(h * ss)); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); wk.postMessage({ type:'small', key:p.key, data:x0.getImageData(0, 0, c0.width, c0.height).data, sw:c0.width, sh:c0.height });  freeSC(); }
     var c = document.createElement('canvas'); c.width = p.W; c.height = p.H; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, p.W, p.H);
     var d = x.getImageData(0, 0, p.W, p.H), buf = d.data.buffer; d = null;
     return runJob({ type:'run', key:p.key, buf:buf, w:p.W, h:p.H, ox:0, oy:0, W:p.W, H:p.H, P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
       x.putImageData(new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), 0, 0);
+      if (i !== cur && p.bm){ if (p.bm.close) p.bm.close(); p.bm = null; }
       return new Promise(function(ok){ c.toBlob(function(bl){ c.width = c.height = 1; ok(new File([bl], p.name.replace(/\.[^.]+$/, '') + '_base.jpg', { type:'image/jpeg' })); }, 'image/jpeg', 0.97); });
     });
   });
