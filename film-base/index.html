@@ -612,6 +612,11 @@ function render(){
   var v = $('view'), hold = 0, lastTap = 0, showingOrig = false, Z = { s:1, x:0, y:0 }, g = null, moved = false;
   function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; var hqOk = HQS && HQS.n === hqN && !hq.hidden && Z.s > 1;
     if (hqOk){ $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on); drawHQ(on ? HQS.orig : HQS.res); return; }   // 拡大中は、くっきり版の元の写真を出す
+    if (Z.s > 1 && !p.zoom && p.bm){   // くっきり版がまだ（計算中）でも、元の写真は元の解像度からすぐ切り出して出す（加工がいらないので速い）
+      $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
+      if (on){ origDirect(p); return; }
+      if (HQS && HQS.n === hqN) { drawHQ(HQS.res); return; }
+      hq.hidden = true; fbHQ(); return; }
     if (on) hqHide(); $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
     if (on){ var s = p.zoom ? p.zoom.data : p.prev; cv.width = s.width; cv.height = s.height; ctx.putImageData(s, 0, 0); }
     else if (p.res && p.res.sig === sigOf(p, p.zoom, params())){ cv.width = p.res.img.width; cv.height = p.res.img.height; ctx.putImageData(p.res.img, 0, 0); }
@@ -629,6 +634,13 @@ function render(){
   var HQS = null;
   function drawHQ(img){ if (!HQS) return; hq.width = HQS.W; hq.height = HQS.H; var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
     var tc = SC(img.width, img.height); tc.getContext('2d').putImageData(img, 0, 0); hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, HQS.x, HQS.y, HQS.dw, HQS.dh); freeSC(); hq.hidden = false; }
+  function hqGeo(p){ var vw = v.clientWidth, vh = v.clientHeight, dpr = window.devicePixelRatio || 1, cw = cv.offsetWidth * Z.s, ch = cv.offsetHeight * Z.s;
+    var left = vw / 2 + Z.x - cw / 2, top = vh / 2 + Z.y - ch / 2;
+    var u0 = Math.max(0, -left / cw), u1 = Math.min(1, (vw - left) / cw), v0 = Math.max(0, -top / ch), v1 = Math.min(1, (vh - top) / ch); if (u1 <= u0 || v1 <= v0) return null;
+    return { vw:vw, vh:vh, dpr:dpr, x:Math.max(0, left) * dpr, y:Math.max(0, top) * dpr, dw:(u1 - u0) * cw * dpr, dh:(v1 - v0) * ch * dpr, ex:u0 * p.W, ey:v0 * p.H, ew:(u1 - u0) * p.W, eh:(v1 - v0) * p.H }; }
+  function origDirect(p){ var G = hqGeo(p); if (!G) return; var sx = p.bm.width / p.W;
+    hq.width = Math.round(G.vw * G.dpr); hq.height = Math.round(G.vh * G.dpr); var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height); hx.imageSmoothingQuality = 'high';
+    hx.drawImage(p.bm, G.ex * sx, G.ey * sx, G.ew * sx, G.eh * sx, G.x, G.y, G.dw, G.dh); hq.hidden = false; }
   function makeHQ(p){
     var n = ++hqN, vw = v.clientWidth, vh = v.clientHeight, dpr = window.devicePixelRatio || 1, cw = cv.offsetWidth * Z.s, ch = cv.offsetHeight * Z.s;
     var left = vw / 2 + Z.x - cw / 2, top = vh / 2 + Z.y - ch / 2;
