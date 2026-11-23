@@ -670,7 +670,10 @@ function render(){
     if (g && e.touches.length === 2 && g.d){ e.preventDefault(); moved = true;
       var m = mid(e.touches), s = Math.max(1, Math.min(8, g.s * dist(e.touches) / g.d)), k = s / g.s;
       Z.s = s; Z.x = m.x - (g.mx - g.x) * k; Z.y = m.y - (g.my - g.y) * k; applyZ(); return; }
-    if (g && g.pan && e.touches.length === 1){ e.preventDefault(); var t = e.touches[0], dx = t.clientX - g.px, dy = t.clientY - g.py; if (Math.abs(dx) + Math.abs(dy) > 6){ moved = true; clearTimeout(hold); } Z.x = g.x + dx; Z.y = g.y + dy; applyZ(); return; }
+    if (showingOrig){ e.preventDefault(); return; }   // 長押し中は動かさない（わずかなずれで読み込み直さないように）
+    if (g && g.pan && e.touches.length === 1){ e.preventDefault(); var t = e.touches[0], dx = t.clientX - g.px, dy = t.clientY - g.py;
+      if (!moved){ if (Math.abs(dx) + Math.abs(dy) <= 8) return; moved = true; clearTimeout(hold); g.px = t.clientX; g.py = t.clientY; return; }   // 少し動くまでは止まったまま（長押しと区別）
+      Z.x = g.x + dx; Z.y = g.y + dy; applyZ(); return; }
     moved = true; clearTimeout(hold);
   }, { passive:false });
   v.addEventListener('touchend', function(e){
