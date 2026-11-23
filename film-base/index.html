@@ -220,7 +220,7 @@ var FB = (function(){
     for (y = 0; y < h; y++) for (x = 0; x < w; x++){ v = T[y * w + x]; for (k = 1; k <= r; k++){ var p2 = T[Math.max(0, y - k) * w + x], q2 = T[Math.min(h - 1, y + k) * w + x]; if (isMax){ if (p2 > v) v = p2; if (q2 > v) v = q2; } else { if (p2 < v) v = p2; if (q2 < v) v = q2; } } O[y * w + x] = v; }
     return O;
   }
-  function s2lf(q){ return q <= 0.04045 ? q / 12.92 : Math.pow((q + 0.055) / 1.055, 2.4); }
+  function s2lf(q){ return s2l(q); }   // 表引きで速く
   // 見本と撮って出しの境目を同じ大きさで比べると、見本は ①境目の外側の明暗の縁（シャープ・明瞭度の縁取り）がほぼ無く
   // ②暗い側へわずかに光が回り込み ③弱い細かい凹凸が少ない。境目そのものは太らせない＝ぼかしではなく、縁取りを消して光を回す
   function filmSoft(src, w, h, L, P){
@@ -258,7 +258,9 @@ var FB = (function(){
   // ---- 本体：src（RGBA 8bit、全体W×Hのうち ox,oy から w×h の範囲）を処理して out に書く ----
   function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov){
     var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
-    if (on.fsoft) src = filmSoft(src, w, h, L, P);   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
+    if (on.fsoft){   // 輪郭の柔らかさは重いので、同じ写真・同じ範囲・同じ値なら前の結果を使う（他の効果を動かす時に速い）
+      var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
+      var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
     var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
     var hal = on.hal ? P.halR / 100 * 7 : 0, blo = on.hal ? P.halW / 100 * 1.8 : 0;
     var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
