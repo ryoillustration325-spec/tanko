@@ -22,7 +22,9 @@ header p{margin:3px 0 0;color:var(--sub);font-size:13px}
 main{padding:0 14px calc(env(safe-area-inset-bottom) + 28px);max-width:720px;margin:0 auto}
 .stick{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -14px;padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;transition:box-shadow .2s}
 .stick.sh{box-shadow:0 8px 14px -10px rgba(0,0,0,.7)}
-.stick.sh .tip{display:none}
+.stick .tip{transition:opacity .15s}
+.stick.sh .tip{opacity:0}   /* 高さは変えない（変えるとスクロール位置がずれて、表示が行ったり来たりする） */
+.stick::after{content:"";position:absolute;left:0;right:0;bottom:-14px;height:14px;background:linear-gradient(var(--bg),rgba(18,17,16,0));pointer-events:none}
 .view{position:relative;background:#080807;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .view canvas{display:block;max-width:100%;max-height:42vh;height:auto;transform-origin:50% 50%;will-change:transform}
 .view .empty{color:#8f897e;text-align:center;padding:48px 28px;font-size:13.5px;width:100%;line-height:1.7}
@@ -768,7 +770,7 @@ function deliver(files){
 renderPats(); renderGroups();
 idbGet('overlay').then(function(r){ if (r && r.blob){ var f = r.blob; try{ f = new File([r.blob], r.name, { type:r.type }); }catch(e){} setOverlay(f, true); } });
 idbGet('photos').then(function(list){ if (list && list.length && !photos.length){ var fs = list.map(function(r){ var b = r.blob; try{ b = new File([r.blob], r.name, { type:r.type }); }catch(e){ b.name = r.name; } return b; }); addPhotos(fs, true); } });   // 前回の写真を戻す
-window.addEventListener('scroll', function(){ $('stick').classList.toggle('sh', window.scrollY > 120); }, { passive:true });
+(function(){ var on = false; window.addEventListener('scroll', function(){ var y = window.scrollY, nx = on ? y > 90 : y > 150; if (nx !== on){ on = nx; $('stick').classList.toggle('sh', on); } }, { passive:true }); })();   // 行き来しないよう、出す所と消す所をずらす
 if ('serviceWorker' in navigator){   // 新しい版が入ったら1回だけ読み直す（古い画面のまま残らないように）
   var hadCtl = !!navigator.serviceWorker.controller, reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', function(){ if (hadCtl && !reloaded && !photos.length){ reloaded = true; location.reload(); } });
