@@ -181,7 +181,8 @@ var FB = (function(){
   var memo = {};
   function M(name, k, fn){ var c = memo[name]; if (c && c.k === k) return c.v; var v = fn(); memo[name] = { k:k, v:v }; return v; }
   function half(A, w, h){ var w2 = Math.max(1, w >> 1), h2 = Math.max(1, h >> 1), B = new Float32Array(w2 * h2); for (var y = 0; y < h2; y++) for (var x = 0; x < w2; x++){ var i = (y * 2) * w + x * 2; B[y * w2 + x] = (A[i] + A[i + 1] + A[i + w] + A[i + w + 1]) * 0.25; } return mk(B, w2, h2); }
-  function excess(R, G, B, n, thr){ var E = new Float32Array(n); for (var i = 0; i < n; i++){ var Y = 0.2126 * R[i] + 0.7152 * G[i] + 0.0722 * B[i]; E[i] = Y > thr ? Math.pow((Y - thr) / (1 - thr), 1.3) : 0; } return E; }
+  // 光の量は一番強い色で見る（赤いネオンは赤の強さのまま光る。人の目の明るさの重み付けは使わない）。写真は明るい所を圧縮しているので、飽和に近いほど元の光は急に強い＝2乗で戻す
+  function excess(R, G, B, n, thr){ var E = new Float32Array(n); for (var i = 0; i < n; i++){ var Y = Math.max(R[i], G[i], B[i]); E[i] = Y > thr ? Math.pow((Y - thr) / (1 - thr), 2) : 0; } return E; }
   // 線に沿った積分（クロス・光の軌跡）
   function streak(m, ang, len, oneSide){ var w = m.w, h = m.h, A = m.A, O = new Float32Array(w * h), dx = Math.cos(ang), dy = Math.sin(ang), N = 28, st = len / N, ws = 0, k;
     for (k = 1; k <= N; k++) ws += Math.exp(-k / N * 3) * (oneSide ? 1 : 2);
@@ -206,7 +207,7 @@ var FB = (function(){
     if (on.hal){ var thr = 0.35 + 0.55 * P.halT / 100, sh_ = (0.004 + 0.02 * P.halS / 100) * Ls, sb = (0.015 + 0.06 * P.halS / 100) * Ls;
       o.hal = M('hal', key + thr + '|' + sh_ + '|' + sb, function(){ var E = excess(base.R, base.G, base.B, n, thr), h1 = blur(E, sw, sh, sh_), h2 = blur(E, sw, sh, sh_ * 0.35);
         for (var i = 0; i < n; i++) h1[i] = 0.6 * h1[i] + 0.4 * h2[i];
-        var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n); for (i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i]; ER[i] = r > thr ? (r - thr) / (1 - thr) : 0; EG[i] = g > thr ? (g - thr) / (1 - thr) : 0; EB[i] = b > thr ? (b - thr) / (1 - thr) : 0; }
+        var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n); for (i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = Math.max(r, g, b), e = Y > thr ? Math.pow((Y - thr) / (1 - thr), 2) : 0; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
         return { H:mk(h1, sw, sh), R:mk(blur(ER, sw, sh, sb), sw, sh), G:mk(blur(EG, sw, sh, sb), sw, sh), B:mk(blur(EB, sw, sh, sb), sw, sh) }; }); }
     if (on.lens && P.lSoft > 0){ var ss = (0.002 + 0.005 * P.lSoft / 100) * Ls;
       o.soft = M('soft', key + ss, function(){ return { R:mk(blur(base.R, sw, sh, ss), sw, sh), G:mk(blur(base.G, sw, sh, ss), sw, sh), B:mk(blur(base.B, sw, sh, ss), sw, sh) }; }); }
@@ -222,30 +223,34 @@ var FB = (function(){
         return { LR:two(base.R), LG:two(base.G), LB:two(base.B), GR:two(g8[0]), GG:two(g8[1]), GB:two(g8[2]) }; }); }
     var needLC = ['oCm', 'cCm', 'aCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; });
     if (needLC) o.lc = M('lc', key + '|lc', function(){ var thr = 0.5, ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n);
-      for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, e = Y > thr ? (Y - thr) / (1 - thr) : 0; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
+      for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i]; ER[i] = r > thr ? (r - thr) / (1 - thr) : 0; EG[i] = g > thr ? (g - thr) / (1 - thr) : 0; EB[i] = b > thr ? (b - thr) / (1 - thr) : 0; }
       var a = half(ER, sw, sh), b2 = half(EG, sw, sh), c = half(EB, sw, sh), sg = 0.012 * Ls; return { R:mk(blur(a.A, a.w, a.h, sg), a.w, a.h), G:mk(blur(b2.A, b2.w, b2.h, sg), b2.w, b2.h), B:mk(blur(c.A, c.w, c.h, sg), c.w, c.h) }; });
     if (on.prism){ var pt = 0.45 + 0.5 * P.pT / 100, pb = (0.004 + 0.03 * P.pB / 100) * Ls;
       o.prism = M('prism', key + pt + '|' + pb, function(){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), E = new Float32Array(n);
-        for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, e = Y > pt ? Math.pow((Y - pt) / (1 - pt), 1.2) : 0; E[i] = e; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
+        for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = Math.max(r, g, b), e = Y > pt ? Math.pow((Y - pt) / (1 - pt), 2) : 0; E[i] = e; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
         var h1 = half(E, sw, sh), w2 = h1.w, h2 = h1.h, bl = function(A){ var hA = half(A, sw, sh); return mk(blur(hA.A, w2, h2, pb / 2), w2, h2); };
         return { E:mk(blur(h1.A, w2, h2, pb / 2), w2, h2), R:bl(ER), G:bl(EG), B:bl(EB) }; }); }
     if (on.slow){ var ang = P.sA / 100 * Math.PI, ln = (0.02 + 0.25 * P.sL / 100) * Ls, sSp = (P.sCm === 'rainbow' ? Math.max(0.6, P.sS / 100) : P.sS / 100) || 0;
       o.slow = M('slow', key + ang + '|' + ln + '|' + sSp, function(){ var E = excess(base.R, base.G, base.B, n, 0.45), Eh = half(E, sw, sh), Rh = half(base.R, sw, sh), Gh = half(base.G, sw, sh), Bh = half(base.B, sw, sh);
         var T = mk(streak(Eh, ang, ln / 2, true), Eh.w, Eh.h), TR = sSp > 0 ? mk(streak(Eh, ang, ln / 2 * (1 + 0.4 * sSp), true), Eh.w, Eh.h) : T, TB = sSp > 0 ? mk(streak(Eh, ang, ln / 2 * (1 - 0.4 * sSp), true), Eh.w, Eh.h) : T;   // 色の分かれ：赤は長く、青は短く流れる
         return { T:T, TR:TR, TB:TB, R:mk(dirBlur(Rh.A, Rh.w, Rh.h, ang, ln / 4), Rh.w, Rh.h), G:mk(dirBlur(Gh.A, Gh.w, Gh.h, ang, ln / 4), Gh.w, Gh.h), B:mk(dirBlur(Bh.A, Bh.w, Bh.h, ang, ln / 4), Bh.w, Bh.h) }; }); }
-    if (on.cross){ var ct = 0.55 + 0.4 * P.cT / 100, cl = (0.03 + 0.25 * P.cL / 100) * Ls, cn = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, cr = P.cR / 100 * Math.PI / 2, crb = P.cCm === 'rainbow';
-      o.cross = M('cross', key + ct + '|' + cl + '|' + cn + '|' + cr + '|' + crb, function(){ var E = excess(base.R, base.G, base.B, n, ct), Eh = half(E, sw, sh);
-        function one(sc){ var S = new Float32Array(Eh.w * Eh.h); for (var a = 0; a < cn; a++){ var T = streak(Eh, cr + a * Math.PI / cn, cl / 2 * sc, false); for (var i = 0; i < S.length; i++) S[i] += T[i]; } return mk(S, Eh.w, Eh.h); }
-        var G = one(1); return crb ? { G:G, R:one(1.35), B:one(0.7) } : { G:G, R:G, B:G }; }); }   // 虹：赤は長く、青は短い筋
+    if (on.cross){ var ct = 0.55 + 0.4 * P.cT / 100, cl = (0.03 + 0.25 * P.cL / 100) * Ls, cn = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, cr = P.cR / 100 * Math.PI / 2, crb = P.cCm === 'rainbow', crs = P.cCm === 'src';
+      o.cross = M('cross', key + ct + '|' + cl + '|' + cn + '|' + cr + '|' + crb + crs, function(){ var E = excess(base.R, base.G, base.B, n, ct), Eh = half(E, sw, sh);
+        function one(H, sc){ var S = new Float32Array(H.w * H.h); for (var a = 0; a < cn; a++){ var T = streak(H, cr + a * Math.PI / cn, cl / 2 * sc, false); for (var i = 0; i < S.length; i++) S[i] += T[i]; } return mk(S, H.w, H.h); }
+        function ch(C){ var X = new Float32Array(n); for (var i = 0; i < n; i++) X[i] = E[i] * C[i]; return half(X, sw, sh); }   // 光の色のまま：赤い光は赤い筋になる（周りの色は混ぜない）
+        if (crs) return { R:one(ch(base.R), 1), G:one(ch(base.G), 1), B:one(ch(base.B), 1), src:1 };
+        var G = one(Eh, 1); return crb ? { G:G, R:one(Eh, 1.35), B:one(Eh, 0.7) } : { G:G, R:G, B:G }; }); }   // 虹：赤は長く、青は短い筋
     if (on.ray){ var rt = 0.4 + 0.5 * P.rT / 100, rx = P.rX / 100, ry = P.rY / 100, rl = 0.2 + 0.75 * P.rL / 100;
       o.ray = M('ray', key + rt + '|' + rx + '|' + ry + '|' + rl, function(){ var E = excess(base.R, base.G, base.B, n, rt), Eh = half(E, sw, sh), w = Eh.w, h = Eh.h, O = new Float32Array(w * h), N = 36, sx = rx * w, sy = ry * h;
         for (var y = 0; y < h; y++) for (var x = 0; x < w; x++){ var dx = (sx - x) * rl / N, dy = (sy - y) * rl / N, s = 0, dec = 1, px = x, py = y;
           for (var k = 0; k < N; k++){ px += dx; py += dy; if (px < 0 || py < 0 || px > w - 1 || py > h - 1) break; s += Eh.A[(py | 0) * w + (px | 0)] * dec; dec *= 0.955; }
           O[y * w + x] = s / N * 2.2; }
         return mk(O, w, h); }); }
-    if (on.ana){ var at = 0.5 + 0.45 * P.aT / 100, al = (0.05 + 0.45 * P.aL / 100) * Ls, arb = P.aCm === 'rainbow';
-      o.ana = M('ana', key + at + '|' + al + '|' + arb, function(){ var E = excess(base.R, base.G, base.B, n, at), Eh = half(E, sw, sh);
-        function one(sc){ var A1 = blurH(Eh.A, Eh.w, Eh.h, al / 2 * sc), A2 = blurH(Eh.A, Eh.w, Eh.h, al / 8 * sc); for (var i = 0; i < A1.length; i++) A1[i] = A1[i] * 0.7 + A2[i] * 0.3; var A3 = new Float32Array(A1.length); boxV(A1, A3, Eh.w, Eh.h, 1); return mk(A3, Eh.w, Eh.h); }
+    if (on.ana){ var at = 0.5 + 0.45 * P.aT / 100, al = (0.05 + 0.45 * P.aL / 100) * Ls, arb = P.aCm === 'rainbow', ars = P.aCm === 'src';
+      o.ana = M('ana', key + at + '|' + al + '|' + arb + ars, function(){ var E = excess(base.R, base.G, base.B, n, at), Eh = half(E, sw, sh);
+        function one(sc, H){ H = H || Eh; var A1 = blurH(H.A, H.w, H.h, al / 2 * sc), A2 = blurH(H.A, H.w, H.h, al / 8 * sc); for (var i = 0; i < A1.length; i++) A1[i] = A1[i] * 0.7 + A2[i] * 0.3; var A3 = new Float32Array(A1.length); boxV(A1, A3, H.w, H.h, 1); return mk(A3, H.w, H.h); }
+        function ch(C){ var X = new Float32Array(n); for (var i = 0; i < n; i++) X[i] = E[i] * C[i]; return half(X, sw, sh); }   // 光の色のまま
+        if (ars) return { R:one(1, ch(base.R)), G:one(1, ch(base.G)), B:one(1, ch(base.B)), src:1 };
         var G = one(1); return arb ? { G:G, R:one(1.4), B:one(0.65) } : { G:G, R:G, B:G }; }); }
     return o;
   }
@@ -389,10 +394,12 @@ var FB = (function(){
         if (ob && oA > 0){ var odx = (X - oX) / oR, ody = (Y - oY) / oR, od2 = odx * odx + ody * ody;
           if (od2 < 9){ var og = Math.exp(-od2 / oSp) * oA * 1.6, oc = Math.exp(-od2 / 0.06) * oC * oA * 2.2, orr = Math.exp(-Math.pow(Math.sqrt(od2) - 1.05, 2) / 0.02) * oA * 0.12 * P.oSo / 100, ot = TC(oFix, oM, P.oH, oX / W, oY / H);
             ar += (og + orr) * ot[0] + oc; ag += (og + orr) * ot[1] + oc; ab += (og + orr) * ot[2] + oc; } }
-        if (cr > 0){ if (cM === 'rainbow'){ ar += sampleMap(Mp.cross.R, u, v) * cr; ag += sampleMap(Mp.cross.G, u, v) * cr * 0.95; ab += sampleMap(Mp.cross.B, u, v) * cr; }
+        if (cr > 0){ if (cM === 'src' && Mp.cross.src){ ar += sampleMap(Mp.cross.R, u, v) * cr; ag += sampleMap(Mp.cross.G, u, v) * cr; ab += sampleMap(Mp.cross.B, u, v) * cr; }
+          else if (cM === 'rainbow'){ ar += sampleMap(Mp.cross.R, u, v) * cr; ag += sampleMap(Mp.cross.G, u, v) * cr * 0.95; ab += sampleMap(Mp.cross.B, u, v) * cr; }
           else { var cv_ = sampleMap(Mp.cross.G, u, v) * cr; if (cv_ > 1e-4){ var ct_ = TC(cFix, cM, P.cH, u, v); ar += cv_ * ct_[0]; ag += cv_ * ct_[1]; ab += cv_ * ct_[2]; } } }
         if (ry_ > 0){ var rv = sampleMap(Mp.ray, u, v) * ry_; if (rv > 1e-4){ var rt_ = TC(rFix, rM, P.rH, u, v); ar += rv * rt_[0]; ag += rv * rt_[1]; ab += rv * rt_[2]; } }
-        if (an > 0){ if (aM === 'rainbow'){ ar += sampleMap(Mp.ana.R, u, v) * an; ag += sampleMap(Mp.ana.G, u, v) * an * 0.95; ab += sampleMap(Mp.ana.B, u, v) * an; }
+        if (an > 0){ if (aM === 'src' && Mp.ana.src){ ar += sampleMap(Mp.ana.R, u, v) * an; ag += sampleMap(Mp.ana.G, u, v) * an; ab += sampleMap(Mp.ana.B, u, v) * an; }
+          else if (aM === 'rainbow'){ ar += sampleMap(Mp.ana.R, u, v) * an; ag += sampleMap(Mp.ana.G, u, v) * an * 0.95; ab += sampleMap(Mp.ana.B, u, v) * an; }
           else { var av = sampleMap(Mp.ana.G, u, v) * an; if (av > 1e-4){ var at_ = TC(aFix, aM, P.aH, u, v); ar += av * at_[0]; ag += av * at_[1]; ab += av * at_[2]; } } }
         if (sl && sT > 0){ var tg_ = sampleMap(Mp.slow.T, u, v) * sT, tr_ = sampleMap(Mp.slow.TR, u, v) * sT, tb_ = sampleMap(Mp.slow.TB, u, v) * sT;
           if (sM === 'rainbow'){ ar += tr_; ag += tg_ * 0.95; ab += tb_; } else if (tg_ + tr_ + tb_ > 1e-4){ var st_ = TC(sFix, sM, P.sH, u, v); ar += tr_ * st_[0]; ag += tg_ * st_[1]; ab += tb_ * st_[2]; } }
