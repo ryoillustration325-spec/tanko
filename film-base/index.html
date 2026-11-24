@@ -181,8 +181,16 @@ var FB = (function(){
   var memo = {};
   function M(name, k, fn){ var c = memo[name]; if (c && c.k === k) return c.v; var v = fn(); memo[name] = { k:k, v:v }; return v; }
   function half(A, w, h){ var w2 = Math.max(1, w >> 1), h2 = Math.max(1, h >> 1), B = new Float32Array(w2 * h2); for (var y = 0; y < h2; y++) for (var x = 0; x < w2; x++){ var i = (y * 2) * w + x * 2; B[y * w2 + x] = (A[i] + A[i + 1] + A[i + w] + A[i + w + 1]) * 0.25; } return mk(B, w2, h2); }
-  // 光の量は一番強い色で見る（赤いネオンは赤の強さのまま光る。人の目の明るさの重み付けは使わない）。写真は明るい所を圧縮しているので、飽和に近いほど元の光は急に強い＝2乗で戻す
-  function excess(R, G, B, n, thr){ var E = new Float32Array(n); for (var i = 0; i < n; i++){ var Y = Math.max(R[i], G[i], B[i]); E[i] = Y > thr ? Math.pow((Y - thr) / (1 - thr), 2) : 0; } return E; }
+  // 光の判定（見本：Lightroomの光彩）。白飛びだけでなく、明るい所は明るさに応じてなめらかに光る。
+  // 光の量＝その色の強さ^1.5 × 明るさ（明るく色の濃い所ほど強く、色はその場所の色のまま）。白飛びした所は写真の外にまだ光があるので1.6倍。
+  // thr（拾う明るさ）は、ここより暗い所は光らない下限（なめらかに立ち上がる）。クロスなど点の光の効果は高め、にじみ・軌跡は低めが初期値
+  var GLN = 1 / 1.6;
+  function knee(Y, thr){ var t0 = Math.min(1, Math.max(0, (thr - 0.35) / 0.6)) * 0.85, k = Y <= t0 ? 0 : Math.min(1, (Y - t0) / 0.3); return k * k * (3 - 2 * k); }
+  function gw(r, g, b, thr){ var Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, M = Math.max(r, g, b); return Y * knee(Y, thr) * (M > 0.95 ? 1.6 : 1) * GLN; }
+  function excess(R, G, B, n, thr){ var E = new Float32Array(n); for (var i = 0; i < n; i++){ var r = R[i], g = G[i], b = B[i], M = Math.max(r, g, b); E[i] = M * Math.sqrt(M) * gw(r, g, b, thr); } return E; }
+  function excessC(R, G, B, n, thr){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), E = new Float32Array(n);
+    for (var i = 0; i < n; i++){ var r = R[i], g = G[i], b = B[i], w = gw(r, g, b, thr), M = Math.max(r, g, b); ER[i] = r * Math.sqrt(r) * w; EG[i] = g * Math.sqrt(g) * w; EB[i] = b * Math.sqrt(b) * w; E[i] = M * Math.sqrt(M) * w; }
+    return { R:ER, G:EG, B:EB, E:E }; }
   // 線に沿った積分（クロス・光の軌跡）
   function streak(m, ang, len, oneSide){ var w = m.w, h = m.h, A = m.A, O = new Float32Array(w * h), dx = Math.cos(ang), dy = Math.sin(ang), N = 28, st = len / N, ws = 0, k;
     for (k = 1; k <= N; k++) ws += Math.exp(-k / N * 3) * (oneSide ? 1 : 2);
@@ -222,12 +230,10 @@ var FB = (function(){
         function two(A){ var x1 = blur(A, sw, sh, sf1), x2 = blur(A, sw, sh, sf1 * 0.4); for (var i = 0; i < n; i++) x1[i] = x1[i] * 0.6 + x2[i] * 0.4; return mk(x1, sw, sh); }
         return { LR:two(base.R), LG:two(base.G), LB:two(base.B), GR:two(g8[0]), GG:two(g8[1]), GB:two(g8[2]) }; }); }
     var needLC = ['oCm', 'cCm', 'aCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; });
-    if (needLC) o.lc = M('lc', key + '|lc', function(){ var thr = 0.5, ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n);
-      for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i]; ER[i] = r > thr ? (r - thr) / (1 - thr) : 0; EG[i] = g > thr ? (g - thr) / (1 - thr) : 0; EB[i] = b > thr ? (b - thr) / (1 - thr) : 0; }
+    if (needLC) o.lc = M('lc', key + '|lc', function(){ var C = excessC(base.R, base.G, base.B, n, 0.5), ER = C.R, EG = C.G, EB = C.B;
       var a = half(ER, sw, sh), b2 = half(EG, sw, sh), c = half(EB, sw, sh), sg = 0.012 * Ls; return { R:mk(blur(a.A, a.w, a.h, sg), a.w, a.h), G:mk(blur(b2.A, b2.w, b2.h, sg), b2.w, b2.h), B:mk(blur(c.A, c.w, c.h, sg), c.w, c.h) }; });
     if (on.prism){ var pt = 0.45 + 0.5 * P.pT / 100, pb = (0.004 + 0.03 * P.pB / 100) * Ls;
-      o.prism = M('prism', key + pt + '|' + pb, function(){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), E = new Float32Array(n);
-        for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = Math.max(r, g, b), e = Y > pt ? Math.pow((Y - pt) / (1 - pt), 2) : 0; E[i] = e; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
+      o.prism = M('prism', key + pt + '|' + pb, function(){ var C = excessC(base.R, base.G, base.B, n, pt), ER = C.R, EG = C.G, EB = C.B, E = C.E;
         var h1 = half(E, sw, sh), w2 = h1.w, h2 = h1.h, bl = function(A){ var hA = half(A, sw, sh); return mk(blur(hA.A, w2, h2, pb / 2), w2, h2); };
         return { E:mk(blur(h1.A, w2, h2, pb / 2), w2, h2), R:bl(ER), G:bl(EG), B:bl(EB) }; }); }
     if (on.slow){ var ang = P.sA / 100 * Math.PI, ln = (0.02 + 0.25 * P.sL / 100) * Ls, sSp = (P.sCm === 'rainbow' ? Math.max(0.6, P.sS / 100) : P.sS / 100) || 0;
@@ -237,8 +243,8 @@ var FB = (function(){
     if (on.cross){ var ct = 0.55 + 0.4 * P.cT / 100, cl = (0.03 + 0.25 * P.cL / 100) * Ls, cn = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, cr = P.cR / 100 * Math.PI / 2, crb = P.cCm === 'rainbow', crs = P.cCm === 'src';
       o.cross = M('cross', key + ct + '|' + cl + '|' + cn + '|' + cr + '|' + crb + crs, function(){ var E = excess(base.R, base.G, base.B, n, ct), Eh = half(E, sw, sh);
         function one(H, sc){ var S = new Float32Array(H.w * H.h); for (var a = 0; a < cn; a++){ var T = streak(H, cr + a * Math.PI / cn, cl / 2 * sc, false); for (var i = 0; i < S.length; i++) S[i] += T[i]; } return mk(S, H.w, H.h); }
-        function ch(C){ var X = new Float32Array(n); for (var i = 0; i < n; i++) X[i] = E[i] * C[i]; return half(X, sw, sh); }   // 光の色のまま：赤い光は赤い筋になる（周りの色は混ぜない）
-        if (crs) return { R:one(ch(base.R), 1), G:one(ch(base.G), 1), B:one(ch(base.B), 1), src:1 };
+        var EC = crs ? excessC(base.R, base.G, base.B, n, ct) : null; function ch(C){ return half(C, sw, sh); }   // 光の色のまま：赤い光は赤い筋になる（周りの色は混ぜない）
+        if (crs) return { R:one(ch(EC.R), 1), G:one(ch(EC.G), 1), B:one(ch(EC.B), 1), src:1 };
         var G = one(Eh, 1); return crb ? { G:G, R:one(Eh, 1.35), B:one(Eh, 0.7) } : { G:G, R:G, B:G }; }); }   // 虹：赤は長く、青は短い筋
     if (on.ray){ var rt = 0.4 + 0.5 * P.rT / 100, rx = P.rX / 100, ry = P.rY / 100, rl = 0.2 + 0.75 * P.rL / 100;
       o.ray = M('ray', key + rt + '|' + rx + '|' + ry + '|' + rl, function(){ var E = excess(base.R, base.G, base.B, n, rt), Eh = half(E, sw, sh), w = Eh.w, h = Eh.h, O = new Float32Array(w * h), N = 36, sx = rx * w, sy = ry * h;
@@ -249,8 +255,8 @@ var FB = (function(){
     if (on.ana){ var at = 0.5 + 0.45 * P.aT / 100, al = (0.05 + 0.45 * P.aL / 100) * Ls, arb = P.aCm === 'rainbow', ars = P.aCm === 'src';
       o.ana = M('ana', key + at + '|' + al + '|' + arb + ars, function(){ var E = excess(base.R, base.G, base.B, n, at), Eh = half(E, sw, sh);
         function one(sc, H){ H = H || Eh; var A1 = blurH(H.A, H.w, H.h, al / 2 * sc), A2 = blurH(H.A, H.w, H.h, al / 8 * sc); for (var i = 0; i < A1.length; i++) A1[i] = A1[i] * 0.7 + A2[i] * 0.3; var A3 = new Float32Array(A1.length); boxV(A1, A3, H.w, H.h, 1); return mk(A3, H.w, H.h); }
-        function ch(C){ var X = new Float32Array(n); for (var i = 0; i < n; i++) X[i] = E[i] * C[i]; return half(X, sw, sh); }   // 光の色のまま
-        if (ars) return { R:one(1, ch(base.R)), G:one(1, ch(base.G)), B:one(1, ch(base.B)), src:1 };
+        var EC = ars ? excessC(base.R, base.G, base.B, n, at) : null; function ch(C){ return half(C, sw, sh); }   // 光の色のまま
+        if (ars) return { R:one(1, ch(EC.R)), G:one(1, ch(EC.G)), B:one(1, ch(EC.B)), src:1 };
         var G = one(1); return arb ? { G:G, R:one(1.4), B:one(0.65) } : { G:G, R:G, B:G }; }); }
     return o;
   }
@@ -404,10 +410,10 @@ var FB = (function(){
         if (sl && sT > 0){ var tg_ = sampleMap(Mp.slow.T, u, v) * sT, tr_ = sampleMap(Mp.slow.TR, u, v) * sT, tb_ = sampleMap(Mp.slow.TB, u, v) * sT;
           if (sM === 'rainbow'){ ar += tr_; ag += tg_ * 0.95; ab += tb_; } else if (tg_ + tr_ + tb_ > 1e-4){ var st_ = TC(sFix, sM, P.sH, u, v); ar += tr_ * st_[0]; ag += tg_ * st_[1]; ab += tb_ * st_[2]; } }
         if (pr > 0){ var spr = 0, spg = 0, spb = 0;   // プリズムの映り込み：明るい所の像をずらし、虹のように分けて重ねる
-          for (var pk = 0; pk < 7; pk++){ var lam = pk / 3 - 1, fq = 1 + pS * 0.7 * lam, pu = u - pdu * fq, pv = v - pdv * fq; if (pu < 0 || pv < 0 || pu > 1 || pv > 1) continue;
-            if (pM === 'rainbow'){ var pe = sampleMap(Mp.prism.E, pu, pv), sc_ = SPEC[pk]; spr += pe * sc_[0]; spg += pe * sc_[1]; spb += pe * sc_[2]; }
-            else if (pM === 'src'){ spr += sampleMap(Mp.prism.R, pu, pv) * 2; spg += sampleMap(Mp.prism.G, pu, pv) * 2; spb += sampleMap(Mp.prism.B, pu, pv) * 2; }
-            else { var pe2 = sampleMap(Mp.prism.E, pu, pv), pt_ = TC(pFix, pM, P.pH, pu, pv); spr += pe2 * pt_[0]; spg += pe2 * pt_[1]; spb += pe2 * pt_[2]; } }
+          for (var pk = 0; pk < 7; pk++){ var lam = pk / 3 - 1, fq = 1 + pS * 0.7 * lam, pu = u - pdu * fq, pv = v - pdv * fq; var ef_ = Math.min(pu, pv, 1 - pu, 1 - pv); if (ef_ <= 0) continue; var fw_ = ef_ < 0.05 ? ef_ / 0.05 : 1; fw_ *= fw_ * (3 - 2 * fw_);   // 端で急に切れると縦じまになるので、なめらかに消す
+            if (pM === 'rainbow'){ var pe = sampleMap(Mp.prism.E, pu, pv), sc_ = SPEC[pk]; pe *= fw_; spr += pe * sc_[0]; spg += pe * sc_[1]; spb += pe * sc_[2]; }
+            else if (pM === 'src'){ spr += sampleMap(Mp.prism.R, pu, pv) * 2 * fw_; spg += sampleMap(Mp.prism.G, pu, pv) * 2 * fw_; spb += sampleMap(Mp.prism.B, pu, pv) * 2 * fw_; }
+            else { var pe2 = sampleMap(Mp.prism.E, pu, pv) * fw_, pt_ = TC(pFix, pM, P.pH, pu, pv); spr += pe2 * pt_[0]; spg += pe2 * pt_[1]; spb += pe2 * pt_[2]; } }
           ar += spr / 7 * pr; ag += spg / 7 * pr; ab += spb / 7 * pr; }
         if (leak > 0){ var qx2 = (nx - lx) * asp, qy2 = ny - ly, d2 = (qx2 * qx2 + qy2 * qy2) / (sp * sp), I = Math.exp(-d2 * 2);
           if (I > 0.002){ I *= 0.65 + 0.35 * vnoise(nx * 1.6 + 7, ny * 1.6 + 3, seed + 11); var core = I * I; ar += leak * I; ag += leak * I * (cEg + (0.9 - cEg) * core); ab += leak * I * (cEb + (0.55 - cEb) * core); } }
