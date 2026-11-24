@@ -215,7 +215,7 @@ var FB = (function(){
     if (on.hal){ var thr = 0.35 + 0.55 * P.halT / 100, sh_ = (0.004 + 0.02 * P.halS / 100) * Ls, sb = (0.015 + 0.06 * P.halS / 100) * Ls;
       o.hal = M('hal', key + thr + '|' + sh_ + '|' + sb, function(){ var E = excess(base.R, base.G, base.B, n, thr), h1 = blur(E, sw, sh, sh_), h2 = blur(E, sw, sh, sh_ * 0.35);
         for (var i = 0; i < n; i++) h1[i] = 0.6 * h1[i] + 0.4 * h2[i];
-        var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n); for (i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = Math.max(r, g, b), e = Y > thr ? Math.pow((Y - thr) / (1 - thr), 2) : 0; ER[i] = r * e; EG[i] = g * e; EB[i] = b * e; }
+        var C = excessC(base.R, base.G, base.B, n, thr), ER = C.R, EG = C.G, EB = C.B;
         return { H:mk(h1, sw, sh), R:mk(blur(ER, sw, sh, sb), sw, sh), G:mk(blur(EG, sw, sh, sb), sw, sh), B:mk(blur(EB, sw, sh, sb), sw, sh) }; }); }
     if (on.lens && P.lSoft > 0){ var ss = (0.002 + 0.005 * P.lSoft / 100) * Ls;
       o.soft = M('soft', key + ss, function(){ return { R:mk(blur(base.R, sw, sh, ss), sw, sh), G:mk(blur(base.G, sw, sh, ss), sw, sh), B:mk(blur(base.B, sw, sh, ss), sw, sh) }; }); }
@@ -320,7 +320,7 @@ var FB = (function(){
       var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
       var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
     var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
-    var hal = on.hal ? P.halR / 100 * 7 : 0, blo = on.hal ? P.halW / 100 * 1.8 : 0;
+    var hal = on.hal ? P.halR / 100 * 7 : 0, blo = on.hal ? (function(w){ return 1.8 * (w <= 0.6 ? w : 0.6 + (w - 0.6) * 3.5); })(P.halW / 100) : 0;   // 白いにじみ：60から上は急に強く（100で前の2倍＝ミストフィルターのような光彩まで）
     var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
     var leak = on.leak ? P.kA / 100 * 2.6 : 0, edge = on.leak ? P.kE / 100 * 1.4 : 0;
     var gA = on.grain ? P.gA / 100 * 0.075 : 0, gC = P.gC / 100 * 0.9, gD = P.gD / 100;
