@@ -26,7 +26,7 @@ main{padding:0 14px calc(env(safe-area-inset-bottom) + 28px);max-width:720px;mar
 .stick.sh .tip{opacity:0}   /* 高さは変えない（変えるとスクロール位置がずれて、表示が行ったり来たりする） */
 .stick::after{content:"";position:absolute;left:0;right:0;bottom:-14px;height:14px;background:linear-gradient(var(--bg),rgba(18,17,16,0));pointer-events:none}
 .view{position:relative;background:#080807;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center;touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.view canvas{display:block;max-width:100%;max-height:42vh;height:auto;transform-origin:50% 50%;will-change:transform}
+.view canvas{display:block;max-width:100%;max-height:42vh;height:auto;transform-origin:50% 50%}
 .view .empty{color:#8f897e;text-align:center;padding:48px 28px;font-size:13.5px;width:100%;line-height:1.7}
 .view .empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
 .view #hq{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;max-height:none;transform:none}
@@ -756,9 +756,9 @@ function render(){
 // 長押しで元の写真、ダブルタップで等倍、ピンチで枠の中だけ拡大（ページは拡大しない）
 (function(){
   var v = $('view'), hold = 0, lastTap = 0, showingOrig = false, Z = { s:1, x:0, y:0 }, g = null, moved = false;
-  function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; var hqOk = HQS && HQS.n === hqN && !hq.hidden && Z.s > 1;
+  function orig(on){ var p = photos[cur]; if (!p || !p.prev) return; showingOrig = on; var hqOk = HQS && HQS.n === hqN && !hq.hidden;
     if (hqOk){ $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on); drawHQ(on ? HQS.orig : HQS.res); return; }   // 拡大中は、くっきり版の元の写真を出す
-    if (Z.s > 1 && !p.zoom && p.bm){   // くっきり版がまだ（計算中）でも、元の写真は元の解像度からすぐ切り出して出す（加工がいらないので速い）
+    if (!p.zoom && p.bm){   // くっきり版がまだ（計算中）でも、元の写真は元の解像度からすぐ切り出して出す（加工がいらないので速い）
       $('badge').textContent = '元の写真'; $('badge').classList.toggle('on', on);
       if (on){ origDirect(p); return; }
       if (HQS && HQS.n === hqN) { drawHQ(HQS.res); return; }
@@ -770,12 +770,12 @@ function render(){
     if (!on) fbHQ(); }
   function clampZ(){ var vw = v.clientWidth, vh = v.clientHeight, w = cv.offsetWidth * Z.s, h = cv.offsetHeight * Z.s, mx = Math.max(0, (w - vw) / 2), my = Math.max(0, (h - vh) / 2);
     if (Z.s <= 1.001){ Z.s = 1; Z.x = 0; Z.y = 0; } Z.x = Math.max(-mx, Math.min(mx, Z.x)); Z.y = Math.max(-my, Math.min(my, Z.y)); }
-  function applyZ(){ if (window.fbHQ) $('hq').hidden = true; clampZ(); cv.style.transform = Z.s > 1 ? 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')' : ''; v.style.touchAction = Z.s > 1 ? 'none' : 'pan-y'; }
+  function applyZ(){ if (window.fbHQ) $('hq').hidden = true; clampZ(); cv.style.transform = Z.s > 1 ? 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')' : ''; cv.style.willChange = Z.s > 1 ? 'transform' : 'auto'; /* 等倍の時は層にしない（iPhoneで低い解像度の層のまま表示されてぼけるため） */ v.style.touchAction = Z.s > 1 ? 'none' : 'pan-y'; }
   window.fbResetZoom = function(){ Z = { s:1, x:0, y:0 }; applyZ(); };
   // 拡大して指を離したら、見えている範囲だけを元の解像度から作り直して、くっきり表示する
   var hq = $('hq'), hqT = 0, hqN = 0, hqBusy = false;
   function hqHide(){ clearTimeout(hqT); hqN++; hqBusy = false; hq.hidden = true; HQS = null; }
-  window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || Z.s <= 1 || showingOrig) return; hqT = setTimeout(function(){ makeHQ(p); }, 220); };
+  window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || showingOrig) return; /* 等倍表示でも、画面の画素に合わせたくっきり版を重ねる */ hqT = setTimeout(function(){ makeHQ(p); }, 220); };
   // くっきり版は、加工後と元の写真の両方を持っておく（拡大中に長押ししても、元の写真が粗くならない）
   var HQS = null;
   function drawHQ(img){ if (!HQS) return; hq.width = HQS.W; hq.height = HQS.H; var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
@@ -838,7 +838,7 @@ function render(){
   var lastTouchT = 0; v.addEventListener('touchstart', function(){ lastTouchT = Date.now(); }, { passive:true });
   v.addEventListener('dblclick', function(e){ if (Date.now() - lastTouchT < 1000) return; if (Z.s > 1) fbResetZoom(); else zoomTo(e); });   // 指で触った直後の「ダブルクリック」は無視（タッチで二重に動かないように）
   v.addEventListener('wheel', function(e){ if (!e.ctrlKey) return; e.preventDefault(); Z.s = Math.max(1, Math.min(8, Z.s * Math.exp(-e.deltaY / 150))); applyZ(); fbHQ(); }, { passive:false });
-  window.addEventListener('resize', applyZ);
+  window.addEventListener('resize', function(){ applyZ(); if (window.fbHQ) fbHQ(); });
   var tapT = 0;
   function focusAt(cx, cy){   // 奥行きのぼけがオンの時だけ：タップした所にピントを合わせる
     var p = photos[cur]; if (!p || !st.on.depth || p.zoom) return; var r = cv.getBoundingClientRect(); if (!r.width) return;
