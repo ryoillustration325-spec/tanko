@@ -197,6 +197,10 @@ var FB = (function(){
 
   function maps(key, sm8, sw, sh, P, dep){
     var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
+    // 使っていない効果の地図は捨てて、メモリを空ける（iPhoneで処理が止まらないように）
+    var use = { hal:on.hal, soft:on.lens && P.lSoft > 0, sf:on.sfocus, slow:on.slow, cross:on.cross, ray:on.ray, ana:on.ana, prism:on.prism, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
+      lc:['oCm', 'cCm', 'aCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; }) };
+    Object.keys(use).forEach(function(k){ if (!use[k] && memo[k]) delete memo[k]; });
     var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
     var o = { base:base };
     if (on.hal){ var thr = 0.35 + 0.55 * P.halT / 100, sh_ = (0.004 + 0.02 * P.halS / 100) * Ls, sb = (0.015 + 0.06 * P.halS / 100) * Ls;
@@ -323,11 +327,11 @@ var FB = (function(){
     var sfo = on.sfocus ? P.sfA / 100 * 0.55 : 0, sfM = P.sfM / 100;
     var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
     var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
-    var cr = on.cross ? P.cA / 100 * 5.5 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0, an = on.ana ? P.aA / 100 * 7 : 0;
+    var cr = on.cross ? P.cA / 100 * 8 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0, an = on.ana ? P.aA / 100 * 10 : 0;
     var LC = Mp.lc, cM = P.cCm || 'white', aM = P.aCm || 'cool', rM = P.rCm || 'warm', oM = P.oCm || 'warm', sM = P.sCm || 'warm', pM = P.pCm || 'rainbow', bM = P.halWm || 'src';
     var cFix = fixedTint(cM), aFix = fixedTint(aM), rFix = fixedTint(rM), oFix = fixedTint(oM), sFix = fixedTint(sM), pFix = fixedTint(pM), bFix = fixedTint(bM);
     function TC(fx, m, h, u, v){ return fx || tintAt(m, h, u, v, seed, LC); }
-    var pr = on.prism ? P.pA / 100 * 4.5 : 0, pang = P.pR / 100 * Math.PI * 2, pdd = (0.02 + 0.25 * P.pD / 100) * L, pS = P.pS / 100, pdu = Math.cos(pang) * pdd / W, pdv = Math.sin(pang) * pdd / H;
+    var pr = on.prism ? P.pA / 100 * 7 : 0, pang = P.pR / 100 * Math.PI * 2, pdd = (0.02 + 0.25 * P.pD / 100) * L, pS = P.pS / 100, pdu = Math.cos(pang) * pdd / W, pdv = Math.sin(pang) * pdd / H;
     var cho = on.chrom && P.caA > 0, chK = P.caA / 100 * 0.012 * L, chRad = P.caM === 'rad', chAng = P.caR / 100 * Math.PI, chX = Math.cos(chAng) * chK, chY = Math.sin(chAng) * chK;
     var cx = W / 2, cy = H / 2, asp = W / H;
     function px(ch, X, Y){ var fx = X - ox, fy = Y - oy;
@@ -477,11 +481,31 @@ function save(){ try{ localStorage.setItem(LS, JSON.stringify(st)); }catch(e){} 
 
 var $ = function(id){ return document.getElementById(id); };
 var cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently:true });
-var wk = new Worker(URL.createObjectURL(new Blob([$('engine').textContent], { type:'text/javascript' })));
-var jobs = {}, jid = 0;
-wk.onmessage = function(e){ var m = e.data, f = jobs[m.id]; delete jobs[m.id]; if (f) f(m); };
-wk.onerror = function(){ toast('処理が止まりました。アプリを閉じて開き直してください'); var b = document.getElementById('busy'); if (b) b.classList.remove('on'); };
-function work(msg, tr){ return new Promise(function(ok){ var id = ++jid; msg.id = id; jobs[id] = ok; wk.postMessage(msg, tr || []); }); }
+// 処理係（ワーカー）。iPhoneでメモリ不足などで止まったら、作り直して続ける
+var WURL = URL.createObjectURL(new Blob([$('engine').textContent], { type:'text/javascript' })), wk = null, jobs = {}, jid = 0, SMALLS = {};
+function startWorker(){
+  if (wk) try{ wk.terminate(); }catch(e){}
+  wk = new Worker(WURL);
+  wk.onmessage = function(e){ var m = e.data, f = jobs[m.id]; delete jobs[m.id]; if (f){ clearTimeout(f.t); f.ok(m); } };
+  wk.onerror = function(){ restartWorker(); };
+  Object.keys(SMALLS).forEach(function(k){ var s = SMALLS[k]; wk.postMessage({ type:'small', key:k, data:s.data, sw:s.sw, sh:s.sh }); if (s.dep) wk.postMessage({ type:'dep', key:k, dep:s.dep }); });
+}
+function restartWorker(){   // 止まった仕事は、新しい処理係でやり直す
+  var pend = jobs; jobs = {}; startWorker();
+  Object.keys(pend).forEach(function(id){ var j = pend[id]; clearTimeout(j.t); if (j.msg && j.copy){ j.msg.buf = j.copy.slice(0).buffer; if (j.ovCopy) j.msg.ov = j.ovCopy.slice(0).buffer; send(j.msg, j.ok, true); } });
+}
+function postSmall(key, data, sw, sh){ SMALLS[key] = { data:data, sw:sw, sh:sh, dep:(SMALLS[key] || {}).dep }; var ks = Object.keys(SMALLS); if (ks.length > 30) delete SMALLS[ks[0]]; wk.postMessage({ type:'small', key:key, data:data, sw:sw, sh:sh }); }
+function postDep(key, dep){ if (SMALLS[key]) SMALLS[key].dep = dep; wk.postMessage({ type:'dep', key:key, dep:dep }); }
+function send(msg, ok, retried){
+  var id = ++jid; msg.id = id;
+  // 書き出し（大きい）はメモリを食うので控えを持たない
+  var big = msg.w * msg.h > 4e6, j = { ok:ok, msg:msg, copy:big ? null : new Uint8ClampedArray(msg.buf).slice(), ovCopy:(!big && msg.ov) ? new Uint8ClampedArray(msg.ov).slice() : null };
+  j.t = setTimeout(function(){ if (jobs[id]){ if (retried){ delete jobs[id]; toast('処理が止まりました。効果を減らすか、開き直してください'); var b = document.getElementById('busy'); if (b) b.classList.remove('on'); } else restartWorker(); } }, big ? 240000 : 45000);
+  jobs[id] = j; var tr = [msg.buf]; if (msg.ov) tr.push(msg.ov); wk.postMessage(msg, tr);
+}
+startWorker();
+window.__fb = { stop:function(){ wk.terminate(); }, restart:function(){ restartWorker(); } };   // 動作確認用
+function work(msg, tr){ return new Promise(function(ok){ send(msg, ok, false); }); }
 
 function toast(t){ var e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function(){ e.classList.remove('on'); }, 2200); }
 
@@ -609,7 +633,7 @@ function select(i){
     p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
     var ss = 1024 / Math.max(w, h), c = SC(Math.round(w * ss), Math.round(h * ss));
     var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, c.width, c.height);
-    var d = x.getImageData(0, 0, c.width, c.height); wk.postMessage({ type:'small', key:p.key, data:d.data, sw:c.width, sh:c.height });
+    var d = x.getImageData(0, 0, c.width, c.height); postSmall(p.key, d.data, c.width, c.height);
     var view = $('view'), pw = Math.min(1500, Math.round(view.clientWidth * (window.devicePixelRatio || 1))), ps = Math.min(1, pw / w);
     if (h * ps > 1500) ps = 1500 / h;
     var pc = SC(Math.round(w * ps), Math.round(h * ps));
@@ -656,7 +680,7 @@ function ensureDepth(p){
         var x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, q = y0 * 256 + x0, v = (o[q] * (1 - ax) + o[q + 1] * ax) * (1 - ay) + (o[q + 256] * (1 - ax) + o[q + 257] * ax) * ay, j = yy * sw + xx;
         D[j] = (v - mn) / (mx - mn + 1e-6); I[j] = (0.299 * g[j * 4] + 0.587 * g[j * 4 + 1] + 0.114 * g[j * 4 + 2]) / 255; }
       D = guided(I, D, sw, sh, Math.max(2, Math.round(Math.max(sw, sh) * 0.012)), 1e-3);
-      p.dep = D; wk.postMessage({ type:'dep', key:p.key, dep:D }); return D; });
+      p.dep = D; postDep(p.key, D); return D; });
   }); });
   p.depP.catch(function(){ p.depP = null; toast('奥行きを測れませんでした'); });
   return p.depP;
@@ -821,8 +845,8 @@ function exportOne(i){
   var p = photos[i];
   return (p.bm ? Promise.resolve(p.bm) : decode(p.f)).then(function(bm){
     p.bm = bm; var w = bm.width, h = bm.height, s = Math.min(1, Math.sqrt(MAXPX / (w * h))); p.W = Math.round(w * s); p.H = Math.round(h * s);
-    if (i !== cur){ var ss = 1024 / Math.max(w, h), c0 = SC(Math.round(w * ss), Math.round(h * ss)); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); wk.postMessage({ type:'small', key:p.key, data:x0.getImageData(0, 0, c0.width, c0.height).data, sw:c0.width, sh:c0.height });  freeSC(); }
-    return (st.on.depth ? ensureDepth(p) : Promise.resolve()).then(function(){ if (p.dep) wk.postMessage({ type:'dep', key:p.key, dep:p.dep });
+    if (i !== cur){ var ss = 1024 / Math.max(w, h), c0 = SC(Math.round(w * ss), Math.round(h * ss)); var x0 = c0.getContext('2d'); x0.imageSmoothingQuality = 'high'; x0.drawImage(bm, 0, 0, c0.width, c0.height); postSmall(p.key, x0.getImageData(0, 0, c0.width, c0.height).data, c0.width, c0.height);  freeSC(); }
+    return (st.on.depth ? ensureDepth(p) : Promise.resolve()).then(function(){ if (p.dep) postDep(p.key, p.dep);
     var c = document.createElement('canvas'); c.width = p.W; c.height = p.H; var x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bm, 0, 0, p.W, p.H);
     var d = x.getImageData(0, 0, p.W, p.H), buf = d.data.buffer; d = null;
     return runJob({ type:'run', key:p.key, buf:buf, w:p.W, h:p.H, ox:0, oy:0, W:p.W, H:p.H, P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
