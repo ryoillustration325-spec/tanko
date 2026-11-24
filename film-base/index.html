@@ -54,7 +54,7 @@ h2{font-size:13px;color:var(--sub);font-weight:600;letter-spacing:.04em;margin:2
 input.hue{margin-top:10px}input.hue::-webkit-slider-runnable-track{background:linear-gradient(90deg,hsl(0,75%,60%),hsl(60,75%,60%),hsl(120,75%,60%),hsl(180,75%,60%),hsl(240,75%,60%),hsl(300,75%,60%),hsl(360,75%,60%))!important;height:6px}
 .moreb{display:block;width:100%;margin:8px 0 2px;padding:9px 0;border:1px dashed #3a3733;border-radius:10px;background:transparent;color:var(--sub);font:inherit;font-size:13px}
 .more{padding-top:2px}
-.seg{display:flex;gap:6px;padding:8px 0 4px}.seg button{flex:1;border:1px solid var(--line);background:#24231f;border-radius:10px;padding:8px 0;font:inherit;font-size:13px;color:var(--ink)}.seg button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.seg{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}.seg button{flex:1 1 auto;white-space:nowrap;padding-left:8px!important;padding-right:8px!important;border:1px solid var(--line);background:#24231f;border-radius:10px;padding:8px 0;font:inherit;font-size:13px;color:var(--ink)}.seg button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 
 .grp{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden}
 .gh{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
@@ -207,7 +207,7 @@ var FB = (function(){
   function maps(key, sm8, sw, sh, P, dep){
     var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
     // 使っていない効果の地図は捨てて、メモリを空ける（iPhoneで処理が止まらないように）
-    var use = { hal:on.hal, soft:on.lens && P.lSoft > 0, sf:on.sfocus, slow:on.slow, cross:on.cross, ray:on.ray, ana:on.ana, prism:on.prism, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
+    var use = { hal:on.hal, soft:on.lens && P.lSoft > 0, sf:on.sfocus, slow:on.slow, cross:on.cross, ray:on.ray, ana:on.ana, prism:on.prism, glow:on.glow, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
       lc:['oCm', 'cCm', 'aCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; }) };
     Object.keys(use).forEach(function(k){ if (!use[k] && memo[k]) delete memo[k]; });
     var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
@@ -232,6 +232,20 @@ var FB = (function(){
     var needLC = ['oCm', 'cCm', 'aCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; });
     if (needLC) o.lc = M('lc', key + '|lc', function(){ var C = excessC(base.R, base.G, base.B, n, 0.5), ER = C.R, EG = C.G, EB = C.B;
       var a = half(ER, sw, sh), b2 = half(EG, sw, sh), c = half(EB, sw, sh), sg = 0.012 * Ls; return { R:mk(blur(a.A, a.w, a.h, sg), a.w, a.h), G:mk(blur(b2.A, b2.w, b2.h, sg), b2.w, b2.h), B:mk(blur(c.A, c.w, c.h, sg), c.w, c.h) }; });
+    // 光彩（見本：Lightroomの光彩と同じ5つのスタイル）。光の量はなめらかな判定、色はその場所の光の色のまま
+    if (on.glow){ var gS = P.glS || 'bloom', gR = P.glR / 100, gt0 = 0.6 * Math.pow(1 - gR, 1.3) * ({ diff:0.3, hal:1.6 }[P.glS] || 1), gsg = 0.012 * Math.pow(3, (P.glP / 100 - 0.5) * 2) * Ls;
+      o.glow = M('glow', key + gS + '|' + gt0 + '|' + gsg, function(){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), dif = gS === 'diff';
+        for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, M_ = Math.max(r, g, b), k = Y <= gt0 ? 0 : Math.min(1, (Y - gt0) / 0.3); k = k * k * (3 - 2 * k);
+          var w = Y * k * (M_ > 0.95 ? 1.6 : 1) * GLN, pw = dif ? 1.2 : 1.5; ER[i] = Math.pow(r, pw) * w; EG[i] = Math.pow(g, pw) * w; EB[i] = Math.pow(b, pw) * w; }
+        var hr = half(ER, sw, sh), hg = half(EG, sw, sh), hb = half(EB, sw, sh), w2 = hr.w, h2 = hr.h, s2 = gsg / 2;
+        function f(H){ var A = H.A, X, Z, i;
+          if (gS === 'bloom'){ X = blur(A, w2, h2, s2); Z = blur(A, w2, h2, s2 * 0.35); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.75 + Z[i] * 0.25; }
+          else if (gS === 'diff'){ X = blur(A, w2, h2, s2 * 3); Z = blur(A, w2, h2, s2 * 0.8); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.6 + Z[i] * 0.4; }
+          else if (gS === 'hal'){ X = blur(A, w2, h2, s2 * 0.3); Z = blur(A, w2, h2, s2 * 0.9); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.7 + Z[i] * 0.3; }
+          else if (gS === 'motion'){ X = blurH(A, w2, h2, s2 * 6); Z = blurH(A, w2, h2, s2 * 2); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.6 + Z[i] * 0.4; var V = new Float32Array(X.length); boxV(X, V, w2, h2, 2); X = V; }
+          else { X = blurH(A, w2, h2, s2 * 16); Z = blurH(A, w2, h2, s2 * 5); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.55 + Z[i] * 0.45; var V2 = new Float32Array(X.length); boxV(X, V2, w2, h2, 2); X = V2; }
+          return mk(X, w2, h2); }
+        return { R:f(hr), G:f(hg), B:f(hb) }; }); }
     if (on.prism){ var pt = 0.45 + 0.5 * P.pT / 100, pb = (0.004 + 0.03 * P.pB / 100) * Ls;
       o.prism = M('prism', key + pt + '|' + pb, function(){ var C = excessC(base.R, base.G, base.B, n, pt), ER = C.R, EG = C.G, EB = C.B, E = C.E;
         var h1 = half(E, sw, sh), w2 = h1.w, h2 = h1.h, bl = function(A){ var hA = half(A, sw, sh); return mk(blur(hA.A, w2, h2, pb / 2), w2, h2); };
@@ -338,6 +352,7 @@ var FB = (function(){
     var sfo = on.sfocus ? P.sfA / 100 * 0.55 : 0, sfM = P.sfM / 100;
     var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
     var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
+    var gl_ = on.glow ? P.glA / 100 * 3.8 * ({ bloom:1, diff:0.9, hal:1.8, motion:1.1, streak:2 }[P.glS || 'bloom'] || 1) : 0, gM = P.glCm || 'src', gwm = (P.glW - 50) / 50;
     var cr = on.cross ? P.cA / 100 * 8 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0, an = on.ana ? P.aA / 100 * 10 : 0;
     var LC = Mp.lc, cM = P.cCm || 'white', aM = P.aCm || 'cool', rM = P.rCm || 'warm', oM = P.oCm || 'warm', sM = P.sCm || 'warm', pM = P.pCm || 'rainbow', bM = P.halWm || 'src';
     var cFix = fixedTint(cM), aFix = fixedTint(aM), rFix = fixedTint(rM), oFix = fixedTint(oM), sFix = fixedTint(sM), pFix = fixedTint(pM), bFix = fixedTint(bM);
@@ -394,6 +409,11 @@ var FB = (function(){
         if (fl){ var gf = (1 + fA * 0.7 * lit) * Math.pow(Math.max(0.02, 1 - fF * 0.93 * (1 - lit)), 1.6); r = shoulder(r * gf * ftr); g = shoulder(g * gf * ftg); b = shoulder(b * gf * ftb); hardK = fH * 0.35 * lit; }
         // 7) 光を足す（にじみ・光の玉・クロス・光芒・横のフレア・光の軌跡・光漏れ）
         var ar = 0, ag = 0, ab = 0;
+        if (gl_ > 0){ var gr_ = sampleMap(Mp.glow.R, u, v), gg_ = sampleMap(Mp.glow.G, u, v), gb_ = sampleMap(Mp.glow.B, u, v);
+          if ((P.glS || 'bloom') === 'hal'){ var gy_ = Math.max(gr_, gg_, gb_) * gl_, hg = 0.3 - 0.2 * gwm, hb = 0.1 - 0.07 * gwm; ar += gy_; ag += gy_ * hg; ab += gy_ * hb; }   // 黄〜赤のにじみ
+          else { if (gM === 'src'){ if (P.glS === 'diff'){ var gm_ = (gr_ + gg_ + gb_) / 3; gr_ = gm_ + (gr_ - gm_) * 1.6; gg_ = gm_ + (gg_ - gm_) * 1.6; gb_ = gm_ + (gb_ - gm_) * 1.6; var dk_ = 0.2 + 0.8 * Math.sqrt(Math.min(1, 0.2126 * r + 0.7152 * g + 0.0722 * b)); gr_ *= dk_; gg_ *= dk_; gb_ *= dk_; }   // 暗い所は沈めたまま   // 拡散は色を濃く
+              ar += Math.max(0, gr_) * gl_ * (1 + 0.25 * gwm); ag += Math.max(0, gg_) * gl_; ab += Math.max(0, gb_) * gl_ * (1 - 0.25 * gwm); }
+            else { var gv_ = (gr_ + gg_ + gb_) / 3 * gl_, gt_ = TC(fixedTint(gM), gM, P.glH, u, v); ar += gv_ * gt_[0] * (1 + 0.25 * gwm); ag += gv_ * gt_[1]; ab += gv_ * gt_[2] * (1 - 0.25 * gwm); } } }
         if (hal > 0 || blo > 0){ var hv = sampleMap(Mp.hal.H, u, v) * hal; ar += hv; ag += hv * 0.4; ab += hv * 0.15;
           var br_ = sampleMap(Mp.hal.R, u, v), bg_ = sampleMap(Mp.hal.G, u, v), bb_ = sampleMap(Mp.hal.B, u, v);
           if (bM === 'src'){ ar += br_ * blo; ag += bg_ * blo * 0.97; ab += bb_ * blo * 0.9; } else { var bl_ = (br_ + bg_ + bb_) / 3 * blo, bt = TC(bFix, bM, P.halWH, u, v); ar += bl_ * bt[0]; ag += bl_ * bt[1]; ab += bl_ * bt[2]; } }
@@ -463,11 +483,12 @@ var GROUPS = [
   { key:'fsoft', keepOn:1, basic:1, title:'フィルムの輪郭の柔らかさ', sub:'ピントは合ったまま、境目と質感だけを柔らかく（オプション）', sl:[['fsA','柔らかさ','デジタル','フィルム'],['fsE','縁取りを消す','そのまま','消す'],['fsR','光の回り込み','少ない','多い'],['fsF','細かい凹凸','そのまま','緩める'],['fsC','色のにじみ','くっきり','にじむ']], note:'見本と撮って出しを同じ大きさで比べると、見本は境目の外側に付く明暗の縁（シャープや明瞭度の縁取り）がほぼ無く、暗い側へ光がわずかに回り込み、弱い細かい凹凸が少ない写りでした。ぼかすのではなく、縁取りを消して光を回すことで近づけます。等倍（ダブルタップ）で確認してください。' },
   { key:'leak', basic:2, title:'光漏れ・フィルムの端', sub:'端から入る橙の光と、縁の焼け', sl:[['kA','光漏れ','なし','強い'],['kP','位置','左上','一周'],['kS','広がり','小さい','大きい'],['kH','色','赤','黄'],['kE','フィルムの端の焼け','なし','強い']], note:'偶然の味なので、写真ごとに位置を変えるのがおすすめです。', extra:true },
   { sect:'光を足す' },
+  { key:'glow', man:1, basic:3, segTop:1, seg:['glS', [['bloom','ブルーム'], ['diff','拡散'], ['hal','ハレーション'], ['motion','モーション'], ['streak','ストリーク']]], col:['glCm','glH','src,white,warm,cool,hue,rand'], title:'光彩', sub:'明るい所から光がにじむ（白飛びしていない明るい所も光る）', sl:[['glA','光彩','なし','強い'],['glR','範囲','明るい所だけ','広く'],['glP','スプレッド','狭い','広い'],['glW','暖かさ','寒色','暖色']], note:'ブルーム：明るい所がやわらかく光る。拡散：画面全体がかすみ、色が濃くにじむ。ハレーション：明るい縁が黄〜赤ににじむ（暖かさで黄〜赤）。モーション：明るい所が横に流れる。ストリーク：さらに長く強く横に流れる。光の色は初期設定で「光の色のまま」です。' },
   { key:'orb', man:1, basic:2, col:['oCm','oH','src,white,warm,cool,hue,rand'], title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
   { key:'cross', man:1, basic:2, col:['cCm','cH','src,white,warm,cool,hue,rand,rainbow'], title:'クロス', sub:'点の光から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'街灯や車のライトなど、小さく強い光に向いています。虹にすると筋の先が赤、根元が青に分かれます。' },
   { key:'ana', man:1, basic:2, col:['aCm','aH','src,white,warm,cool,hue,rand,rainbow'], title:'横に流れるフレア', sub:'強い光から横一直線に伸びる光', sl:[['aA','強さ','弱い','強い'],['aL','長さ','短い','長い'],['aT','光る明るさ','暗めから','強い光だけ']], note:'夜のライトや街灯に。寒色にすると映画のような青い光になります。' },
   { key:'ray', man:1, basic:2, col:['rCm','rH','src,white,warm,cool,hue,rand'], title:'光の筋（光芒）', sub:'明るい所から差し込む光の帯', sl:[['rA','強さ','弱い','強い'],['rL','長さ','短い','長い'],['rX','光源 左右','左','右'],['rY','光源 上下','上','下'],['rT','光る明るさ','暗めから','強い光だけ']], note:'光源を窓や空の方向に置くと、明るい所から反対側へ光の帯が伸びます。' },
-  { key:'prism', man:1, basic:3, col:['pCm','pH','rainbow,src,white,warm,cool,hue'], title:'プリズムの映り込み', sub:'明るい所の像がずれて、虹のように分かれて重なる', sl:[['pA','強さ','弱い','強い'],['pR','向き','右','一周'],['pD','ずれ幅','近く','遠く'],['pS','虹の広がり','まとまる','広がる'],['pB','ぼかし','くっきり','ぼんやり'],['pT','光る明るさ','暗めから','強い光だけ']], note:'レンズの前にプリズムやガラスをかざした時のように、白い服や光の像が横にずれて、赤から紫へ分かれて映り込みます。' },
+  { key:'prism', man:1, basic:3, col:['pCm','pH','src,rainbow,white,warm,cool,hue'], title:'プリズムの映り込み', sub:'明るい所の像がずれて、虹のように分かれて重なる', sl:[['pA','強さ','弱い','強い'],['pR','向き','右','一周'],['pD','ずれ幅','近く','遠く'],['pS','虹の広がり','まとまる','広がる'],['pB','ぼかし','くっきり','ぼんやり'],['pT','光る明るさ','暗めから','強い光だけ']], note:'レンズの前にプリズムやガラスをかざした時のように、白い服や光の像が横にずれて、赤から紫へ分かれて映り込みます。' },
   { sect:'動き・重ね' },
   { key:'slow', man:1, basic:2, col:['sCm','sH','src,white,warm,cool,hue,rand,rainbow'], title:'スローシンクロ', sub:'光の軌跡とブレ。フラッシュの当たった所は止まる', sl:[['sT','光の軌跡','なし','強い'],['sG','ブレ','なし','強い'],['sA','向き','横','縦→横'],['sL','長さ','短い','長い'],['sS','色の分かれ','なし','分かれる']], note:'直射フラッシュと一緒に使うと、光の中心だけが止まり、周りが流れます。色の分かれを上げると、軌跡の先が赤、手前が青に割れます。' },
   { key:'multi', man:1, basic:2, title:'多重露光・残像', sub:'ずらした像や別の写真を重ねる', sl:[['mA','重ねる強さ','薄い','濃い'],['mX','ずれ 左右','左へ','右へ'],['mY','ずれ 上下','上へ','下へ'],['mN','重ねる回数','1回','3回'],['mS','大きさ','小さく','大きく']], note:'同じ写真の時：ずれを中央（50）にして大きさだけ変えると、ズームしたような残像に。別の写真の時：重ねる強さ・ずれ・大きさで位置と濃さを決めます（回数は使いません）。重ね方はX-S10の合成モードと同じです。加算は明るくなるので、カメラで露出を下げる代わりに重ねる強さを下げてください。' },
@@ -478,7 +499,7 @@ var GROUPS = [
   { sect:'照明' },
   { key:'flash', man:1, basic:2, title:'直射フラッシュ', sub:'手前を硬く照らし、奥を沈める', sl:[['fA','強さ','弱い','強い'],['fF','奥を沈める','そのまま','黒く'],['fS','光の届く範囲','狭い','広い'],['fX','光の中心 左右','左','右'],['fY','光の中心 上下','上','下'],['fH','硬さ','柔らかい','硬い'],['fT','光の色','冷たい','暖かい']], note:'光の中心は被写体の顔や体に合わせてください。夜や室内の人物で一番多い光です。' }
 ];
-var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","sfA":40,"sfR":45,"sfM":35,"dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"rainbow","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"warm","oH":30,"cCm":"white","cH":200,"aCm":"cool","aH":210,"rCm":"warm","rH":40,"sCm":"warm","sH":30,"halWm":"src","halWH":40}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","sfA":40,"sfR":45,"sfM":35,"dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"halWm":"src","halWH":40,"glS":"bloom","glA":50,"glR":50,"glP":50,"glW":50,"glCm":"src","glH":200}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
 GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
 var LS = 'filmbase-v1', st;
 try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
@@ -585,8 +606,9 @@ function renderGroups(){
       r.ondblclick = function(){ st.P[k] = base[k]; r.value = base[k]; show(); save(); renderPatsNote(); schedule(); };
       into.appendChild(d);
     }
+    if (g.seg && g.segTop) b.appendChild(segRow(g.seg[0], g.seg[1]));   // スタイルを先に選ぶ
     g.sl.forEach(function(s, i){ slider(s, i < nb ? b : more); });
-    if (g.seg) b.appendChild(segRow(g.seg[0], g.seg[1]));
+    if (g.seg && !g.segTop) b.appendChild(segRow(g.seg[0], g.seg[1]));
     if (g.col) b.appendChild(colorRow(g.col[0], g.col[1], g.col[2].split(','), g.col[3]));
     if (nb < g.sl.length){ var mt = document.createElement('button'); mt.type = 'button'; mt.className = 'moreb'; mt.textContent = more.hidden ? '詳しく調整 ▾' : '閉じる ▴';
       mt.onclick = function(){ more.hidden = !more.hidden; openMore[g.key] = !more.hidden; mt.textContent = more.hidden ? '詳しく調整 ▾' : '閉じる ▴'; };
