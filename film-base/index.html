@@ -603,8 +603,12 @@ function renderPats(){
   $('pnote').textContent = (st.pat ? st.pat + ' ' + PN[st.pat][0] + '：' + PN[st.pat][1] : '') + (changed ? '（調整済み）' : '');
 }
 // ---- 効果のグループ ----
-var openG = { glow:1, grain:1 };
+var openG = {};   /* 開いた時はすべて閉じた状態（設定は保持） */
 var openMore = {};
+(function(){ var hidAt = 0;   /* しばらく離れてから戻った時も、項目をすべて閉じる（設定はそのまま） */
+  function collapse(){ openG = {}; openMore = {}; if (typeof renderGroups === 'function') renderGroups(); }
+  document.addEventListener('visibilitychange', function(){ if (document.hidden) hidAt = Date.now(); else if (hidAt && Date.now() - hidAt > 30000) collapse(); });
+  window.addEventListener('pageshow', function(e){ if (e.persisted) collapse(); }); })();
 // 光の色の選び方（丸いボタン1列。「選ぶ」の時だけ色相のスライダー）
 var CNAME = { src:'光の色', white:'白', warm:'暖色', cool:'寒色', hue:'選ぶ', rand:'ランダム', rainbow:'虹' };
 function colorRow(mk, hk, opts, label){
