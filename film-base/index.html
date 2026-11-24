@@ -318,8 +318,13 @@ var FB = (function(){
     var ch = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
     for (i = 0; i < n; i++){ ch[0][i] = src[i * 4] / 255; ch[1][i] = src[i * 4 + 1] / 255; ch[2][i] = src[i * 4 + 2] / 255; }
     // ⓪ 全体のゆるいピンボケ：レンズのぼけと同じ円形の形で、光の量（線形）のまま広げる。被写体が崩れない範囲（長辺の0〜0.3%）
-    var dR = (P.fsD || 0) / 100 * 0.003 * L;
-    if (dR > 0.35){ for (c = 0; c < 3; c++){ var lin = new Float32Array(n); for (i = 0; i < n; i++) lin[i] = s2lf(ch[c][i]); var D = discBlur(lin, w, h, dR); for (i = 0; i < n; i++) ch[c][i] = l2s(D[i]); } }
+    var dR = (P.fsD || 0) / 100 * 0.003 * L, dK = P.fsDk == null ? 1 : P.fsDk / 100, b0 = 0, w0 = 1;
+    function pc(A, p){ var hs = new Uint32Array(1024), t, tot = 0, acc = 0; for (t = 0; t < A.length; t += 3){ var v = A[t]; hs[v <= 0 ? 0 : v >= 1 ? 1023 : (v * 1023) | 0]++; tot++; } for (t = 0; t < 1024; t++){ acc += hs[t]; if (acc >= tot * p) return t / 1023; } return 1; }
+    function lum(){ var Y = new Float32Array(n); for (var q = 0; q < n; q++) Y[q] = 0.2126 * ch[0][q] + 0.7152 * ch[1][q] + 0.0722 * ch[2][q]; return Y; }
+    if (dR > 0.35){
+      if (dK > 0){ var Y0 = lum(); b0 = pc(Y0, 0.01); w0 = pc(Y0, 0.995); }
+      for (c = 0; c < 3; c++){ var lin = new Float32Array(n); for (i = 0; i < n; i++) lin[i] = s2lf(ch[c][i]); var D = discBlur(lin, w, h, dR); for (i = 0; i < n; i++) ch[c][i] = l2s(D[i]); }
+    }
     if (halo > 0){
       var r = Math.max(1, Math.round(s * 2.5));
       for (c = 0; c < 3; c++){ var x = ch[c], B = gaussS(x, w, h, Math.max(0.5, s * 0.8)), MX = maxMin(B, w, h, r, true), MN = maxMin(B, w, h, r, false);
@@ -344,6 +349,8 @@ var FB = (function(){
       for (i = 0; i < n; i++){ var yl = 0.2126 * ch[0][i] + 0.7152 * ch[1][i] + 0.0722 * ch[2][i]; YY[i] = yl; CR[i] = ch[0][i] - yl; CB[i] = ch[2][i] - yl; }
       var sg = Math.max(0.6, s * (1.5 + 2 * col)), BR2 = gaussS(CR, w, h, sg), BB2 = gaussS(CB, w, h, sg), kc = Math.min(1, col);
       for (i = 0; i < n; i++){ var R = YY[i] + CR[i] + (BR2[i] - CR[i]) * kc, Bb = YY[i] + CB[i] + (BB2[i] - CB[i]) * kc; ch[0][i] = R; ch[2][i] = Bb; ch[1][i] = (YY[i] - 0.2126 * R - 0.0722 * Bb) / 0.7152; } }   // ④色の境目だけにじむ
+    if (dR > 0.35 && dK > 0){ var Y1 = lum(), b1 = pc(Y1, 0.01), w1 = pc(Y1, 0.995);   // ぼかしと柔らかさで浮いた黒（と沈んだ白）を、元の写真の黒と白に戻す。画面全体で1本の曲線なので縁取りは出ない（もやに見えないように）
+      if (w1 - b1 > 0.05){ var scl = (w0 - b0) / (w1 - b1); for (i = 0; i < n; i++){ var yb = Y1[i], yt = yb + (b0 + (yb - b1) * scl - yb) * dK, rr_ = yb > 1e-4 ? Math.max(0, yt) / yb : 1; ch[0][i] *= rr_; ch[1][i] *= rr_; ch[2][i] *= rr_; } } }
     var o = new Uint8ClampedArray(src.length);
     for (i = 0; i < n; i++){ o[i * 4] = ch[0][i] * 255 + 0.5; o[i * 4 + 1] = ch[1][i] * 255 + 0.5; o[i * 4 + 2] = ch[2][i] * 255 + 0.5; o[i * 4 + 3] = 255; }
     return o;
@@ -352,7 +359,7 @@ var FB = (function(){
   function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov, dep){
     var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P, dep), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
     if (on.fsoft){   // 輪郭の柔らかさは重いので、同じ写真・同じ範囲・同じ値なら前の結果を使う（他の効果を動かす時に速い）
-      var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, P.fsD, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
+      var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, P.fsD, P.fsDk, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
       var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
     var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
     var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
