@@ -905,8 +905,12 @@ function deliver(files){
   if (!files.length) return;
   var share = function(){ return navigator.share({ files:files }).catch(function(e){ if (e && e.name !== 'AbortError') download(); }); };
   var can = navigator.canShare && navigator.canShare({ files:files });
+  if (can && !deliver.tried){   /* まず共有シートを直接開く（書き出しが長くて許可が切れた時だけ、下の画面で1回タップしてもらう） */
+    deliver.tried = true;
+    navigator.share({ files:files }).then(function(){ deliver.tried = false; }).catch(function(e){ var nm = e && e.name; if (nm === 'AbortError'){ deliver.tried = false; return; } deliver(files); deliver.tried = false; });
+    return; }
   sheet('<h3>できました（' + files.length + '枚）</h3><p>' + files[0].name + (files.length > 1 ? ' ほか' : '') + '　' + (photos[cur] ? photos[cur].W + '×' + photos[cur].H : '') + '</p>' +
-    (can ? '<button class="opt" data-a="s"><b>写真に保存・共有</b><small>共有シートで「画像を保存」を選ぶと写真アプリに入ります</small></button>' : '') +
+    (can ? '<button class="opt" data-a="s"><b>写真に保存・共有</b><small>開いた共有シートで「画像を保存」を押すと写真アプリに入ります</small></button>' : '') +
     '<button class="opt" data-a="d"><b>ダウンロード</b><small>ファイルとして保存</small></button><button class="opt" data-a="x"><b>閉じる</b></button>', function(a){ if (a === 's') share(); else if (a === 'd') download(); });
   function download(){ files.forEach(function(f, i){ setTimeout(function(){ var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }, i * 400); }); }
 }
