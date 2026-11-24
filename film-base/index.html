@@ -207,16 +207,11 @@ var FB = (function(){
   function maps(key, sm8, sw, sh, P, dep){
     var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
     // 使っていない効果の地図は捨てて、メモリを空ける（iPhoneで処理が止まらないように）
-    var use = { hal:on.hal, soft:on.lens && P.lSoft > 0, sf:on.sfocus, slow:on.slow, cross:on.cross, ray:on.ray, prism:on.prism, glow:on.glow, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
+    var use = { soft:on.lens && P.lSoft > 0, sf:on.glow && P.glS === 'diff', slow:on.slow, cross:on.cross, ray:on.ray, prism:on.prism, glow:on.glow, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
       lc:['oCm', 'cCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; }) };
     Object.keys(use).forEach(function(k){ if (!use[k] && memo[k]) delete memo[k]; });
     var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
     var o = { base:base };
-    if (on.hal){ var thr = 0.35 + 0.55 * P.halT / 100, sh_ = (0.004 + 0.02 * P.halS / 100) * Ls, sb = (0.015 + 0.06 * P.halS / 100) * Ls;
-      o.hal = M('hal', key + thr + '|' + sh_ + '|' + sb, function(){ var E = excess(base.R, base.G, base.B, n, thr), h1 = blur(E, sw, sh, sh_), h2 = blur(E, sw, sh, sh_ * 0.35);
-        for (var i = 0; i < n; i++) h1[i] = 0.6 * h1[i] + 0.4 * h2[i];
-        var C = excessC(base.R, base.G, base.B, n, thr), ER = C.R, EG = C.G, EB = C.B;
-        return { H:mk(h1, sw, sh), R:mk(blur(ER, sw, sh, sb), sw, sh), G:mk(blur(EG, sw, sh, sb), sw, sh), B:mk(blur(EB, sw, sh, sb), sw, sh) }; }); }
     if (on.lens && P.lSoft > 0){ var ss = (0.002 + 0.005 * P.lSoft / 100) * Ls;
       o.soft = M('soft', key + ss, function(){ return { R:mk(blur(base.R, sw, sh, ss), sw, sh), G:mk(blur(base.G, sw, sh, ss), sw, sh), B:mk(blur(base.B, sw, sh, ss), sw, sh) }; }); }
     if (on.glass){ var sg = (0.0015 * (1 + 7 * P.gsB / 100)) * Ls;
@@ -225,7 +220,8 @@ var FB = (function(){
       o.dq = M('dq', key + '|dq', function(){ var a = []; for (var i = 0; i < n; i += 7) a.push(dep[i]); a.sort(function(x, y){ return x - y; }); return a; });
       o.db = M('db', key + '|db', function(){ var L3 = [0.003, 0.009, 0.022].map(function(f){ return f * Ls; }), out = [];
         L3.forEach(function(sg){ out.push({ R:mk(blur(base.R, sw, sh, sg), sw, sh), G:mk(blur(base.G, sw, sh, sg), sw, sh), B:mk(blur(base.B, sw, sh, sg), sw, sh) }); }); return out; }); }
-    if (on.sfocus){ var sf1 = (0.004 + 0.03 * P.sfR / 100) * Ls;
+    var gDiff = on.glow && P.glS === 'diff';
+    if (gDiff){ var sf1 = (0.004 + 0.03 * (P.glP == null ? 50 : P.glP) / 100) * Ls;   // 拡散：芯を残して同じ色の柔らかなぼけを重ねる（もとのソフトフォーカス）
       o.sf = M('sf', key + sf1, function(){ var g8 = [new Float32Array(n), new Float32Array(n), new Float32Array(n)]; for (var i = 0; i < n; i++){ g8[0][i] = sm8[i * 4] / 255; g8[1][i] = sm8[i * 4 + 1] / 255; g8[2][i] = sm8[i * 4 + 2] / 255; }
         function two(A){ var x1 = blur(A, sw, sh, sf1), x2 = blur(A, sw, sh, sf1 * 0.4); for (var i = 0; i < n; i++) x1[i] = x1[i] * 0.6 + x2[i] * 0.4; return mk(x1, sw, sh); }
         return { LR:two(base.R), LG:two(base.G), LB:two(base.B), GR:two(g8[0]), GG:two(g8[1]), GB:two(g8[2]) }; }); }
@@ -233,19 +229,29 @@ var FB = (function(){
     if (needLC) o.lc = M('lc', key + '|lc', function(){ var C = excessC(base.R, base.G, base.B, n, 0.5), ER = C.R, EG = C.G, EB = C.B;
       var a = half(ER, sw, sh), b2 = half(EG, sw, sh), c = half(EB, sw, sh), sg = 0.012 * Ls; return { R:mk(blur(a.A, a.w, a.h, sg), a.w, a.h), G:mk(blur(b2.A, b2.w, b2.h, sg), b2.w, b2.h), B:mk(blur(c.A, c.w, c.h, sg), c.w, c.h) }; });
     // 光彩（見本：Lightroomの光彩と同じ5つのスタイル）。光の量はなめらかな判定、色はその場所の光の色のまま
-    if (on.glow){ var gS = P.glS || 'bloom', gR = P.glR / 100, gt0 = 0.6 * Math.pow(1 - gR, 1.3) * ({ diff:0.3, hal:1.6 }[P.glS] || 1), gsg = 0.012 * Math.pow(3, (P.glP / 100 - 0.5) * 2) * Ls;
-      o.glow = M('glow', key + gS + '|' + gt0 + '|' + gsg, function(){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), dif = gS === 'diff';
+    if (on.glow){ var gS = P.glS || 'bloom', gR = (P.glR == null ? 50 : P.glR) / 100, gt0 = 0.6 * Math.pow(1 - gR, 1.3) * ({ diff:0.3, hal:1.6 }[P.glS] || 1), gsg = 0.012 * Math.pow(5, ((P.glP == null ? 50 : P.glP) / 100 - 0.5) * 2) * Ls;
+      o.glow = M('glow', key + gS + '|' + gt0 + '|' + gsg + '|' + (P.glRed > 0) + '|' + (P.glAng || 0), function(){ var ER = new Float32Array(n), EG = new Float32Array(n), EB = new Float32Array(n), dif = gS === 'diff';
         for (var i = 0; i < n; i++){ var r = base.R[i], g = base.G[i], b = base.B[i], Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, M_ = Math.max(r, g, b), k = Y <= gt0 ? 0 : Math.min(1, (Y - gt0) / 0.3); k = k * k * (3 - 2 * k);
           var w = Y * k * (M_ > 0.95 ? 1.6 : 1) * GLN, pw = dif ? 1.2 : 1.5; ER[i] = Math.pow(r, pw) * w; EG[i] = Math.pow(g, pw) * w; EB[i] = Math.pow(b, pw) * w; }
         var hr = half(ER, sw, sh), hg = half(EG, sw, sh), hb = half(EB, sw, sh), w2 = hr.w, h2 = hr.h, s2 = gsg / 2;
+        var gAng = (P.glAng || 0) / 100 * Math.PI;   // 流れる向き（0＝横）
+        function BH(A, sg){ if (Math.abs(gAng) < 0.01) return blurH(A, w2, h2, sg);   // 斜め：少しずつずらした点で、なめらかに流す
+          var O = new Float32Array(A.length), N = 48, ca = Math.cos(gAng), sa = Math.sin(gAng), ws = 0, W = [], k; for (k = 0; k < N; k++){ var tt = (k + 0.5) / N * 2 - 1; W.push(Math.exp(-tt * tt * 3)); ws += W[k]; }
+          for (var y = 0; y < h2; y++) for (var x = 0; x < w2; x++){ var j = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1024 / 1024, s = 0;
+            for (k = 0; k < N; k++){ var d = ((k + j) / N * 2 - 1) * sg * 2.5, px = x + ca * d, py = y + sa * d; if (px < 0 || py < 0 || px > w2 - 1.001 || py > h2 - 1.001) continue; var x0 = px | 0, y0 = py | 0, fx = px - x0, fy = py - y0, q = y0 * w2 + x0; s += ((A[q] * (1 - fx) + A[q + 1] * fx) * (1 - fy) + (A[q + w2] * (1 - fx) + A[q + w2 + 1] * fx) * fy) * W[k]; }
+            O[y * w2 + x] = s / ws; } return O; }
         function f(H){ var A = H.A, X, Z, i;
           if (gS === 'bloom'){ X = blur(A, w2, h2, s2); Z = blur(A, w2, h2, s2 * 0.35); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.75 + Z[i] * 0.25; }
           else if (gS === 'diff'){ X = blur(A, w2, h2, s2 * 3); Z = blur(A, w2, h2, s2 * 0.8); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.6 + Z[i] * 0.4; }
           else if (gS === 'hal'){ X = blur(A, w2, h2, s2 * 0.3); Z = blur(A, w2, h2, s2 * 0.9); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.7 + Z[i] * 0.3; }
-          else if (gS === 'motion'){ X = blurH(A, w2, h2, s2 * 6); Z = blurH(A, w2, h2, s2 * 2); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.6 + Z[i] * 0.4; var V = new Float32Array(X.length); boxV(X, V, w2, h2, 2); X = V; }
-          else { X = blurH(A, w2, h2, s2 * 16); Z = blurH(A, w2, h2, s2 * 5); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.55 + Z[i] * 0.45; var V2 = new Float32Array(X.length); boxV(X, V2, w2, h2, 2); X = V2; }
+          else if (gS === 'motion'){ X = BH(A, s2 * 6); Z = BH(A, s2 * 2); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.6 + Z[i] * 0.4; var V = new Float32Array(X.length); boxV(X, V, w2, h2, 2); X = V; }
+          else { X = BH(A, s2 * 16); Z = BH(A, s2 * 5); for (i = 0; i < X.length; i++) X[i] = X[i] * 0.55 + Z[i] * 0.45; var V2 = new Float32Array(X.length); boxV(X, V2, w2, h2, 2); X = V2; }
           return mk(X, w2, h2); }
-        return { R:f(hr), G:f(hg), B:f(hb) }; }); }
+        var out = { R:f(hr), G:f(hg), B:f(hb) };
+        if (P.glRed > 0){ var t1 = Math.min(0.9, gt0 + 0.15), H = new Float32Array(n), rs = Math.max(0.004, Math.min(0.024, gsg / Ls * 0.31)) * Ls;   // 縁の赤いにじみ：強い光の縁だけ、フィルムの中の反射で赤くにじむ
+          for (var q = 0; q < n; q++){ var r_ = base.R[q], g_ = base.G[q], b_ = base.B[q], Yq = 0.2126 * r_ + 0.7152 * g_ + 0.0722 * b_, kq = Yq <= t1 ? 0 : Math.min(1, (Yq - t1) / 0.25); H[q] = Math.max(r_, g_, b_) * Yq * kq * kq * (3 - 2 * kq); }
+          var h1 = blur(H, sw, sh, rs), h2 = blur(H, sw, sh, rs * 0.35); for (q = 0; q < n; q++) h1[q] = 0.6 * h1[q] + 0.4 * h2[q]; out.H = mk(h1, sw, sh); }
+        return out; }); }
     if (on.prism){ var pt = 0.45 + 0.5 * P.pT / 100, pb = (0.004 + 0.03 * P.pB / 100) * Ls;
       o.prism = M('prism', key + pt + '|' + pb, function(){ var C = excessC(base.R, base.G, base.B, n, pt), ER = C.R, EG = C.G, EB = C.B, E = C.E;
         var h1 = half(E, sw, sh), w2 = h1.w, h2 = h1.h, bl = function(A){ var hA = half(A, sw, sh); return mk(blur(hA.A, w2, h2, pb / 2), w2, h2); };
@@ -332,7 +338,6 @@ var FB = (function(){
       var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
       var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
     var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
-    var hal = on.hal ? P.halR / 100 * 7 : 0, blo = on.hal ? (function(w){ return 1.8 * (w <= 0.6 ? w : 0.6 + (w - 0.6) * 3.5); })(P.halW / 100) : 0;   // 白いにじみ：60から上は急に強く（100で前の2倍＝ミストフィルターのような光彩まで）
     var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
     var leak = on.leak ? P.kA / 100 * 2.6 : 0, edge = on.leak ? P.kE / 100 * 1.4 : 0;
     var gA = on.grain ? P.gA / 100 * 0.075 : 0, gC = P.gC / 100 * 0.9, gD = P.gD / 100;
@@ -347,10 +352,10 @@ var FB = (function(){
     if (dpo){ var fxp = P.dpX == null ? 0.5 : P.dpX, fyp = P.dpY == null ? 0.55 : P.dpY, fs_ = [], ii, jj;   // ピントの点のまわりの奥行き（中央値）＋ずらし
       for (ii = -2; ii <= 2; ii++) for (jj = -2; jj <= 2; jj++) fs_.push(sampleMap(Mp.dep, Math.min(1, Math.max(0, fxp + ii * 0.012)), Math.min(1, Math.max(0, fyp + jj * 0.012))));
       fs_.sort(function(x, y){ return x - y; }); dfd = fs_[12] - (P.dpF - 50) / 50 * 0.35; dtol = 0.02 + 0.25 * P.dpS / 100; dkf = P.dpA / 100 * 4; dkn = P.dpN / 100 * 4; }
-    var sfo = on.sfocus ? P.sfA / 100 * 0.55 : 0, sfM = P.sfM / 100;
+    var sfo = (on.glow && P.glS === 'diff') ? P.glA / 100 * 0.5 : 0, sfM = 0.35;
     var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
     var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
-    var gl_ = on.glow ? P.glA / 100 * 3.8 * ({ bloom:1, diff:0.9, hal:1.8, motion:1.1, streak:2 }[P.glS || 'bloom'] || 1) : 0, gM = P.glCm || 'src', gwm = (P.glW - 50) / 50;
+    var gl_ = on.glow ? (P.glA || 0) / 100 * 3.8 * ({ bloom:1, diff:0.9, hal:1.8, motion:1.1, streak:2 }[P.glS || 'bloom'] || 1) : 0, gM = P.glCm || 'src', gwm = ((P.glW == null ? 50 : P.glW) - 50) / 50, glRed = on.glow ? (P.glRed || 0) / 100 * 7 : 0;
     var cr = on.cross ? P.cA / 100 * 8 : 0, ry_ = on.ray ? P.rA / 100 * 2.4 : 0;
     var LC = Mp.lc, cM = P.cCm || 'white', aM = P.aCm || 'cool', rM = P.rCm || 'warm', oM = P.oCm || 'warm', sM = P.sCm || 'warm', pM = P.pCm || 'rainbow', bM = P.halWm || 'src';
     var cFix = fixedTint(cM), aFix = fixedTint(aM), rFix = fixedTint(rM), oFix = fixedTint(oM), sFix = fixedTint(sM), pFix = fixedTint(pM), bFix = fixedTint(bM);
@@ -407,14 +412,12 @@ var FB = (function(){
         if (fl){ var gf = (1 + fA * 0.7 * lit) * Math.pow(Math.max(0.02, 1 - fF * 0.93 * (1 - lit)), 1.6); r = shoulder(r * gf * ftr); g = shoulder(g * gf * ftg); b = shoulder(b * gf * ftb); hardK = fH * 0.35 * lit; }
         // 7) 光を足す（にじみ・光の玉・クロス・光芒・横のフレア・光の軌跡・光漏れ）
         var ar = 0, ag = 0, ab = 0;
+        if (glRed > 0 && Mp.glow.H){ var hv = sampleMap(Mp.glow.H, u, v) * glRed; ar += hv; ag += hv * (0.4 - 0.15 * gwm); ab += hv * (0.15 - 0.08 * gwm); }
         if (gl_ > 0){ var gr_ = sampleMap(Mp.glow.R, u, v), gg_ = sampleMap(Mp.glow.G, u, v), gb_ = sampleMap(Mp.glow.B, u, v);
           if ((P.glS || 'bloom') === 'hal'){ var gy_ = Math.max(gr_, gg_, gb_) * gl_, hg = 0.3 - 0.2 * gwm, hb = 0.1 - 0.07 * gwm; ar += gy_; ag += gy_ * hg; ab += gy_ * hb; }   // 黄〜赤のにじみ
           else { if (gM === 'src'){ if (P.glS === 'diff'){ var gm_ = (gr_ + gg_ + gb_) / 3; gr_ = gm_ + (gr_ - gm_) * 1.6; gg_ = gm_ + (gg_ - gm_) * 1.6; gb_ = gm_ + (gb_ - gm_) * 1.6; var dk_ = 0.2 + 0.8 * Math.sqrt(Math.min(1, 0.2126 * r + 0.7152 * g + 0.0722 * b)); gr_ *= dk_; gg_ *= dk_; gb_ *= dk_; }   // 暗い所は沈めたまま   // 拡散は色を濃く
               ar += Math.max(0, gr_) * gl_ * (1 + 0.25 * gwm); ag += Math.max(0, gg_) * gl_; ab += Math.max(0, gb_) * gl_ * (1 - 0.25 * gwm); }
             else { var gv_ = (gr_ + gg_ + gb_) / 3 * gl_, gt_ = TC(fixedTint(gM), gM, P.glH, u, v); ar += gv_ * gt_[0] * (1 + 0.25 * gwm); ag += gv_ * gt_[1]; ab += gv_ * gt_[2] * (1 - 0.25 * gwm); } } }
-        if (hal > 0 || blo > 0){ var hv = sampleMap(Mp.hal.H, u, v) * hal; ar += hv; ag += hv * 0.4; ab += hv * 0.15;
-          var br_ = sampleMap(Mp.hal.R, u, v), bg_ = sampleMap(Mp.hal.G, u, v), bb_ = sampleMap(Mp.hal.B, u, v);
-          if (bM === 'src'){ ar += br_ * blo; ag += bg_ * blo * 0.97; ab += bb_ * blo * 0.9; } else { var bl_ = (br_ + bg_ + bb_) / 3 * blo, bt = TC(bFix, bM, P.halWH, u, v); ar += bl_ * bt[0]; ag += bl_ * bt[1]; ab += bl_ * bt[2]; } }
         if (ob && oA > 0){ var odx = (X - oX) / oR, ody = (Y - oY) / oR, od2 = odx * odx + ody * ody;
           if (od2 < 9){ var og = Math.exp(-od2 / oSp) * oA * 1.6, oc = Math.exp(-od2 / 0.06) * oC * oA * 2.2, orr = Math.exp(-Math.pow(Math.sqrt(od2) - 1.05, 2) / 0.02) * oA * 0.12 * P.oSo / 100, ot = TC(oFix, oM, P.oH, oX / W, oY / H);
             ar += (og + orr) * ot[0] + oc; ag += (og + orr) * ot[1] + oc; ab += (og + orr) * ot[2] + oc; } }
@@ -468,17 +471,16 @@ if (typeof module !== 'undefined') module.exports = FB;
 <script>
 (function(){
 'use strict';
-var PATS = {"A":{"halR":20,"halW":40,"halT":55,"halS":50,"gA":40,"gS":45,"gC":30,"gD":30,"lSoft":25,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30},"B":{"halR":50,"halW":20,"halT":50,"halS":55,"gA":28,"gS":50,"gC":40,"gD":25,"lSoft":28,"lVig":8,"lCA":15,"kA":0,"kE":0,"fsA":40,"fsR":45,"fsE":60,"fsF":35,"fsC":30},"C":{"halR":25,"halW":32,"halT":55,"halS":45,"gA":60,"gS":45,"gC":20,"gD":35,"lSoft":15,"lVig":20,"lCA":10,"kA":0,"kE":0,"fsA":30,"fsR":30,"fsE":60,"fsF":30,"fsC":60},"D":{"halR":30,"halW":60,"halT":60,"halS":40,"gA":50,"gS":55,"gC":30,"gD":45,"lSoft":40,"lVig":35,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30},"E":{"halR":50,"halW":26,"halT":55,"halS":50,"gA":32,"gS":50,"gC":45,"gD":35,"lSoft":35,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":45},"F":{"halR":15,"halW":60,"halT":50,"halS":50,"gA":35,"gS":50,"gC":25,"gD":35,"lSoft":35,"lVig":30,"lCA":15,"kA":10,"kE":10,"fsA":60,"fsR":50,"fsE":70,"fsF":45,"fsC":60},"G":{"halR":10,"halW":40,"halT":45,"halS":55,"gA":30,"gS":55,"gC":28,"gD":30,"lSoft":35,"lVig":18,"lCA":15,"kA":15,"kE":15,"fsA":75,"fsR":60,"fsE":80,"fsF":55,"fsC":45},"H":{"halR":35,"halW":14,"halT":65,"halS":35,"gA":28,"gS":60,"gC":10,"gD":50,"lSoft":40,"lVig":30,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":40}};
+var PATS = {"A":{"gA":40,"gS":45,"gC":30,"gD":30,"lSoft":25,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":19,"glR":23,"glP":91,"glRed":20,"glW":50,"glAng":0},"B":{"gA":28,"gS":50,"gC":40,"gD":25,"lSoft":28,"lVig":8,"lCA":15,"kA":0,"kE":0,"fsA":40,"fsR":45,"fsE":60,"fsF":35,"fsC":30,"glA":9,"glR":28,"glP":93,"glRed":50,"glW":50,"glAng":0},"C":{"gA":60,"gS":45,"gC":20,"gD":35,"lSoft":15,"lVig":20,"lCA":10,"kA":0,"kE":0,"fsA":30,"fsR":30,"fsE":60,"fsF":30,"fsC":60,"glA":15,"glR":23,"glP":89,"glRed":25,"glW":50,"glAng":0},"D":{"gA":50,"gS":55,"gC":30,"gD":45,"lSoft":40,"lVig":35,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":28,"glR":17,"glP":87,"glRed":30,"glW":50,"glAng":0},"E":{"gA":32,"gS":50,"gC":45,"gD":35,"lSoft":35,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":45,"glA":12,"glR":23,"glP":91,"glRed":50,"glW":50,"glAng":0},"F":{"gA":35,"gS":50,"gC":25,"gD":35,"lSoft":35,"lVig":30,"lCA":15,"kA":10,"kE":10,"fsA":60,"fsR":50,"fsE":70,"fsF":45,"fsC":60,"glA":28,"glR":28,"glP":91,"glRed":15,"glW":50,"glAng":0},"G":{"gA":30,"gS":55,"gC":28,"gD":30,"lSoft":35,"lVig":18,"lCA":15,"kA":15,"kE":15,"fsA":75,"fsR":60,"fsE":80,"fsF":55,"fsC":45,"glA":19,"glR":34,"glP":93,"glRed":10,"glW":50,"glAng":0},"H":{"gA":28,"gS":60,"gC":10,"gD":50,"lSoft":40,"lVig":30,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":40,"glA":7,"glR":12,"glP":84,"glRed":35,"glW":50,"glAng":0}};
 var PN = { A:['光で飛ばす','白をぎりぎりまで上げた昼の強い光。白のにじみ多め、粒子は中くらい'], B:['霞む水色','柔らかく霞む。赤いにじみと色の粒がやや多く、周辺も甘め'], C:['素の中間調','粒子が一番はっきり出るパターン。にじみは控えめで、レンズはシャープ'], D:['夜のストロボ','光の当たった所に白いにじみ。周辺は暗く甘く、暗部に粒子'], E:['青に沈む','赤いにじみと色の粒が多め。周辺は甘め'], F:['暖色ミッド','電球色の部屋。白のにじみが大きく、周辺は暗め。わずかな光漏れ'], G:['琥珀のかぶり','全体がかぶったような柔らかさ。光漏れとフィルムの端の焼け'], H:['暗闇の残光','点の光に赤いにじみ。暗部の粒子が多く、周辺は暗く甘い'] };
 var GROUPS = [
   { sect:'フィルムの質感（パターンで初期値が入ります）' },
-  { key:'hal', basic:2, col:['halWm','halWH','src,white,warm,cool,hue','白いにじみの色'], title:'ハレーション', sub:'明るい所の周りに広がる、赤いにじみと白いにじみ', sl:[['halR','赤いにじみ','なし','強い'],['halW','白いにじみ','なし','強い'],['halT','にじむ明るさ','暗めからにじむ','白だけ'],['halS','広がり','狭い','広い']], note:'フィルムの中で光が反射して、白い所の縁が赤くにじむ現象です。夜の街灯や窓の光でよく出ます。' },
+  { key:'glow', basic:4, segTop:1, seg:['glS', [['bloom','ブルーム'], ['diff','拡散'], ['hal','ハレーション'], ['motion','モーション'], ['streak','ストリーク']]], col:['glCm','glH','src,white,warm,cool,hue,rand'], title:'光彩', sub:'明るい所から光がにじむ（白飛びしていない明るい所も光る）', sl:[['glA','光彩','なし','強い'],['glR','範囲','明るい所だけ','広く'],['glP','スプレッド','狭い','広い'],['glRed','縁の赤いにじみ','なし','強い'],['glW','暖かさ','寒色','暖色'],['glAng','流れる向き（モーション・ストリーク）','横','縦']], note:'ブルーム：明るい所がやわらかく光る。拡散：芯を残して全体を柔らかくぼかし、色の濃いにじみを重ねる（ソフトフォーカス）。ハレーション：明るい縁が黄〜赤ににじむ。モーション・ストリーク：明るい所が流れる（向きは詳しく調整で）。縁の赤いにじみは、どのスタイルにも重ねられます（フィルムのハレーション）。' },
   { key:'grain', basic:2, title:'フィルム粒子', sub:'明るさで量が変わる、色ムラのある粒', sl:[['gA','量','なし','多い'],['gS','大きさ','細かい','粗い'],['gC','色の粒','白黒の粒','色ムラ'],['gD','暗部の粒','控えめ','ざらつく']], note:'中間の明るさで一番強く、白に近い所では弱くなります。等倍（ダブルタップ）で確認するのがおすすめです。' },
   { key:'lens', basic:2, title:'レンズ', sub:'四隅の甘さ・周辺の落ち・色ずれ', sl:[['lSoft','周辺の甘さ','シャープ','甘い'],['lVig','周辺減光','なし','暗く'],['lCA','色ずれ','なし','強い']], note:'古いコンパクトカメラや写ルンですのような、中心はしっかり、四隅だけ柔らかい写りです。' },
   { key:'fsoft', keepOn:1, basic:1, title:'フィルムの輪郭の柔らかさ', sub:'ピントは合ったまま、境目と質感だけを柔らかく（オプション）', sl:[['fsA','柔らかさ','デジタル','フィルム'],['fsE','縁取りを消す','そのまま','消す'],['fsR','光の回り込み','少ない','多い'],['fsF','細かい凹凸','そのまま','緩める'],['fsC','色のにじみ','くっきり','にじむ']], note:'見本と撮って出しを同じ大きさで比べると、見本は境目の外側に付く明暗の縁（シャープや明瞭度の縁取り）がほぼ無く、暗い側へ光がわずかに回り込み、弱い細かい凹凸が少ない写りでした。ぼかすのではなく、縁取りを消して光を回すことで近づけます。等倍（ダブルタップ）で確認してください。' },
   { key:'leak', basic:2, title:'光漏れ・フィルムの端', sub:'端から入る橙の光と、縁の焼け', sl:[['kA','光漏れ','なし','強い'],['kP','位置','左上','一周'],['kS','広がり','小さい','大きい'],['kH','色','赤','黄'],['kE','フィルムの端の焼け','なし','強い']], note:'偶然の味なので、写真ごとに位置を変えるのがおすすめです。', extra:true },
   { sect:'光を足す' },
-  { key:'glow', man:1, basic:3, segTop:1, seg:['glS', [['bloom','ブルーム'], ['diff','拡散'], ['hal','ハレーション'], ['motion','モーション'], ['streak','ストリーク']]], col:['glCm','glH','src,white,warm,cool,hue,rand'], title:'光彩', sub:'明るい所から光がにじむ（白飛びしていない明るい所も光る）', sl:[['glA','光彩','なし','強い'],['glR','範囲','明るい所だけ','広く'],['glP','スプレッド','狭い','広い'],['glW','暖かさ','寒色','暖色']], note:'ブルーム：明るい所がやわらかく光る。拡散：画面全体がかすみ、色が濃くにじむ。ハレーション：明るい縁が黄〜赤ににじむ（暖かさで黄〜赤）。モーション：明るい所が横に流れる。ストリーク：さらに長く強く横に流れる。光の色は初期設定で「光の色のまま」です。' },
   { key:'orb', man:1, basic:2, col:['oCm','oH','src,white,warm,cool,hue,rand'], title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
   { key:'cross', man:1, basic:2, col:['cCm','cH','src,white,warm,cool,hue,rand,rainbow'], title:'クロス', sub:'点の光から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'街灯や車のライトなど、小さく強い光に向いています。虹にすると筋の先が赤、根元が青に分かれます。' },
   { key:'ray', man:1, basic:2, seg:['rPos', [['auto','光源に合わせる'], ['man','位置を指定']]], col:['rCm','rH','src,white,warm,cool,hue,rand'], title:'光の筋（光芒）', sub:'明るい所から差し込む光の帯', sl:[['rA','強さ','弱い','強い'],['rL','長さ','短い','長い'],['rX','光源 左右','左','右'],['rY','光源 上下','上','下'],['rT','光る明るさ','暗めから','強い光だけ']], note:'光源に合わせる：写真の中で一番強い光から放射状に伸びます。位置を指定：「詳しく調整」の光源 左右・上下で決めた所から伸びます。' },
@@ -487,22 +489,23 @@ var GROUPS = [
   { key:'slow', man:1, basic:2, col:['sCm','sH','src,white,warm,cool,hue,rand,rainbow'], title:'スローシンクロ', sub:'光の軌跡とブレ。フラッシュの当たった所は止まる', sl:[['sT','光の軌跡','なし','強い'],['sG','ブレ','なし','強い'],['sA','向き','横','縦→横'],['sL','長さ','短い','長い'],['sS','色の分かれ','なし','分かれる']], note:'直射フラッシュと一緒に使うと、光の中心だけが止まり、周りが流れます。色の分かれを上げると、軌跡の先が赤、手前が青に割れます。' },
   { key:'multi', man:1, basic:2, title:'多重露光・残像', sub:'ずらした像や別の写真を重ねる', sl:[['mA','重ねる強さ','薄い','濃い'],['mX','ずれ 左右','左へ','右へ'],['mY','ずれ 上下','上へ','下へ'],['mN','重ねる回数','1回','3回'],['mS','大きさ','小さく','大きく']], note:'同じ写真の時：ずれを中央（50）にして大きさだけ変えると、ズームしたような残像に。別の写真の時：重ねる強さ・ずれ・大きさで位置と濃さを決めます（回数は使いません）。重ね方はX-S10の合成モードと同じです。加算は明るくなるので、カメラで露出を下げる代わりに重ねる強さを下げてください。' },
   { sect:'レンズ・ピント' },
-  { key:'sfocus', man:1, basic:2, title:'ソフトフォーカス', sub:'芯を残して、同じ色の柔らかなぼけを重ねる', sl:[['sfA','強さ','弱い','強い'],['sfR','広がり','狭い','広い'],['sfM','にじみ方','影もにじむ','光だけ']], note:'ソフトフォーカスのレンズやフィルターのように、くっきりした像に同じ色のぼけを薄く重ねます。ミストフィルターと違って白いもやにはならず、暗い所の色もそのまま柔らかく広がります。' },
   { key:'depth', man:1, basic:2, title:'奥行きのぼけ', sub:'ピントの面を残して、奥ほど溶かす（AIで奥行きを推定）', sl:[['dpA','ぼけの量','少ない','多い'],['dpF','ピントの位置（タップした所から）','手前へ','奥へ'],['dpS','ピントの深さ','薄い','深い'],['dpN','手前もぼかす','ぼかさない','ぼかす']], note:'写真から奥行きを推定して、絞りを開けて撮ったように背景を溶かします。オンの間は、プレビューをタップした所にピントが合います（最初は画面の中央）。初めてオンにした時は、AIの読み込み（約35MB）で数十秒かかります。' },
   { key:'chrom', man:1, basic:1, seg:['caM', [['dir','一方向'], ['rad','放射状']]], title:'強い色収差', sub:'赤と青を大きくずらす', sl:[['caA','強さ','弱い','強い'],['caR','向き（一方向の時）','横','縦']], note:'一方向は画面全体で赤と青を同じ向きにずらし、放射状は中心から外へ行くほど大きくずらします。控えめな周辺の色ずれは、フィルムの質感の「レンズ」にあります。' },
   { sect:'照明' },
   { key:'flash', man:1, basic:2, title:'直射フラッシュ', sub:'手前を硬く照らし、奥を沈める', sl:[['fA','強さ','弱い','強い'],['fF','奥を沈める','そのまま','黒く'],['fS','光の届く範囲','狭い','広い'],['fX','光の中心 左右','左','右'],['fY','光の中心 上下','上','下'],['fH','硬さ','柔らかい','硬い'],['fT','光の色','冷たい','暖かい']], note:'光の中心は被写体の顔や体に合わせてください。夜や室内の人物で一番多い光です。' }
 ];
-var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","sfA":40,"sfR":45,"sfM":35,"dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"halWm":"src","halWH":40,"glS":"bloom","glA":50,"glR":50,"glP":50,"glW":50,"glCm":"src","glH":200,"rPos":"auto"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"glS":"bloom","glCm":"src","glH":200,"rPos":"auto"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
 GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
 var LS = 'filmbase-v1', st;
 try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
 if (!st || !st.P) st = { pat:'A', seed:0, P:{}, on:{} };
+if (st.P.glA == null || st.on.hal != null || st.on.sfocus != null){ var wasHal = st.on.hal, wasSf = st.on.sfocus; delete st.on.hal; delete st.on.sfocus; delete st.on.ana; st.migrate = { hal:wasHal, sf:wasSf }; }   /* ハレーション・ソフトフォーカスは光彩にまとめた */
 function patVals(p){ var o = Object.assign({}, DEF, PATS[p] || PATS.A); return o; }
-function patOn(p){ var v = PATS[p] || PATS.A; return { hal:1, grain:1, lens:1, leak:(v.kA > 0 || v.kE > 0) ? 1 : 0 }; }
+function patOn(p){ var v = PATS[p] || PATS.A; return { glow:1, grain:1, lens:1, leak:(v.kA > 0 || v.kE > 0) ? 1 : 0 }; }
 function applyPat(p){ var keep = {}, keepOn = {}; Object.keys(MAN).forEach(function(k){ if (st.P[k] != null) keep[k] = st.P[k]; }); GROUPS.forEach(function(g){ if (g.man || g.keepOn) keepOn[g.key] = st.on[g.key] ? 1 : 0; });
   st.pat = p; st.P = Object.assign(patVals(p), keep); st.on = Object.assign(patOn(p), keepOn); }   // 光の効果はパターンを変えても残す
 if (!Object.keys(st.P).length) applyPat(st.pat || 'A');
+(function(){ var pv = patVals(st.pat || 'A'); Object.keys(pv).forEach(function(k){ if (st.P[k] == null) st.P[k] = pv[k]; }); if (st.migrate){ st.on.glow = st.migrate.hal || st.migrate.sf ? 1 : 0; if (!st.migrate.hal && st.migrate.sf) st.P.glS = 'diff'; delete st.migrate; } })();   /* 足りない値はパターンから補う */
 Object.keys(DEF).forEach(function(k){ if (st.P[k] == null) st.P[k] = DEF[k]; });
 if (['add','avg','lig','dar'].indexOf(st.P.mB) < 0) st.P.mB = 'add';
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(st)); }catch(e){} }
@@ -550,7 +553,7 @@ function renderPats(){
   $('pnote').textContent = (st.pat ? st.pat + ' ' + PN[st.pat][0] + '：' + PN[st.pat][1] : '') + (changed ? '（調整済み）' : '');
 }
 // ---- 効果のグループ ----
-var openG = { hal:1, grain:1 };
+var openG = { glow:1, grain:1 };
 var openMore = {};
 // 光の色の選び方（丸いボタン1列。「選ぶ」の時だけ色相のスライダー）
 var CNAME = { src:'光の色', white:'白', warm:'暖色', cool:'寒色', hue:'選ぶ', rand:'ランダム', rainbow:'虹' };
