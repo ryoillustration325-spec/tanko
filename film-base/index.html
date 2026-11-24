@@ -393,6 +393,15 @@ var FB = (function(){
       if (fx < -0.5 || fy < -0.5 || fx > w - 0.5 || fy > h - 0.5){ var mm = ch === 0 ? BR : ch === 1 ? BG : BB; return sampleMap(mm, (X + 0.5) / W, (Y + 0.5) / H); }   // 範囲の外は縮小画像から
       if (fx < 0) fx = 0; if (fy < 0) fy = 0; if (fx > w - 1.001) fx = w - 1.001; if (fy > h - 1.001) fy = h - 1.001;
       var x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, i = (y0 * w + x0) * 4 + ch; return (S2L[src[i]] * (1 - ax) + S2L[src[i + 4]] * ax) * (1 - ay) + (S2L[src[i + w * 4]] * (1 - ax) + S2L[src[i + w * 4 + 4]] * ax) * ay; }
+    // ゴミ（スキャンしたネガに付いたもの）：写真ごとに決まった位置。ネガのゴミは白く、リバーサルは黒く写る
+    var duO = on.dust && P.duA > 0, DM = null, duK = (P.duS == null ? 85 : P.duS) / 100, duDark = P.duM === 'dark';
+    if (duO) DM = M('dust', seed + '|' + P.duA + '|' + W + 'x' + H, function(){
+      var Lw = 2048, dw = Math.max(8, Math.round(Lw * W / L)), dh = Math.max(8, Math.round(Lw * H / L)), A = new Float32Array(dw * dh), st_ = (seed * 9301 + 49297) >>> 0;
+      function rnd(){ st_ = (st_ + 0x6D2B79F5) >>> 0; var t = st_; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+      function dot(cx_, cy_, r, a){ var R = Math.ceil(r + 1); for (var yy = Math.max(0, (cy_ - R) | 0); yy <= Math.min(dh - 1, (cy_ + R) | 0); yy++) for (var xx = Math.max(0, (cx_ - R) | 0); xx <= Math.min(dw - 1, (cx_ + R) | 0); xx++){ var d = Math.hypot(xx - cx_, yy - cy_), v = Math.max(0, Math.min(1, r + 0.5 - d)) * a, q = yy * dw + xx; if (v > A[q]) A[q] = v; } }
+      var nS = Math.round((P.duA || 0) / 100 * 220), k;
+      for (k = 0; k < nS; k++){ var rr_ = 0.6 + Math.pow(rnd(), 4) * 4.5; dot(rnd() * dw, rnd() * dh, rr_, 0.3 + 0.7 * rnd()); }   // 小さいゴミ（大きいものほど少ない）
+      return mk(A, dw, dh); });
     for (var y = 0; y < h; y++){
       var Y = oy + y, ny = (Y + 0.5) / H * 2 - 1, v = (Y + 0.5) / H;
       for (var x = 0; x < w; x++){
@@ -464,6 +473,7 @@ var FB = (function(){
         if (edge > 0){ var de = Math.min(X, W - 1 - X, Y, H - 1 - Y) / L, band = Math.exp(-de / 0.014);
           if (band > 0.003){ band *= 0.45 + 0.55 * (0.5 + 0.5 * vnoise(X / L * 9, Y / L * 9, seed + 23)); ar += edge * band; ag += edge * band * 0.42; ab += edge * band * 0.14; } }
         if (ar > 0 || ag > 0 || ab > 0){ r = 1 - (1 - Math.min(r, 1)) * Math.exp(-ar); g = 1 - (1 - Math.min(g, 1)) * Math.exp(-ag); b = 1 - (1 - Math.min(b, 1)) * Math.exp(-ab); }
+        if (DM){ var dv_ = sampleMap(DM, u, v) * duK; if (dv_ > 0.002){ if (duDark){ r *= 1 - dv_; g *= 1 - dv_; b *= 1 - dv_; } else { r += (0.98 - r) * dv_; g += (0.97 - g) * dv_; b += (0.95 - b) * dv_; } } }
         var R = l2s(r), G = l2s(g), B = l2s(b);
         if (hardK > 0){ R += (R - 0.5) * hardK; G += (G - 0.5) * hardK; B += (B - 0.5) * hardK; }
         // 8) 粒子（最後に）
@@ -506,6 +516,7 @@ var GROUPS = [
   { key:'lens', basic:2, title:'レンズ', sub:'四隅の甘さ・周辺の落ち・色ずれ', sl:[['lSoft','周辺の甘さ','シャープ','甘い'],['lVig','周辺減光','なし','暗く'],['lCA','色ずれ','なし','強い']], note:'古いコンパクトカメラや写ルンですのような、中心はしっかり、四隅だけ柔らかい写りです。' },
   { key:'fsoft', keepOn:1, basic:2, title:'フィルムの輪郭の柔らかさ', sub:'全体をゆるくピンボケさせ、境目と質感を柔らかく（オプション）', sl:[['fsA','柔らかさ','デジタル','フィルム'],['fsD','全体のピンボケ','ピントが合う','ゆるくぼける'],['fsE','縁取りを消す','そのまま','消す'],['fsR','光の回り込み','少ない','多い'],['fsF','細かい凹凸','そのまま','緩める'],['fsC','色のにじみ','くっきり','にじむ']], note:'全体のピンボケ：レンズのぼけと同じ円い形で、写真全体をわずかにぼかします。初期値の50前後が、被写体が崩れずにフィルムのように見える範囲です。見本と撮って出しを同じ大きさで比べると、見本は境目の外側に付く明暗の縁（シャープや明瞭度の縁取り）がほぼ無く、暗い側へ光がわずかに回り込み、弱い細かい凹凸が少ない写りでした。ぼかすのではなく、縁取りを消して光を回すことで近づけます。等倍（ダブルタップ）で確認してください。' },
   { key:'leak', basic:2, title:'光漏れ・フィルムの端', sub:'端から入る橙の光と、縁の焼け', sl:[['kA','光漏れ','なし','強い'],['kP','位置','左上','一周'],['kS','広がり','小さい','大きい'],['kH','色','赤','黄'],['kE','フィルムの端の焼け','なし','強い']], note:'偶然の味なので、写真ごとに位置を変えるのがおすすめです。', extra:true },
+  { key:'dust', keepOn:1, basic:2, seg:['duM', [['white','白（ネガ）'], ['dark','黒（リバーサル）']]], title:'ゴミ', sub:'スキャンしたフィルムに付いた小さなゴミ（オプション）', sl:[['duA','量','少ない','多い'],['duS','濃さ','薄い','濃い']], note:'ネガをスキャンするとゴミは白く、リバーサルでは黒く写ります。位置は写真ごとに決まっています。毛や傷などの質感は、ゴミのテクスチャ画像を「多重露光・残像」の別の写真として重ねると自然です（重ね方は「明」か「加算」、黒地に白いゴミのテクスチャを使います）。' },
   { sect:'光を足す' },
   { key:'orb', man:1, basic:2, col:['oCm','oH','src,white,warm,cool,hue,rand'], title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
   { key:'cross', man:1, basic:2, col:['cCm','cH','src,white,warm,cool,hue,rand,rainbow'], title:'クロス', sub:'点の光から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'街灯や車のライトなど、小さく強い光に向いています。虹にすると筋の先が赤、根元が青に分かれます。' },
@@ -520,7 +531,7 @@ var GROUPS = [
   { sect:'照明' },
   { key:'flash', man:1, basic:2, title:'直射フラッシュ', sub:'手前を硬く照らし、奥を沈める', sl:[['fA','強さ','弱い','強い'],['fF','奥を沈める','そのまま','黒く'],['fS','光の届く範囲','狭い','広い'],['fX','光の中心 左右','左','右'],['fY','光の中心 上下','上','下'],['fH','硬さ','柔らかい','硬い'],['fT','光の色','冷たい','暖かい']], note:'光の中心は被写体の顔や体に合わせてください。夜や室内の人物で一番多い光です。' }
 ];
-var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"glS":"bloom","glCm":"src","glH":200,"rPos":"auto"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"glS":"bloom","glCm":"src","glH":200,"rPos":"auto","duA":40,"duS":85,"duM":"white"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
 GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
 var LS = 'filmbase-v1', st;
 try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
