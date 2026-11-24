@@ -299,10 +299,27 @@ var FB = (function(){
   function s2lf(q){ return s2l(q); }   // 表引きで速く
   // 見本と撮って出しの境目を同じ大きさで比べると、見本は ①境目の外側の明暗の縁（シャープ・明瞭度の縁取り）がほぼ無く
   // ②暗い側へわずかに光が回り込み ③弱い細かい凹凸が少ない。境目そのものは太らせない＝ぼかしではなく、縁取りを消して光を回す
+  // 円形のぼけ（半径r画素）。大きい時は縮めて計算し、なめらかに戻す
+  function discBlur(A, w, h, r){
+    var f = Math.max(1, Math.floor(r / 2.5)), w2 = Math.ceil(w / f), h2 = Math.ceil(h / f), S = new Float32Array(w2 * h2), x, y, i, j;
+    if (f === 1) S = A; else { for (y = 0; y < h2; y++) for (x = 0; x < w2; x++){ var s = 0, c = 0; for (j = y * f; j < Math.min(h, y * f + f); j++) for (i = x * f; i < Math.min(w, x * f + f); i++){ s += A[j * w + i]; c++; } S[y * w2 + x] = s / c; } }
+    var rr = r / f, R = Math.ceil(rr + 0.5), K = [], kw = 0;
+    for (j = -R; j <= R; j++) for (i = -R; i <= R; i++){ var d = Math.sqrt(i * i + j * j), wt = Math.max(0, Math.min(1, rr + 0.5 - d)); if (wt > 0){ K.push(i, j, wt); kw += wt; } }   // ふちをなめらかにした円
+    var O = new Float32Array(w2 * h2), nk = K.length;
+    for (y = 0; y < h2; y++) for (x = 0; x < w2; x++){ var s2 = 0; for (var k = 0; k < nk; k += 3){ var xx = x + K[k], yy = y + K[k + 1]; xx = xx < 0 ? 0 : xx >= w2 ? w2 - 1 : xx; yy = yy < 0 ? 0 : yy >= h2 ? h2 - 1 : yy; s2 += S[yy * w2 + xx] * K[k + 2]; } O[y * w2 + x] = s2 / kw; }
+    if (f === 1) return O;
+    var U = new Float32Array(w * h);
+    for (y = 0; y < h; y++){ var fy = (y + 0.5) / f - 0.5; if (fy < 0) fy = 0; var y0 = fy | 0, y1 = Math.min(h2 - 1, y0 + 1), ay = fy - y0;
+      for (x = 0; x < w; x++){ var fx = (x + 0.5) / f - 0.5; if (fx < 0) fx = 0; var x0 = fx | 0, x1 = Math.min(w2 - 1, x0 + 1), ax = fx - x0;
+        U[y * w + x] = (O[y0 * w2 + x0] * (1 - ax) + O[y0 * w2 + x1] * ax) * (1 - ay) + (O[y1 * w2 + x0] * (1 - ax) + O[y1 * w2 + x1] * ax) * ay; } }
+    return U; }
   function filmSoft(src, w, h, L, P){
     var n = w * h, s = L / 2000, i, c, amt = P.fsA / 100, halo = Math.min(1, P.fsE / 100 * (0.4 + 1.2 * amt)), spill = P.fsR / 100, rad = 4 + 8 * P.fsR / 100, fine = P.fsF / 100, col = P.fsC / 100;
     var ch = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
     for (i = 0; i < n; i++){ ch[0][i] = src[i * 4] / 255; ch[1][i] = src[i * 4 + 1] / 255; ch[2][i] = src[i * 4 + 2] / 255; }
+    // ⓪ 全体のゆるいピンボケ：レンズのぼけと同じ円形の形で、光の量（線形）のまま広げる。被写体が崩れない範囲（長辺の0〜0.3%）
+    var dR = (P.fsD || 0) / 100 * 0.003 * L;
+    if (dR > 0.35){ for (c = 0; c < 3; c++){ var lin = new Float32Array(n); for (i = 0; i < n; i++) lin[i] = s2lf(ch[c][i]); var D = discBlur(lin, w, h, dR); for (i = 0; i < n; i++) ch[c][i] = l2s(D[i]); } }
     if (halo > 0){
       var r = Math.max(1, Math.round(s * 2.5));
       for (c = 0; c < 3; c++){ var x = ch[c], B = gaussS(x, w, h, Math.max(0.5, s * 0.8)), MX = maxMin(B, w, h, r, true), MN = maxMin(B, w, h, r, false);
@@ -335,7 +352,7 @@ var FB = (function(){
   function run(src, out, w, h, ox, oy, W, H, sm8, sw, sh, key, P, seed, ov, dep){
     var on = P.on || {}, Mp = maps(key, sm8, sw, sh, P, dep), L = Math.max(W, H), diag = Math.sqrt(W * W + H * H), base = Mp.base;
     if (on.fsoft){   // 輪郭の柔らかさは重いので、同じ写真・同じ範囲・同じ値なら前の結果を使う（他の効果を動かす時に速い）
-      var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
+      var fk = [key, w, h, ox, oy, W, H, P.fsA, P.fsE, P.fsR, P.fsF, P.fsC, P.fsD, src.length, src[0], src[(src.length >> 1) & ~3], src[src.length - 4]].join(',');
       var fm = memo.fsoftOut; src = (fm && fm.k === fk) ? fm.v : (memo.fsoftOut = { k:fk, v:filmSoft(src, w, h, L, P) }).v; }   // 輪郭の柔らかさは最初に（光の効果や粒子はこの後に乗る）
     var BR = mk(base.R, sw, sh), BG = mk(base.G, sw, sh), BB = mk(base.B, sw, sh);
     var soft = on.lens ? P.lSoft / 100 * 0.9 : 0, vig = on.lens ? P.lVig / 100 * 0.6 : 0, ca = on.lens ? P.lCA / 100 * 0.0022 : 0;
@@ -471,14 +488,14 @@ if (typeof module !== 'undefined') module.exports = FB;
 <script>
 (function(){
 'use strict';
-var PATS = {"A":{"gA":40,"gS":45,"gC":30,"gD":30,"lSoft":25,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":19,"glR":23,"glP":91,"glRed":20,"glW":50,"glAng":0},"B":{"gA":28,"gS":50,"gC":40,"gD":25,"lSoft":28,"lVig":8,"lCA":15,"kA":0,"kE":0,"fsA":40,"fsR":45,"fsE":60,"fsF":35,"fsC":30,"glA":9,"glR":28,"glP":93,"glRed":50,"glW":50,"glAng":0},"C":{"gA":60,"gS":45,"gC":20,"gD":35,"lSoft":15,"lVig":20,"lCA":10,"kA":0,"kE":0,"fsA":30,"fsR":30,"fsE":60,"fsF":30,"fsC":60,"glA":15,"glR":23,"glP":89,"glRed":25,"glW":50,"glAng":0},"D":{"gA":50,"gS":55,"gC":30,"gD":45,"lSoft":40,"lVig":35,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":28,"glR":17,"glP":87,"glRed":30,"glW":50,"glAng":0},"E":{"gA":32,"gS":50,"gC":45,"gD":35,"lSoft":35,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":45,"glA":12,"glR":23,"glP":91,"glRed":50,"glW":50,"glAng":0},"F":{"gA":35,"gS":50,"gC":25,"gD":35,"lSoft":35,"lVig":30,"lCA":15,"kA":10,"kE":10,"fsA":60,"fsR":50,"fsE":70,"fsF":45,"fsC":60,"glA":28,"glR":28,"glP":91,"glRed":15,"glW":50,"glAng":0},"G":{"gA":30,"gS":55,"gC":28,"gD":30,"lSoft":35,"lVig":18,"lCA":15,"kA":15,"kE":15,"fsA":75,"fsR":60,"fsE":80,"fsF":55,"fsC":45,"glA":19,"glR":34,"glP":93,"glRed":10,"glW":50,"glAng":0},"H":{"gA":28,"gS":60,"gC":10,"gD":50,"lSoft":40,"lVig":30,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":40,"glA":7,"glR":12,"glP":84,"glRed":35,"glW":50,"glAng":0}};
+var PATS = {"A":{"gA":40,"gS":45,"gC":30,"gD":30,"lSoft":25,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":19,"glR":23,"glP":91,"glRed":20,"glW":50,"glAng":0,"fsD":50},"B":{"gA":28,"gS":50,"gC":40,"gD":25,"lSoft":28,"lVig":8,"lCA":15,"kA":0,"kE":0,"fsA":40,"fsR":45,"fsE":60,"fsF":35,"fsC":30,"glA":9,"glR":28,"glP":93,"glRed":50,"glW":50,"glAng":0,"fsD":50},"C":{"gA":60,"gS":45,"gC":20,"gD":35,"lSoft":15,"lVig":20,"lCA":10,"kA":0,"kE":0,"fsA":30,"fsR":30,"fsE":60,"fsF":30,"fsC":60,"glA":15,"glR":23,"glP":89,"glRed":25,"glW":50,"glAng":0,"fsD":50},"D":{"gA":50,"gS":55,"gC":30,"gD":45,"lSoft":40,"lVig":35,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":30,"glA":28,"glR":17,"glP":87,"glRed":30,"glW":50,"glAng":0,"fsD":50},"E":{"gA":32,"gS":50,"gC":45,"gD":35,"lSoft":35,"lVig":15,"lCA":15,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":45,"glA":12,"glR":23,"glP":91,"glRed":50,"glW":50,"glAng":0,"fsD":50},"F":{"gA":35,"gS":50,"gC":25,"gD":35,"lSoft":35,"lVig":30,"lCA":15,"kA":10,"kE":10,"fsA":60,"fsR":50,"fsE":70,"fsF":45,"fsC":60,"glA":28,"glR":28,"glP":91,"glRed":15,"glW":50,"glAng":0,"fsD":50},"G":{"gA":30,"gS":55,"gC":28,"gD":30,"lSoft":35,"lVig":18,"lCA":15,"kA":15,"kE":15,"fsA":75,"fsR":60,"fsE":80,"fsF":55,"fsC":45,"glA":19,"glR":34,"glP":93,"glRed":10,"glW":50,"glAng":0,"fsD":50},"H":{"gA":28,"gS":60,"gC":10,"gD":50,"lSoft":40,"lVig":30,"lCA":20,"kA":0,"kE":0,"fsA":45,"fsR":40,"fsE":60,"fsF":40,"fsC":40,"glA":7,"glR":12,"glP":84,"glRed":35,"glW":50,"glAng":0,"fsD":50}};
 var PN = { A:['光で飛ばす','白をぎりぎりまで上げた昼の強い光。白のにじみ多め、粒子は中くらい'], B:['霞む水色','柔らかく霞む。赤いにじみと色の粒がやや多く、周辺も甘め'], C:['素の中間調','粒子が一番はっきり出るパターン。にじみは控えめで、レンズはシャープ'], D:['夜のストロボ','光の当たった所に白いにじみ。周辺は暗く甘く、暗部に粒子'], E:['青に沈む','赤いにじみと色の粒が多め。周辺は甘め'], F:['暖色ミッド','電球色の部屋。白のにじみが大きく、周辺は暗め。わずかな光漏れ'], G:['琥珀のかぶり','全体がかぶったような柔らかさ。光漏れとフィルムの端の焼け'], H:['暗闇の残光','点の光に赤いにじみ。暗部の粒子が多く、周辺は暗く甘い'] };
 var GROUPS = [
   { sect:'フィルムの質感（パターンで初期値が入ります）' },
   { key:'glow', basic:4, segTop:1, seg:['glS', [['bloom','ブルーム'], ['diff','拡散'], ['hal','ハレーション'], ['motion','モーション'], ['streak','ストリーク']]], col:['glCm','glH','src,white,warm,cool,hue,rand'], title:'光彩', sub:'明るい所から光がにじむ（白飛びしていない明るい所も光る）', sl:[['glA','光彩','なし','強い'],['glR','範囲','明るい所だけ','広く'],['glP','スプレッド','狭い','広い'],['glRed','縁の赤いにじみ','なし','強い'],['glW','暖かさ','寒色','暖色'],['glAng','流れる向き（モーション・ストリーク）','横','縦']], note:'ブルーム：明るい所がやわらかく光る。拡散：芯を残して全体を柔らかくぼかし、色の濃いにじみを重ねる（ソフトフォーカス）。ハレーション：明るい縁が黄〜赤ににじむ。モーション・ストリーク：明るい所が流れる（向きは詳しく調整で）。縁の赤いにじみは、どのスタイルにも重ねられます（フィルムのハレーション）。' },
   { key:'grain', basic:2, title:'フィルム粒子', sub:'明るさで量が変わる、色ムラのある粒', sl:[['gA','量','なし','多い'],['gS','大きさ','細かい','粗い'],['gC','色の粒','白黒の粒','色ムラ'],['gD','暗部の粒','控えめ','ざらつく']], note:'中間の明るさで一番強く、白に近い所では弱くなります。等倍（ダブルタップ）で確認するのがおすすめです。' },
   { key:'lens', basic:2, title:'レンズ', sub:'四隅の甘さ・周辺の落ち・色ずれ', sl:[['lSoft','周辺の甘さ','シャープ','甘い'],['lVig','周辺減光','なし','暗く'],['lCA','色ずれ','なし','強い']], note:'古いコンパクトカメラや写ルンですのような、中心はしっかり、四隅だけ柔らかい写りです。' },
-  { key:'fsoft', keepOn:1, basic:1, title:'フィルムの輪郭の柔らかさ', sub:'ピントは合ったまま、境目と質感だけを柔らかく（オプション）', sl:[['fsA','柔らかさ','デジタル','フィルム'],['fsE','縁取りを消す','そのまま','消す'],['fsR','光の回り込み','少ない','多い'],['fsF','細かい凹凸','そのまま','緩める'],['fsC','色のにじみ','くっきり','にじむ']], note:'見本と撮って出しを同じ大きさで比べると、見本は境目の外側に付く明暗の縁（シャープや明瞭度の縁取り）がほぼ無く、暗い側へ光がわずかに回り込み、弱い細かい凹凸が少ない写りでした。ぼかすのではなく、縁取りを消して光を回すことで近づけます。等倍（ダブルタップ）で確認してください。' },
+  { key:'fsoft', keepOn:1, basic:2, title:'フィルムの輪郭の柔らかさ', sub:'全体をゆるくピンボケさせ、境目と質感を柔らかく（オプション）', sl:[['fsA','柔らかさ','デジタル','フィルム'],['fsD','全体のピンボケ','ピントが合う','ゆるくぼける'],['fsE','縁取りを消す','そのまま','消す'],['fsR','光の回り込み','少ない','多い'],['fsF','細かい凹凸','そのまま','緩める'],['fsC','色のにじみ','くっきり','にじむ']], note:'全体のピンボケ：レンズのぼけと同じ円い形で、写真全体をわずかにぼかします。初期値の50前後が、被写体が崩れずにフィルムのように見える範囲です。見本と撮って出しを同じ大きさで比べると、見本は境目の外側に付く明暗の縁（シャープや明瞭度の縁取り）がほぼ無く、暗い側へ光がわずかに回り込み、弱い細かい凹凸が少ない写りでした。ぼかすのではなく、縁取りを消して光を回すことで近づけます。等倍（ダブルタップ）で確認してください。' },
   { key:'leak', basic:2, title:'光漏れ・フィルムの端', sub:'端から入る橙の光と、縁の焼け', sl:[['kA','光漏れ','なし','強い'],['kP','位置','左上','一周'],['kS','広がり','小さい','大きい'],['kH','色','赤','黄'],['kE','フィルムの端の焼け','なし','強い']], note:'偶然の味なので、写真ごとに位置を変えるのがおすすめです。', extra:true },
   { sect:'光を足す' },
   { key:'orb', man:1, basic:2, col:['oCm','oH','src,white,warm,cool,hue,rand'], title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
