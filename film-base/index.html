@@ -513,8 +513,8 @@ var FB = (function(){
         // 8) 粒子（最後に）
         if (gA > 0){
           var l = 0.299 * R + 0.587 * G + 0.114 * B; l = l < 0 ? 0 : l > 1 ? 1 : l; var wg = Math.pow(4 * l * (1 - l) + 1e-4, 0.7) + gD * 0.9 * Math.pow(1 - l, 3), nm, nr, nb;
-          if (fine){ nm = hash(X, Y, seed) * 1.7; nr = hash(X, Y, seed + 1) * 1.7; nb = hash(X, Y, seed + 2) * 1.7; }
-          else { var uu2 = X * gInv, vv3 = Y * gInv; nm = vnoise(uu2, vv3, seed) * 1.6 + vnoise(uu2 * 2.1 + 5, vv3 * 2.1 + 9, seed + 5) * 0.8; nr = vnoise(uu2, vv3, seed + 1) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 6) * 0.8; nb = vnoise(uu2, vv3, seed + 2) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 7) * 0.8; }
+          if (fine){ nm = hash(X, Y, seed) * 1.7; if (gC > 0){ nr = hash(X, Y, seed + 1) * 1.7; nb = hash(X, Y, seed + 2) * 1.7; } else nr = nb = 0; }
+          else { var uu2 = X * gInv, vv3 = Y * gInv; nm = vnoise(uu2, vv3, seed) * 1.6 + vnoise(uu2 * 2.1 + 5, vv3 * 2.1 + 9, seed + 5) * 0.8; if (gC > 0){ nr = vnoise(uu2, vv3, seed + 1) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 6) * 0.8; nb = vnoise(uu2, vv3, seed + 2) * 1.6 + vnoise(uu2 * 2.1, vv3 * 2.1, seed + 7) * 0.8; } else nr = nb = 0; }   // 色ムラのない粒子なら色ごとの計算を省く
           var am = gAmp * wg; R += (nm + gC * nr) * am; G += nm * am; B += (nm + gC * nb) * am;
         }
         out[j] = R * 255 + 0.5; out[j + 1] = G * 255 + 0.5; out[j + 2] = B * 255 + 0.5; out[j + 3] = 255;
@@ -788,6 +788,7 @@ function select(i){
     var d = x.getImageData(0, 0, c.width, c.height); postSmall(p.key, d.data, c.width, c.height);
     var view = $('view'), pw = Math.min(1500, Math.round(view.clientWidth * (window.devicePixelRatio || 1))), ps = Math.min(1, pw / w);
     if (h * ps > 1500) ps = 1500 / h;
+    ps *= 0.65;   /* 下見は小さめ（くっきり版を重ねるので見た目は変わらない）。計算を減らして、iPhoneが熱くならないように */
     var pc = SC(Math.round(w * ps), Math.round(h * ps));
     var px = pc.getContext('2d'); px.imageSmoothingQuality = 'high'; px.drawImage(bm, 0, 0, pc.width, pc.height);
     p.prev = px.getImageData(0, 0, pc.width, pc.height); freeSC(); p.zoom = null; if (window.fbResetZoom) fbResetZoom();
@@ -892,9 +893,9 @@ function render(){
   // 拡大して指を離したら、見えている範囲だけを元の解像度から作り直して、くっきり表示する
   var hq = $('hq'), hqT = 0, hqN = 0, hqBusy = false;
   function hqHide(){ clearTimeout(hqT); hqN++; hqBusy = false; hq.hidden = true; HQS = null; }
-  window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || showingOrig) return; /* 等倍表示でも、画面の画素に合わせたくっきり版を重ねる */ hqT = setTimeout(function(){ makeHQ(p); }, 220); };
+  window.fbHQ = function(){ hqHide(); var p = photos[cur]; if (!p || !p.bm || p.zoom || showingOrig) return; /* 等倍表示でも、画面の画素に合わせたくっきり版を重ねる */ hqT = setTimeout(function(){ makeHQ(p); }, 300); };
   // くっきり版は、加工後と元の写真の両方を持っておく（拡大中に長押ししても、元の写真が粗くならない）
-  var HQS = null;
+  var HQS = null, HQC = null;
   function drawHQ(img){ if (!HQS) return; hq.width = HQS.W; hq.height = HQS.H; var hx = hq.getContext('2d'); hx.clearRect(0, 0, hq.width, hq.height);
     var tc = SC(img.width, img.height); tc.getContext('2d').putImageData(img, 0, 0); hx.imageSmoothingQuality = 'high'; hx.drawImage(tc, HQS.x, HQS.y, HQS.dw, HQS.dh); freeSC(); hq.hidden = false; }
   function hqGeo(p){ var vw = v.clientWidth, vh = v.clientHeight, dpr = window.devicePixelRatio || 1, cw = cv.offsetWidth * Z.s, ch = cv.offsetHeight * Z.s;
@@ -910,6 +911,8 @@ function render(){
     var u0 = Math.max(0, -left / cw), u1 = Math.min(1, (vw - left) / cw), v0 = Math.max(0, -top / ch), v1 = Math.min(1, (vh - top) / ch); if (u1 <= u0 || v1 <= v0) return;
     var ex = u0 * p.W, ey = v0 * p.H, ew = (u1 - u0) * p.W, eh = (v1 - v0) * p.H;
     var dw = (u1 - u0) * cw * dpr, dh = (v1 - v0) * ch * dpr, k = Math.min(1, dw / ew), tw = Math.max(1, Math.round(ew * k)), th = Math.max(1, Math.round(eh * k));
+    var hsig = sigOf(p, null, params()) + '|' + [tw, th, Math.round(ex * k), Math.round(ey * k), k.toFixed(4), p.key].join(',');   /* 同じ設定・同じ範囲なら計算し直さない */
+    if (HQC && HQC.sig === hsig && HQC.p === p){ HQS = HQC.hqs; HQS.n = n; hqBusy = false; drawHQ(showingOrig ? HQS.orig : HQS.res); return; }
     var c = SC(tw, th), x = c.getContext('2d'), sx = p.bm.width / p.W; x.imageSmoothingQuality = 'high';
     x.drawImage(p.bm, ex * sx, ey * sx, ew * sx, eh * sx, 0, 0, tw, th);
     var srcD = x.getImageData(0, 0, tw, th), origCopy = new ImageData(new Uint8ClampedArray(srcD.data), tw, th), buf = srcD.data.buffer; freeSC(); HQS = null;
@@ -917,7 +920,7 @@ function render(){
     runJob({ type:'run', key:p.key, buf:buf, w:tw, h:th, ox:Math.round(ex * k), oy:Math.round(ey * k), W:Math.round(p.W * k), H:Math.round(p.H * k), P:params(), seed:p.seed + st.seed * 101 }, [buf]).then(function(m){
       if (n === hqN) hqBusy = false;
       if (n !== hqN || photos[cur] !== p) return;
-      HQS = { n:n, orig:origCopy, res:new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), x:Math.max(0, left) * dpr, y:Math.max(0, top) * dpr, dw:dw, dh:dh, W:Math.round(vw * dpr), H:Math.round(vh * dpr) };
+      HQS = { n:n, orig:origCopy, res:new ImageData(new Uint8ClampedArray(m.buf), m.w, m.h), x:Math.max(0, left) * dpr, y:Math.max(0, top) * dpr, dw:dw, dh:dh, W:Math.round(vw * dpr), H:Math.round(vh * dpr) }; HQC = { sig:hsig, p:p, hqs:HQS };
       drawHQ(showingOrig ? HQS.orig : HQS.res);
     });
   }
