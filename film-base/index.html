@@ -104,6 +104,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
 .prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0 12px}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 28px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10;white-space:nowrap}
 .toast.on{opacity:1}
+.opt.big{padding:26px 18px}.opt.big b{font-size:20px}.alt{text-align:center;margin:14px 0 4px;font-size:13px}.alt a{color:var(--sub,#a8a296);text-decoration:underline;margin:0 8px}
 </style>
 </head>
 <body>
@@ -994,7 +995,7 @@ $('exp').onclick = function(){
     });
 };
 function sheet(html, cb){ var s = $('sheet'), b = $('sheetIn'); b.innerHTML = html; s.classList.add('on');
-  b.querySelectorAll('[data-a]').forEach(function(e){ e.onclick = function(){ s.classList.remove('on'); cb && cb(e.getAttribute('data-a')); }; });
+  b.querySelectorAll('[data-a]').forEach(function(e){ e.onclick = function(ev){ if (ev) ev.preventDefault(); s.classList.remove('on'); cb && cb(e.getAttribute('data-a')); }; });
   s.onclick = function(e){ if (e.target === s) s.classList.remove('on'); }; }
 function exportOne(i){
   var p = photos[i];
@@ -1029,9 +1030,9 @@ function deliver(files){
     deliver.tried = true;
     navigator.share({ files:files }).then(function(){ deliver.tried = false; }).catch(function(e){ var nm = e && e.name; if (nm === 'AbortError'){ deliver.tried = false; return; } deliver(files); deliver.tried = false; });
     return; }
-  sheet('<h3>できました（' + files.length + '枚）</h3><p>' + files[0].name + (files.length > 1 ? ' ほか' : '') + '　' + (photos[cur] ? photos[cur].W + '×' + photos[cur].H : '') + '</p>' +
-    (can ? '<button class="opt" data-a="s"><b>写真に保存・共有</b><small>開いた共有シートで「画像を保存」を押すと写真アプリに入ります</small></button>' : '') +
-    '<button class="opt" data-a="d"><b>ダウンロード</b><small>ファイルとして保存</small></button><button class="opt" data-a="x"><b>閉じる</b></button>', function(a){ if (a === 's') share(); else if (a === 'd') download(); });
+  if (can){   /* 時間切れで共有シートを直接開けなかった時だけ：大きなボタン1つ（どこを押しても保存へ） */
+    sheet('<button class="opt big" data-a="s"><b>写真に保存</b><small>押すと共有シートが開きます（' + files.length + '枚）</small></button><p class="alt"><a href="#" data-a="d">ファイルとして保存</a>　<a href="#" data-a="x">閉じる</a></p>', function(a){ if (a === 's') share(); else if (a === 'd') download(); });
+  } else sheet('<h3>できました（' + files.length + '枚）</h3><button class="opt" data-a="d"><b>ダウンロード</b><small>ファイルとして保存</small></button><button class="opt" data-a="x"><b>閉じる</b></button>', function(a){ if (a === 'd') download(); });
   function download(){ files.forEach(function(f, i){ setTimeout(function(){ var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }, i * 400); }); }
 }
 
