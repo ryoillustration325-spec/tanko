@@ -208,7 +208,7 @@ var FB = (function(){
   function maps(key, sm8, sw, sh, P, dep){
     var on = P.on || {}, n = sw * sh, Ls = Math.max(sw, sh);
     // 使っていない効果の地図は捨てて、メモリを空ける（iPhoneで処理が止まらないように）
-    var use = { soft:on.lens && P.lSoft > 0, sf:on.glow && P.glS === 'diff', slow:on.slow, crossPk:on.cross, crossVeil:on.cross, ray:on.ray, prism:on.prism, glow:on.glow, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
+    var use = { soft:on.lens && P.lSoft > 0, sf:on.glow && P.glS === 'diff', slow:on.slow, crossPk:on.cross, crossVeil:on.cross, crossBand:on.cross, ray:on.ray, prism:on.prism, glow:on.glow, db:on.depth, dq:on.depth, fsoftOut:on.fsoft, glass:0,
       lc:['oCm', 'cCm', 'rCm', 'sCm', 'pCm'].some(function(k){ return P[k] === 'src'; }) };
     Object.keys(use).forEach(function(k){ if (!use[k] && memo[k]) delete memo[k]; });
     var base = M('base', key, function(){ var R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n); for (var i = 0; i < n; i++){ R[i] = S2L[sm8[i * 4]]; G[i] = S2L[sm8[i * 4 + 1]]; B[i] = S2L[sm8[i * 4 + 2]]; } return { R:R, G:G, B:B }; });
@@ -290,6 +290,20 @@ var FB = (function(){
           E_ *= SS((E_ - cLo + 0.2) / 0.45);   // 筋が出る光の範囲：弱い光ほど薄く短く、自然に消えていく（本物のフィルターと同じ）
           return { u:mx / tot / sw, v:my / tot / sh, E:E_, s3:[cr_ / cm, cg_ / cm, cb_ / cm] }; }).filter(function(p){ return p.E > 0.02; }); });
       var vs = 0; for (var q2 = 0; q2 < n; q2 += 7) vs += 0.2126 * base.R[q2] + 0.7152 * base.G[q2] + 0.0722 * base.B[q2]; o.crossVeil = vs / Math.ceil(n / 7); }   // ④ フィルターのガラスで回る光（全体のごく弱いかすみ）
+    // クロスの「面の光」：窓・水面のきらめき・明るい葉のように大きさのある光は、その幅のままやわらかい筋になる（本物のフィルターはすべての光を同じ形に引き伸ばす）
+    if (on.cross && (P.cB == null ? 60 : P.cB) > 0){ var bT = 0.55 + 0.4 * (P.cT == null ? 50 : P.cT) / 100, bN = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, bRot = (P.cR == null ? 25 : P.cR) / 100 * Math.PI / 2, bLen = (0.03 + 0.22 * P.cL / 100) * Ls * 1.2, bRain = P.cCm === 'rainbow' ? 1 : (P.cRn == null ? 25 : P.cRn) / 100;
+      o.crossBand = M('crossBand', key + bT + '|' + bN + '|' + bRot + '|' + bLen + '|' + bRain, function(){
+        var C = excessC(base.R, base.G, base.B, n, bT), q4 = function(A){ return half(half(A, sw, sh).A, Math.ceil(sw / 2), Math.ceil(sh / 2)); };
+        var H3 = [q4(C.R), q4(C.G), q4(C.B)], w4 = H3[0].w, h4 = H3[0].h, sc4 = w4 / sw, outs = [];
+        function dexp(A, ang, tau){ var O = new Float32Array(w4 * h4), ux = Math.cos(ang), uy = Math.sin(ang), N = 36, k, W = [], ws = 0; for (k = 0; k < N; k++){ W.push(Math.exp(-(k + 0.5) / N * 3)); ws += W[k] * 2; }
+          for (var y = 0; y < h4; y++) for (var x = 0; x < w4; x++){ var j = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 1024 / 1024, s = 0;   // 少しずつずらして、段々にならないように
+            for (k = 0; k < N; k++){ var d = (k + j) / N * 3 * tau, wt = W[k];
+              for (var sd = -1; sd <= 1; sd += 2){ var px = x + ux * d * sd, py = y + uy * d * sd; if (px < 0 || py < 0 || px > w4 - 1.001 || py > h4 - 1.001) continue; var x0 = px | 0, y0 = py | 0, fx = px - x0, fy = py - y0, q = y0 * w4 + x0; s += wt * ((A[q] * (1 - fx) + A[q + 1] * fx) * (1 - fy) + (A[q + w4] * (1 - fx) + A[q + w4 + 1] * fx) * fy); } }
+            O[y * w4 + x] = s / ws; } return O; }
+        for (var c = 0; c < 3; c++){ var S = new Float32Array(w4 * h4), Lc = bLen * sc4 * (1 + bRain * (c === 0 ? 0.35 : c === 1 ? -0.18 : 0.12));
+          for (var a_ = 0; a_ < bN; a_++){ var an = bRot + a_ * Math.PI / bN, T1 = dexp(H3[c].A, an, Math.max(0.6, Lc * 0.09)), T2 = dexp(H3[c].A, an, Math.max(1.2, Lc * 0.28)); for (var q = 0; q < S.length; q++) S[q] += T1[q] * 0.8 + T2[q] * 0.2; }
+          outs.push(mk(S, w4, h4)); }
+        return { R:outs[0], G:outs[1], B:outs[2], n:bN }; }); }
     if (on.ray){ var rt = 0.4 + 0.5 * P.rT / 100, rAuto = (P.rPos || 'auto') === 'auto', rx = P.rX / 100, ry = P.rY / 100, rl = 0.2 + 0.75 * P.rL / 100;
       o.ray = M('ray', key + rt + '|' + rAuto + '|' + rx + '|' + ry + '|' + rl, function(){ var E = excess(base.R, base.G, base.B, n, rt), Eh = half(E, sw, sh), w = Eh.w, h = Eh.h, A = Eh.A, O = new Float32Array(w * h), N = 64, sx = rx * w, sy = ry * h, i, x, y;
         if (rAuto){ var mx = 0; for (i = 0; i < A.length; i++) if (A[i] > mx) mx = A[i];   // 光源の位置：一番強い光の重心（光芒は光源から放射状に伸びる）
@@ -418,6 +432,7 @@ var FB = (function(){
     var sl = on.slow, sT = P.sT / 100 * 2.2, sG = P.sG / 100 * 0.85;
     var mu = on.multi, mB = P.mB || 'add', mA = P.mA / 100 * 0.7, mN = P.mN < 34 ? 1 : P.mN < 67 ? 2 : 3, mDX = (P.mX - 50) / 50 * 0.12 * L, mDY = (P.mY - 50) / 50 * 0.12 * L, mS = 1 + (P.mS - 50) / 50 * 0.15;
     var gl_ = on.glow ? (P.glA || 0) / 100 * 3.8 * ({ bloom:1, diff:0.9, hal:1.8, motion:1.1, streak:2 }[P.glS || 'bloom'] || 1) : 0, gM = P.glCm || 'src', gwm = ((P.glW == null ? 50 : P.glW) - 50) / 50, glRed = on.glow ? (P.glRed || 0) / 100 * 7 : 0;
+    var cTint = (P.cTi == null ? 50 : P.cTi) / 100, cBk = on.cross ? (P.cA || 0) / 100 * ((P.cB == null ? 60 : P.cB) / 100) * 0.22 * 2 / ((Mp.crossBand && Mp.crossBand.n) || 2) * 8 : 0;
     var cVk = on.cross ? (P.cA || 0) / 100 * 0.035 * (Mp.crossVeil || 0) : 0;
     var ry_ = on.ray ? P.rA / 100 * 2.4 : 0;
     var LC = Mp.lc, cM = P.cCm || 'white', aM = P.aCm || 'cool', rM = P.rCm || 'warm', oM = P.oCm || 'warm', sM = P.sCm || 'warm', pM = P.pCm || 'rainbow', bM = P.halWm || 'src';
@@ -486,6 +501,8 @@ var FB = (function(){
         var ar = 0, ag = 0, ab = 0;
         if (glRed > 0 && Mp.glow.H){ var hv = sampleMap(Mp.glow.H, u, v) * glRed; ar += hv; ag += hv * (0.4 - 0.15 * gwm); ab += hv * (0.15 - 0.08 * gwm); }
         if (cVk > 0){ ar += cVk; ag += cVk; ab += cVk; }
+        if (cBk > 0 && Mp.crossBand){ var br_ = sampleMap(Mp.crossBand.R, u, v), bg_ = sampleMap(Mp.crossBand.G, u, v), bb_ = sampleMap(Mp.crossBand.B, u, v), bm_ = (br_ + bg_ + bb_) / 3;
+          ar += (bm_ + (br_ - bm_) * cTint) * cBk; ag += (bm_ + (bg_ - bm_) * cTint) * cBk; ab += (bm_ + (bb_ - bm_) * cTint) * cBk; }
         if (gl_ > 0){ var gr_ = sampleMap(Mp.glow.R, u, v), gg_ = sampleMap(Mp.glow.G, u, v), gb_ = sampleMap(Mp.glow.B, u, v);
           if ((P.glS || 'bloom') === 'hal'){ var gy_ = Math.max(gr_, gg_, gb_) * gl_, hg = 0.3 - 0.2 * gwm, hb = 0.1 - 0.07 * gwm; ar += gy_; ag += gy_ * hg; ab += gy_ * hb; }   // 黄〜赤のにじみ
           else { if (gM === 'src'){ if (P.glS === 'diff'){ var gm_ = (gr_ + gg_ + gb_) / 3; gr_ = gm_ + (gr_ - gm_) * 1.6; gg_ = gm_ + (gg_ - gm_) * 1.6; gb_ = gm_ + (gb_ - gm_) * 1.6; var dk_ = 0.2 + 0.8 * Math.sqrt(Math.min(1, 0.2126 * r + 0.7152 * g + 0.0722 * b)); gr_ *= dk_; gg_ *= dk_; gb_ *= dk_; }   // 暗い所は沈めたまま   // 拡散は色を濃く
@@ -532,7 +549,7 @@ var FB = (function(){
   function crossSpikes(out, w, h, ox, oy, W, H, P, pts, seed, GR){
     var diag = Math.sqrt(W * W + H * H), Lf = Math.max(W, H), cn = P.cN < 34 ? 2 : P.cN < 67 ? 3 : 4, rot = (P.cR == null ? 25 : P.cR) / 100 * 90, angs = [], k;
     for (k = 0; k < cn * 2; k++) angs.push(rot + k * 180 / cn);
-    var len = 0.03 + 0.22 * P.cL / 100, gain = P.cA / 100 * 1.1, sg = Math.max(0.7, Lf / 2600), cM = P.cCm || 'src', rain = cM === 'rainbow' ? 1 : 0.28, fix = cM === 'src' || cM === 'rainbow' ? null : fixedTint(cM === 'rand' || cM === 'hue' ? 'white' : cM);
+    var len = 0.03 + 0.22 * P.cL / 100, gain = P.cA / 100 * 1.1, soft = (P.cS == null ? 20 : P.cS) / 100, res = Math.max(0.5, diag / 2800), sg = Math.max(0.35, (0.25 + (P.cW == null ? 30 : P.cW) / 100 * 1.6 + soft * 0.3) * res), halo = Math.max(0, soft - 0.3) * 1.4, tint = (P.cTi == null ? 50 : P.cTi) / 100, cM = P.cCm || 'src', rain = cM === 'rainbow' ? 1 : (P.cRn == null ? 25 : P.cRn) / 100 * 0.85, fix = cM === 'src' || cM === 'rainbow' ? null : fixedTint(cM === 'rand' || cM === 'hue' ? 'white' : cM);
     if (cM === 'hue'){ var hh = (P.cH || 0) / 360 * 6, f6 = hh - Math.floor(hh), sx = [[1, f6, 0], [1 - f6, 1, 0], [0, 1, f6], [0, 1 - f6, 1], [f6, 0, 1], [1, 0, 1 - f6]][Math.floor(hh) % 6]; fix = [0.35 + 0.65 * sx[0], 0.35 + 0.65 * sx[1], 0.35 + 0.65 * sx[2]]; }
     var pf = [0.86, 0.09, 0.28], hs = 2166136261, a3 = [0, 0, 0];
     function add(j, a){ if (a[0] < 0.0004 && a[1] < 0.0004 && a[2] < 0.0004) return;
@@ -545,7 +562,7 @@ var FB = (function(){
     function SS(x){ x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); }
     pts.forEach(function(p, pi){
       var A = gain * p.E; if (A < 0.004) return;
-      var px = p.u * W - ox, py = p.v * H - oy, col = fix || (cM === 'rand' ? (function(){ var hh2 = ((pi * 0.618 + seed * 0.13) % 1) * 6, f2 = hh2 - Math.floor(hh2), s2 = [[1, f2, 0], [1 - f2, 1, 0], [0, 1, f2], [0, 1 - f2, 1], [f2, 0, 1], [1, 0, 1 - f2]][Math.floor(hh2) % 6]; return [0.4 + 0.6 * s2[0], 0.4 + 0.6 * s2[1], 0.4 + 0.6 * s2[2]]; })() : p.s3);
+      var px = p.u * W - ox, py = p.v * H - oy, col = fix || (cM === 'src' ? [1 - tint + p.s3[0] * tint, 1 - tint + p.s3[1] * tint, 1 - tint + p.s3[2] * tint] : null) || (cM === 'rand' ? (function(){ var hh2 = ((pi * 0.618 + seed * 0.13) % 1) * 6, f2 = hh2 - Math.floor(hh2), s2 = [[1, f2, 0], [1 - f2, 1, 0], [0, 1, f2], [0, 1 - f2, 1], [f2, 0, 1], [1, 0, 1 - f2]][Math.floor(hh2) % 6]; return [0.4 + 0.6 * s2[0], 0.4 + 0.6 * s2[1], 0.4 + 0.6 * s2[2]]; })() : p.s3);
       var Lb = len * diag * (0.12 + 0.88 * Math.pow(Math.min(1.5, p.E), 1.3)), Lk = Lb * (1 + 0.35 * rain), rad = Math.ceil(sg * 6 + 1 + rain * sg * 2.5);
       if (px + Lk < -rad || py + Lk < -rad || px - Lk > w + rad || py - Lk > h + rad) return;   // この区画に届かない光
       angs.forEach(function(ad){
@@ -560,7 +577,7 @@ var FB = (function(){
               var fc = (pf[0] * Math.exp(-tc / pf[1]) + (1 - pf[0]) * Math.exp(-tc / pf[2])) * (1 - SS((tc - 0.7) / 0.3)), off = c === 1 ? rain * sg * 2.2 * Math.min(1, tn * 2.5) : 0, dc = dp - off, wd = Math.exp(-dc * dc / (2 * sgt * sgt)) * Math.sqrt(sg / sgt);
               a3[c] = A * fc * wd * (col[c] * (1 - wz) + wz); if (a3[c] > 0.0004) any = 1; }
             if (any) add((Yq * w + X) * 4, a3); } } });
-      var r0 = sg * 1.1, rh = sg * 2 + diag * 0.002, hq = Math.ceil(Math.max(r0 * 14, rh * 5)), b0 = A * 0.2, b1 = A * 0.04;   // 芯のまわりのにじみ（縁ができない形）
+      var r0 = sg * 1.1, rh = sg * 2 + (0.2 + halo) * diag * 0.01, hq = Math.ceil(Math.max(r0 * 14, rh * 5)), b0 = A * 0.2, b1 = A * (0.03 + 0.08 * halo);   // 芯のまわりのにじみ（滲みを上げるほど裾が広い）   // 芯のまわりのにじみ（縁ができない形）
       for (var yy = Math.max(0, Math.floor(py - hq)); yy <= Math.min(h - 1, Math.ceil(py + hq)); yy++) for (var xx = Math.max(0, Math.floor(px - hq)); xx <= Math.min(w - 1, Math.ceil(px + hq)); xx++){
         var ddx = xx + 0.5 - px, ddy = yy + 0.5 - py, rr2 = ddx * ddx + ddy * ddy, rr = Math.sqrt(rr2); if (rr > hq) continue;
         var g = (b0 * r0 * r0 / (r0 * r0 + rr2) + b1 * Math.exp(-rr / rh)) * (1 - SS((rr - hq * 0.5) / (hq * 0.5))); if (g < 0.0004) continue; a3[0] = g * col[0]; a3[1] = g * col[1]; a3[2] = g * col[2]; add((yy * w + xx) * 4, a3); }
@@ -599,7 +616,7 @@ var GROUPS = [
   { key:'dust', keepOn:1, basic:2, seg:['duM', [['white','白（ネガ）'], ['dark','黒（リバーサル）']]], title:'ゴミ', sub:'スキャンしたフィルムに付いた小さなゴミ（オプション）', sl:[['duA','量','少ない','多い'],['duS','濃さ','薄い','濃い']], note:'ネガをスキャンするとゴミは白く、リバーサルでは黒く写ります。位置は写真ごとに決まっています。毛や傷などの質感は、ゴミのテクスチャ画像を「多重露光・残像」の別の写真として重ねると自然です（重ね方は「明」か「加算」、黒地に白いゴミのテクスチャを使います）。' },
   { sect:'光を足す' },
   { key:'orb', man:1, basic:2, col:['oCm','oH','src,white,warm,cool,hue,rand'], title:'光の玉', sub:'白く溶ける大きな光の玉', sl:[['oA','強さ','弱い','強い'],['oS','大きさ','小さい','大きい'],['oX','位置 左右','左','右'],['oY','位置 上下','上','下'],['oSo','柔らかさ','くっきり','柔らかい'],['oC','芯の白さ','なし','白く飛ぶ']], note:'光として足すので、暗い所でははっきり、明るい所では溶けます。' },
-  { key:'cross', man:1, basic:3, segTop:1, seg:['cDet', [['refl','反射・きらめき'], ['all','光源も']]], col:['cCm','cH','src,white,warm,cool,hue,rand,rainbow'], title:'クロス', sub:'反射やきらめきの点から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cP','筋が出る光','強い光だけ','弱い光まで'],['cL','長さ','短い','長い'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'反射・きらめき：水面・ガラス・金属・水滴などに映った、小さく飛び抜けて明るい点だけに筋を出します（白い服や壁、雲は選びません）。光源も：街灯や看板など、光源そのものも選びます。筋が出る光：本物のフィルターと同じく数では切らず、強い光ほど長く濃く、弱い光ほど短く薄く消えていきます。明るい面の上のつやは筋が溶けて目立ちません。光の色のままでも筋の先はわずかに色が分かれ、筋にも写真と同じ粒子が乗り、全体にごく弱くガラスのかすみがかかります。' },
+  { key:'cross', man:1, basic:5, segTop:1, seg:['cDet', [['refl','反射・きらめき'], ['all','光源も']]], col:['cCm','cH','src,white,warm,cool,hue,rand,rainbow'], title:'クロス', sub:'反射やきらめきの点から伸びる光の筋', sl:[['cA','強さ','弱い','強い'],['cP','筋が出る光','強い光だけ','弱い光まで'],['cL','長さ','短い','長い'],['cW','太さ','細い','太い'],['cS','滲み','くっきり','にじむ'],['cB','面の光','点の光だけ','窓や水面も'],['cRn','虹色','白い筋','先ほど色が分かれる'],['cTi','光源の色を残す','白い筋','光の色'],['cN','本数','4本','8本'],['cR','角度','0°','90°'],['cT','光る明るさ','暗めから','強い光だけ']], note:'反射・きらめき：水面・ガラス・金属・水滴などの小さく飛び抜けて明るい点に筋を出します。光源も：街灯や看板など光そのものも選びます。筋が出る光：強い光ほど長く濃く、弱い光ほど短く薄く消えていきます。太さ・滲み：筋の太さと、芯のまわりのにじみ。面の光：窓や水面のように大きさのある光は、その幅のままやわらかい筋になります（下げると点の光だけ）。虹色：筋の先ほど色が分かれます。光源の色を残す：下げると白い筋、上げると光の色の筋。' },
   { key:'ray', man:1, basic:2, seg:['rPos', [['auto','光源に合わせる'], ['man','位置を指定']]], col:['rCm','rH','src,white,warm,cool,hue,rand'], title:'光の筋（光芒）', sub:'明るい所から差し込む光の帯', sl:[['rA','強さ','弱い','強い'],['rL','長さ','短い','長い'],['rX','光源 左右','左','右'],['rY','光源 上下','上','下'],['rT','光る明るさ','暗めから','強い光だけ']], note:'光源に合わせる：写真の中で一番強い光から放射状に伸びます。位置を指定：「詳しく調整」の光源 左右・上下で決めた所から伸びます。' },
   { key:'prism', man:1, basic:3, col:['pCm','pH','src,rainbow,white,warm,cool,hue'], title:'プリズムの映り込み', sub:'明るい所の像がずれて、虹のように分かれて重なる', sl:[['pA','強さ','弱い','強い'],['pR','向き','右','一周'],['pD','ずれ幅','近く','遠く'],['pS','虹の広がり','まとまる','広がる'],['pB','ぼかし','くっきり','ぼんやり'],['pT','光る明るさ','暗めから','強い光だけ']], note:'レンズの前にプリズムやガラスをかざした時のように、白い服や光の像が横にずれて、赤から紫へ分かれて映り込みます。' },
   { sect:'動き・重ね' },
@@ -611,7 +628,7 @@ var GROUPS = [
   { sect:'照明' },
   { key:'flash', man:1, basic:2, title:'直射フラッシュ', sub:'手前を硬く照らし、奥を沈める', sl:[['fA','強さ','弱い','強い'],['fF','奥を沈める','そのまま','黒く'],['fS','光の届く範囲','狭い','広い'],['fX','光の中心 左右','左','右'],['fY','光の中心 上下','上','下'],['fH','硬さ','柔らかい','硬い'],['fT','光の色','冷たい','暖かい']], note:'光の中心は被写体の顔や体に合わせてください。夜や室内の人物で一番多い光です。' }
 ];
-var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"glS":"bloom","glCm":"src","glH":200,"rPos":"auto","duA":40,"duS":85,"duM":"white","cP":50,"cDet":"refl"}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
+var MAN = {"fA":50,"fF":55,"fS":45,"fX":50,"fY":45,"fH":45,"fT":50,"sT":40,"sG":30,"sA":15,"sL":40,"mA":55,"mX":65,"mY":50,"mN":0,"mS":50,"oA":55,"oS":45,"oX":30,"oY":35,"oSo":60,"oC":55,"cA":50,"cL":45,"cN":0,"cR":25,"cT":60,"gsA":60,"gsS":45,"gsW":50,"gsB":50,"gsV":30,"rA":50,"rX":50,"rY":15,"rL":55,"rT":55,"aA":50,"aL":55,"aT":55,"mB":"add","dpA":60,"dpF":50,"dpS":35,"dpN":0,"dpX":0.5,"dpY":0.55,"pA":50,"pR":0,"pD":35,"pS":60,"pB":45,"pT":55,"pCm":"src","pH":30,"caA":30,"caM":"dir","caR":0,"sS":0,"oCm":"src","oH":30,"cCm":"src","cH":200,"aCm":"src","aH":210,"rCm":"src","rH":40,"sCm":"src","sH":30,"glS":"bloom","glCm":"src","glH":200,"rPos":"auto","duA":40,"duS":85,"duM":"white","cP":50,"cDet":"refl","cW":30,"cS":20,"cB":60,"cRn":25,"cTi":50}, DEF = Object.assign({ kP:15, kS:50, kH:40 }, MAN), KEYS = [];
 GROUPS.forEach(function(g){ if (g.sl && !g.man) g.sl.forEach(function(s){ if (!(s[0] in MAN) && s[0] !== 'kP' && s[0] !== 'kS' && s[0] !== 'kH') KEYS.push(s[0]); }); });
 var LS = 'filmbase-v1', st;
 try{ st = JSON.parse(localStorage.getItem(LS)); }catch(e){}
